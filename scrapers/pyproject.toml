@@ -1,0 +1,17 @@
+[project]
+name = "lead-gen-scrapers"
+version = "0.1.0"
+description = "ISO interconnection queue scrapers for solar lead generation"
+requires-python = ">=3.11"
+dependencies = [
+    "gridstatus>=0.34.0",
+    "supabase>=2.0.0",
+    "pandas>=2.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.4.0",
+]
