@@ -1,6 +1,7 @@
 from .scrapers.miso import MISOScraper
 from .scrapers.ercot import ERCOTScraper
 from .scrapers.caiso import CAISOScraper
+from .scrapers.gem import GEMScraper
 
 
 def main():
@@ -8,6 +9,7 @@ def main():
         MISOScraper(),
         ERCOTScraper(),
         CAISOScraper(),
+        GEMScraper(),
     ]
 
     results = []

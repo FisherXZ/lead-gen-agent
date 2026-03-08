@@ -8,6 +8,7 @@ from typing import Any, Callable, Awaitable
 
 from .agent import run_agent_async
 from .db import get_active_discovery, store_discovery
+from .knowledge_base import build_knowledge_context
 
 
 async def _research_one(
@@ -38,9 +39,13 @@ async def _research_one(
         })
 
         try:
-            agent_result, agent_log, total_tokens = await run_agent_async(project)
+            knowledge_context = build_knowledge_context(project)
+            agent_result, agent_log, total_tokens = await run_agent_async(
+                project, knowledge_context
+            )
             discovery = store_discovery(
-                project_id, agent_result, agent_log, total_tokens
+                project_id, agent_result, agent_log, total_tokens,
+                project=project,
             )
             result = {
                 "project_id": project_id,

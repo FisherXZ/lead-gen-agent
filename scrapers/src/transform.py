@@ -8,6 +8,8 @@ DB_COLUMNS = [
     "developer",
     "state",
     "county",
+    "latitude",
+    "longitude",
     "mw_capacity",
     "fuel_type",
     "queue_date",
@@ -15,6 +17,8 @@ DB_COLUMNS = [
     "status",
     "source",
     "lead_score",
+    "construction_status",
+    "geocode_source",
     "raw_data",
 ]
 
@@ -159,6 +163,64 @@ def transform_caiso(sheets: dict[str, pd.DataFrame]) -> pd.DataFrame:
                 "raw_data": raw,
             })
     return pd.DataFrame(all_rows)
+
+
+GEM_STATUS_MAP = {
+    "construction": "under_construction",
+    "pre-construction": "pre_construction",
+    "announced": "pre_construction",
+    "operating": "completed",
+    "shelved": "cancelled",
+    "cancelled": "cancelled",
+    "retired": "completed",
+    "mothballed": "cancelled",
+}
+
+
+def transform_gem(features: list[dict]) -> pd.DataFrame:
+    """Transform GEM GeoJSON features to DB schema."""
+    rows = []
+    for f in features:
+        props = f.get("properties", {})
+        coords = f.get("geometry", {}).get("coordinates", [None, None])
+
+        gem_status = (props.get("status") or "").strip().lower()
+        capacity = props.get("capacity") or 0
+        try:
+            capacity = float(capacity)
+        except (ValueError, TypeError):
+            capacity = 0
+
+        owner = props.get("owner") or None
+        # Clean owner: strip percentage like "Acme Corp [100%]"
+        if owner and "[" in owner:
+            owner = owner.split("[")[0].strip()
+
+        raw = {k: v for k, v in props.items()}
+        raw["gem_coordinates"] = coords
+
+        rows.append({
+            "queue_id": str(props.get("pid") or props.get("id", "")),
+            "iso_region": "GEM",
+            "project_name": props.get("name") or None,
+            "developer": owner,
+            "state": props.get("subnat") or None,
+            "county": None,
+            "latitude": coords[1] if len(coords) >= 2 and coords[1] else None,
+            "longitude": coords[0] if len(coords) >= 2 and coords[0] else None,
+            "mw_capacity": capacity,
+            "fuel_type": props.get("technology-type") or "Solar",
+            "facility_type": "Solar",
+            "generation_type": "",
+            "queue_date": None,
+            "expected_cod": safe_date(props.get("start-year")),
+            "status": gem_status.title(),
+            "source": "gem_tracker",
+            "construction_status": GEM_STATUS_MAP.get(gem_status, "unknown"),
+            "geocode_source": "gem_native",
+            "raw_data": raw,
+        })
+    return pd.DataFrame(rows)
 
 
 def finalize(df: pd.DataFrame) -> list[dict]:

@@ -99,23 +99,37 @@ TOOLS = [
 ]
 
 
-async def run_agent_async(project: dict) -> tuple[AgentResult, list[dict], int]:
+async def run_agent_async(
+    project: dict,
+    knowledge_context: str | None = None,
+) -> tuple[AgentResult, list[dict], int]:
     """Run the EPC discovery agent for a single project (async).
+
+    Args:
+        project: Project dict from DB.
+        knowledge_context: Optional KB briefing to include in the prompt.
 
     Returns (result, agent_log, total_tokens).
     """
     client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
-    messages = [{"role": "user", "content": build_user_message(project)}]
+    messages = [{"role": "user", "content": build_user_message(project, knowledge_context)}]
     agent_log: list[dict] = []
     total_tokens = 0
+
+    # Mark last tool with cache_control so system + tools are cached
+    cached_tools = [*TOOLS[:-1], {**TOOLS[-1], "cache_control": {"type": "ephemeral"}}]
 
     for iteration in range(MAX_ITERATIONS):
         response = await client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=4096,
-            system=SYSTEM_PROMPT,
-            tools=TOOLS,
+            system=[{
+                "type": "text",
+                "text": SYSTEM_PROMPT,
+                "cache_control": {"type": "ephemeral"},
+            }],
+            tools=cached_tools,
             messages=messages,
         )
 

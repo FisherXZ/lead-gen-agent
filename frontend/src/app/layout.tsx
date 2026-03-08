@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import NavBar from "@/components/NavBar";
+import { SidebarProvider } from "@/components/SidebarContext";
+import Sidebar from "@/components/Sidebar";
+import MainContent from "@/components/MainContent";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Solar Lead Gen — ISO Queue Dashboard",
+  title: "Solar Lead Gen",
   description:
     "Discover utility-scale solar projects from ISO interconnection queues",
 };
@@ -29,8 +31,10 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
       >
-        <NavBar />
-        {children}
+        <SidebarProvider>
+          <Sidebar />
+          <MainContent>{children}</MainContent>
+        </SidebarProvider>
       </body>
     </html>
   );

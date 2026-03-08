@@ -50,8 +50,12 @@ McCarthy, Mortenson, Signal Energy, Blattner (Quanta), Sundt, Primoris, Rosendin
 """
 
 
-def build_user_message(project: dict) -> str:
-    """Build user message from a project record."""
+def build_user_message(project: dict, knowledge_context: str | None = None) -> str:
+    """Build user message from a project record.
+
+    If knowledge_context is provided, it is appended so the agent can
+    leverage prior research and known relationships.
+    """
     parts = ["Find the EPC contractor for this solar project:\n"]
 
     if project.get("project_name"):
@@ -66,9 +70,16 @@ def build_user_message(project: dict) -> str:
         parts.append(f"- **State:** {project['state']}")
     if project.get("county"):
         parts.append(f"- **County:** {project['county']}")
+    if project.get("latitude") and project.get("longitude"):
+        parts.append(f"- **Coordinates:** {project['latitude']}, {project['longitude']}")
+        if project.get("geocode_source"):
+            parts.append(f"- **Coordinate Source:** {project['geocode_source']}")
     if project.get("fuel_type"):
         parts.append(f"- **Fuel Type:** {project['fuel_type']}")
     if project.get("status"):
         parts.append(f"- **Queue Status:** {project['status']}")
+
+    if knowledge_context:
+        parts.append(f"\n## Knowledge Base Context\n{knowledge_context}")
 
     return "\n".join(parts)

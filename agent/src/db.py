@@ -77,10 +77,12 @@ def store_discovery(
     result,
     agent_log: list[dict],
     total_tokens: int,
+    project: dict | None = None,
 ) -> dict:
     """Store an agent result as a new discovery record.
 
     Rejects any existing pending discovery first.
+    If *project* is provided, also writes to the knowledge base.
     """
     reject_pending_discovery(project_id)
 
@@ -95,7 +97,20 @@ def store_discovery(
         "agent_log": agent_log,
         "tokens_used": total_tokens,
     }
-    return insert_discovery(discovery_data)
+    discovery = insert_discovery(discovery_data)
+
+    # Write-back to knowledge base
+    if project:
+        try:
+            from .knowledge_base import process_discovery_into_kb
+            process_discovery_into_kb(project_id, result, project)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).warning(
+                "KB write-back failed for project %s", project_id, exc_info=True
+            )
+
+    return discovery
 
 
 def list_discoveries() -> list[dict]:
@@ -124,12 +139,22 @@ def search_projects(
     needs_research: bool | None = None,
     has_epc: bool | None = None,
     search: str | None = None,
+    cod_min: str | None = "2025-01-01",
+    cod_max: str | None = "2028-12-31",
     limit: int = 20,
 ) -> list[dict]:
-    """Dynamic project search with optional filters."""
+    """Dynamic project search with optional filters.
+
+    By default, scopes to projects with expected COD between 2025 and 2028.
+    Pass cod_min=None and cod_max=None to disable date filtering.
+    """
     client = get_client()
     query = client.table("projects").select("*")
 
+    if cod_min is not None:
+        query = query.gte("expected_cod", cod_min)
+    if cod_max is not None:
+        query = query.lte("expected_cod", cod_max)
     if state:
         query = query.ilike("state", f"%{state}%")
     if iso_region:

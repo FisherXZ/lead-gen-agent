@@ -27,3 +27,7 @@ Thumbs.db
 
 # Supabase
 .supabase/
+supabase/.temp/
+
+# Claude Code
+.claude/

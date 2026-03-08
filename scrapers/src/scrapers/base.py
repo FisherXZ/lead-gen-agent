@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 import pandas as pd
 from ..db import get_client, upsert_projects, log_scrape_start, log_scrape_end
 from ..filters import filter_solar_projects
+from ..geocoder import geocode_projects
 from ..scoring import score_projects
 from ..transform import finalize
 
@@ -33,6 +34,7 @@ class BaseScraper(ABC):
 
             df = score_projects(df)
             records = finalize(df)
+            records = geocode_projects(records)
 
             # Upsert in batches
             batch_size = 500

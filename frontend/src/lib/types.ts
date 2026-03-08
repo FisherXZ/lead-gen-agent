@@ -16,10 +16,18 @@ export interface Project {
   status: string | null;
   source: string;
   lead_score: number;
+  construction_status: ConstructionStatus;
   raw_data: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 }
+
+export type ConstructionStatus =
+  | "unknown"
+  | "pre_construction"
+  | "under_construction"
+  | "completed"
+  | "cancelled";
 
 export interface ScrapeRun {
   id: string;
@@ -39,6 +47,9 @@ export interface Filters {
   fuel_type: string;
   mw_min: number;
   mw_max: number;
+  cod_year_min: number;
+  cod_year_max: number;
+  construction_status: string;
   search: string;
 }
 

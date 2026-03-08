@@ -22,6 +22,7 @@ import anthropic
 from . import db
 from .agent import run_agent_async
 from .batch import run_batch
+from .knowledge_base import build_knowledge_context, query_knowledge_base
 from .sse import StreamWriter
 
 MODEL = "claude-sonnet-4-20250514"
@@ -36,6 +37,7 @@ You have tools to:
 - Research a single project to identify its EPC contractor (web research)
 - Batch-research multiple projects at once
 - Look up existing EPC discoveries
+- Query the knowledge base for developer/EPC profiles and relationships
 
 Be concise and helpful. When showing search results, briefly summarize what \
 you found. When a user asks to research projects, use the research tools. \
@@ -45,6 +47,10 @@ States in the database are stored as two-letter abbreviations (TX, CA, IL, etc.)
 Always use abbreviations when filtering by state.
 
 When referencing projects, include their name, developer, MW capacity, and state.
+
+Project searches are scoped to expected COD 2025–2028 by default. Projects outside \
+this window are likely already constructed or too far out. If a user explicitly asks \
+about projects outside this range, override the cod_min/cod_max filters.
 """
 
 TOOLS = [
@@ -94,6 +100,14 @@ TOOLS = [
                     "type": "string",
                     "description": "Free text search across project name, developer, queue ID.",
                 },
+                "cod_min": {
+                    "type": "string",
+                    "description": "Earliest expected COD (YYYY-MM-DD). Default '2025-01-01'. Set to null to remove lower bound.",
+                },
+                "cod_max": {
+                    "type": "string",
+                    "description": "Latest expected COD (YYYY-MM-DD). Default '2028-12-31'. Set to null to remove upper bound.",
+                },
                 "limit": {
                     "type": "integer",
                     "description": "Max results (default 20).",
@@ -106,14 +120,15 @@ TOOLS = [
         "description": (
             "Research a single project to discover its EPC contractor. "
             "This runs a web research agent that searches multiple sources. "
-            "Use when a user asks to research a specific project."
+            "Use when a user asks to research a specific project. "
+            "IMPORTANT: The project_id must be a real UUID from a previous search_projects result."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "project_id": {
                     "type": "string",
-                    "description": "The project UUID to research.",
+                    "description": "The project UUID from a search_projects result. Must be a valid UUID.",
                 },
             },
             "required": ["project_id"],
@@ -123,7 +138,8 @@ TOOLS = [
         "name": "batch_research_epc",
         "description": (
             "Research multiple projects at once to discover their EPC contractors. "
-            "Use when a user asks to research several or all projects from a search."
+            "Use when a user asks to research several or all projects from a search. "
+            "IMPORTANT: All project_ids must be real UUIDs from a previous search_projects result."
         ),
         "input_schema": {
             "type": "object",
@@ -131,7 +147,7 @@ TOOLS = [
                 "project_ids": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "List of project UUIDs to research.",
+                    "description": "List of project UUIDs from search_projects results. Must be valid UUIDs.",
                 },
             },
             "required": ["project_ids"],
@@ -155,12 +171,42 @@ TOOLS = [
             },
         },
     },
+    {
+        "name": "query_knowledge_base",
+        "description": (
+            "Query the knowledge base for information about developers, EPC contractors, "
+            "and their relationships. Returns entity profiles, known engagements, and "
+            "research history. Use when a user asks 'what do we know about [company]?' "
+            "or 'which EPCs are active in [state]?'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "entity_name": {
+                    "type": "string",
+                    "description": "Company name to look up (developer or EPC). Partial match not supported — use the full name.",
+                },
+                "state": {
+                    "type": "string",
+                    "description": "State abbreviation to find active EPCs (e.g. 'TX', 'CA').",
+                },
+            },
+        },
+    },
 ]
 
 
 # ---------------------------------------------------------------------------
 # Tool execution
 # ---------------------------------------------------------------------------
+
+def _is_valid_uuid(value: str) -> bool:
+    try:
+        uuid.UUID(value)
+        return True
+    except (ValueError, AttributeError):
+        return False
+
 
 async def _execute_tool(tool_name: str, tool_input: dict) -> dict | list | str:
     """Execute a chat tool and return the result."""
@@ -176,12 +222,16 @@ async def _execute_tool(tool_name: str, tool_input: dict) -> dict | list | str:
             needs_research=tool_input.get("needs_research"),
             has_epc=tool_input.get("has_epc"),
             search=tool_input.get("search"),
+            cod_min=tool_input.get("cod_min", "2025-01-01"),
+            cod_max=tool_input.get("cod_max", "2028-12-31"),
             limit=tool_input.get("limit", 20),
         )
         return {"projects": projects, "count": len(projects)}
 
     elif tool_name == "research_epc":
         project_id = tool_input["project_id"]
+        if not _is_valid_uuid(project_id):
+            return {"error": f"Invalid project ID '{project_id}'. Use a real UUID from search_projects results."}
         project = db.get_project(project_id)
         if not project:
             return {"error": f"Project {project_id} not found"}
@@ -194,12 +244,20 @@ async def _execute_tool(tool_name: str, tool_input: dict) -> dict | list | str:
                 "discovery": existing,
             }
 
-        result, agent_log, total_tokens = await run_agent_async(project)
-        discovery = db.store_discovery(project_id, result, agent_log, total_tokens)
+        knowledge_context = build_knowledge_context(project)
+        result, agent_log, total_tokens = await run_agent_async(
+            project, knowledge_context
+        )
+        discovery = db.store_discovery(
+            project_id, result, agent_log, total_tokens, project=project
+        )
         return {"discovery": discovery}
 
     elif tool_name == "batch_research_epc":
         project_ids = tool_input["project_ids"]
+        invalid = [pid for pid in project_ids if not _is_valid_uuid(pid)]
+        if invalid:
+            return {"error": f"Invalid project IDs: {invalid}. Use real UUIDs from search_projects results."}
         projects = [db.get_project(pid) for pid in project_ids]
         projects = [p for p in projects if p is not None]
 
@@ -229,6 +287,14 @@ async def _execute_tool(tool_name: str, tool_input: dict) -> dict | list | str:
             discoveries = db.list_discoveries()
         return {"discoveries": discoveries, "count": len(discoveries)}
 
+    elif tool_name == "query_knowledge_base":
+        entity_name = tool_input.get("entity_name")
+        state = tool_input.get("state")
+        if not entity_name and not state:
+            return {"error": "Provide at least one of entity_name or state."}
+        result = query_knowledge_base(entity_name=entity_name, state=state)
+        return {"knowledge": result}
+
     else:
         return {"error": f"Unknown tool: {tool_name}"}
 
@@ -254,6 +320,14 @@ async def run_chat_agent(
     """
     client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
+    # Cache system prompt + tools to reduce input token costs (~90% savings)
+    cached_system = [{
+        "type": "text",
+        "text": SYSTEM_PROMPT,
+        "cache_control": {"type": "ephemeral"},
+    }]
+    cached_tools = [*TOOLS[:-1], {**TOOLS[-1], "cache_control": {"type": "ephemeral"}}]
+
     message_id = str(uuid.uuid4())
     yield stream_writer.start(message_id)
     yield stream_writer.start_step()
@@ -273,8 +347,8 @@ async def run_chat_agent(
         async with client.messages.stream(
             model=MODEL,
             max_tokens=4096,
-            system=SYSTEM_PROMPT,
-            tools=TOOLS,
+            system=cached_system,
+            tools=cached_tools,
             messages=api_messages,
         ) as stream:
             async for event in stream:

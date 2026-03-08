@@ -18,6 +18,11 @@ from . import db
 from .agent import run_agent
 from .batch import run_batch
 from .chat_agent import run_chat_agent
+from .knowledge_base import (
+    get_entity_with_profile,
+    list_entities,
+    rebuild_profile_if_stale,
+)
 from .models import BatchDiscoverRequest, ChatRequest, DiscoverRequest, ReviewRequest
 from .sse import StreamWriter
 
@@ -174,6 +179,44 @@ def review_discovery(discovery_id: str, req: ReviewRequest):
 def list_discoveries():
     """List all EPC discoveries."""
     return db.list_discoveries()
+
+
+# ---------------------------------------------------------------------------
+# Knowledge Base / Entity endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/entities")
+def get_entities(type: str | None = None, limit: int = 50):
+    """List entities, optionally filtered by type ('developer' or 'epc')."""
+    return list_entities(entity_type=type, limit=limit)
+
+
+@app.get("/api/entities/{entity_id}")
+def get_entity(entity_id: str):
+    """Get an entity by ID, including its profile."""
+    entity = get_entity_with_profile(entity_id)
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entity not found")
+    return entity
+
+
+@app.post("/api/entities/{entity_id}/rebuild-profile")
+def rebuild_entity_profile(entity_id: str):
+    """Force-rebuild an entity's profile from current KB data."""
+    # Verify entity exists
+    client = db.get_client()
+    resp = client.table("entities").select("id").eq("id", entity_id).limit(1).execute()
+    if not resp.data:
+        raise HTTPException(status_code=404, detail="Entity not found")
+
+    # Clear profile_rebuilt_at to force rebuild, then rebuild
+    client.table("entities").update(
+        {"profile_rebuilt_at": None}
+    ).eq("id", entity_id).execute()
+
+    profile = rebuild_profile_if_stale(entity_id)
+    return {"entity_id": entity_id, "profile": profile}
 
 
 # ---------------------------------------------------------------------------

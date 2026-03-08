@@ -19,9 +19,20 @@ def score_lead(row: pd.Series) -> int:
     else:
         score += 10
 
-    # Status: active is better
+    # Status: active/construction is better
     status = str(row.get("status", "")).lower()
-    if "active" in status:
+    source = str(row.get("source", "")).lower()
+    if source == "gem_tracker":
+        # GEM projects: construction status is the key signal
+        if "construction" in status:
+            score += 30  # Actively being built — EPC is engaged
+        elif "pre-construction" in status:
+            score += 20  # EPC selection imminent
+        elif "announced" in status:
+            score += 10
+        else:
+            score += 5
+    elif "active" in status:
         score += 25
     elif "completed" in status or "done" in status:
         score += 10

@@ -1,6 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { Project } from "@/lib/types";
+
+import { ConstructionStatus } from "@/lib/types";
 
 type SortField =
   | "lead_score"
@@ -11,6 +14,7 @@ type SortField =
   | "mw_capacity"
   | "fuel_type"
   | "status"
+  | "construction_status"
   | "queue_date"
   | "expected_cod";
 
@@ -54,7 +58,8 @@ const COLUMNS: { key: SortField; label: string; align?: "right" }[] = [
   { key: "state", label: "State" },
   { key: "mw_capacity", label: "MW", align: "right" },
   { key: "fuel_type", label: "Type" },
-  { key: "status", label: "Status" },
+  { key: "status", label: "Queue Status" },
+  { key: "construction_status", label: "Construction" },
   { key: "queue_date", label: "Queue Date" },
   { key: "expected_cod", label: "Expected COD" },
 ];
@@ -114,7 +119,12 @@ export default function ProjectsTable({
                     <ScoreBadge score={p.lead_score} />
                   </td>
                   <td className="max-w-[200px] truncate px-4 py-3 font-medium text-slate-900">
-                    {p.project_name || "—"}
+                    <Link
+                      href={`/projects/${p.id}`}
+                      className="hover:text-blue-600 hover:underline"
+                    >
+                      {p.project_name || "—"}
+                    </Link>
                   </td>
                   <td className="max-w-[180px] truncate px-4 py-3 text-slate-600">
                     {p.developer || "—"}
@@ -127,6 +137,9 @@ export default function ProjectsTable({
                   <td className="px-4 py-3 text-slate-600">{p.fuel_type || "—"}</td>
                   <td className="px-4 py-3">
                     <StatusPill status={p.status} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <ConstructionPill status={p.construction_status} />
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-slate-500">
                     {formatDate(p.queue_date)}
@@ -166,6 +179,31 @@ export default function ProjectsTable({
         </div>
       </div>
     </div>
+  );
+}
+
+const CONSTRUCTION_LABELS: Record<string, string> = {
+  unknown: "Unknown",
+  pre_construction: "Pre-Construction",
+  under_construction: "Under Construction",
+  completed: "Completed",
+  cancelled: "Cancelled",
+};
+
+function ConstructionPill({ status }: { status: ConstructionStatus }) {
+  const cls: Record<string, string> = {
+    pre_construction: "bg-amber-50 text-amber-700",
+    under_construction: "bg-blue-50 text-blue-700",
+    completed: "bg-emerald-50 text-emerald-700",
+    cancelled: "bg-red-50 text-red-600",
+    unknown: "bg-slate-100 text-slate-500",
+  };
+  return (
+    <span
+      className={`inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ${cls[status] || cls.unknown}`}
+    >
+      {CONSTRUCTION_LABELS[status] || "Unknown"}
+    </span>
   );
 }
 

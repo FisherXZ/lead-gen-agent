@@ -43,7 +43,8 @@ class TestResearchOne:
     @patch("src.batch.store_discovery")
     @patch("src.batch.run_agent_async", new_callable=AsyncMock)
     @patch("src.batch.get_active_discovery")
-    async def test_successful_research(self, mock_get_active, mock_agent, mock_store):
+    @patch("src.batch.build_knowledge_context", return_value=None)
+    async def test_successful_research(self, mock_kb, mock_get_active, mock_agent, mock_store):
         """Normal project → started + completed callbacks."""
         mock_get_active.return_value = None
         mock_agent.return_value = _fake_agent_result()
@@ -91,7 +92,8 @@ class TestResearchOne:
     @patch("src.batch.store_discovery")
     @patch("src.batch.run_agent_async", new_callable=AsyncMock)
     @patch("src.batch.get_active_discovery")
-    async def test_does_not_skip_pending_discovery(self, mock_get_active, mock_agent, mock_store):
+    @patch("src.batch.build_knowledge_context", return_value=None)
+    async def test_does_not_skip_pending_discovery(self, mock_kb, mock_get_active, mock_agent, mock_store):
         """Project with pending (not accepted) discovery → runs agent."""
         mock_get_active.return_value = {"id": "disc-pending", "review_status": "pending"}
         mock_agent.return_value = _fake_agent_result()
@@ -112,7 +114,8 @@ class TestResearchOne:
     @patch("src.batch.store_discovery")
     @patch("src.batch.run_agent_async", new_callable=AsyncMock)
     @patch("src.batch.get_active_discovery")
-    async def test_agent_error_returns_error_status(self, mock_get_active, mock_agent, mock_store):
+    @patch("src.batch.build_knowledge_context", return_value=None)
+    async def test_agent_error_returns_error_status(self, mock_kb, mock_get_active, mock_agent, mock_store):
         """Agent exception → error result with traceback."""
         mock_get_active.return_value = None
         mock_agent.side_effect = RuntimeError("API failure")
@@ -133,7 +136,8 @@ class TestResearchOne:
     @patch("src.batch.store_discovery")
     @patch("src.batch.run_agent_async", new_callable=AsyncMock)
     @patch("src.batch.get_active_discovery")
-    async def test_uses_queue_id_fallback_for_label(self, mock_get_active, mock_agent, mock_store):
+    @patch("src.batch.build_knowledge_context", return_value=None)
+    async def test_uses_queue_id_fallback_for_label(self, mock_kb, mock_get_active, mock_agent, mock_store):
         """Project without project_name uses queue_id as label."""
         mock_get_active.return_value = None
         mock_agent.return_value = _fake_agent_result()
@@ -159,10 +163,11 @@ class TestRunBatch:
     @patch("src.batch.store_discovery")
     @patch("src.batch.run_agent_async", new_callable=AsyncMock)
     @patch("src.batch.get_active_discovery")
-    async def test_processes_all_projects(self, mock_get_active, mock_agent, mock_store):
+    @patch("src.batch.build_knowledge_context", return_value=None)
+    async def test_processes_all_projects(self, mock_kb, mock_get_active, mock_agent, mock_store):
         mock_get_active.return_value = None
         mock_agent.return_value = _fake_agent_result()
-        mock_store.side_effect = lambda pid, *a: _fake_discovery(pid)
+        mock_store.side_effect = lambda pid, *a, **kw: _fake_discovery(pid)
 
         projects = [
             {"id": f"proj-{i}", "queue_id": f"Q-{i}", "project_name": f"Solar {i}"}
@@ -183,7 +188,8 @@ class TestRunBatch:
     @patch("src.batch.store_discovery")
     @patch("src.batch.run_agent_async", new_callable=AsyncMock)
     @patch("src.batch.get_active_discovery")
-    async def test_mixed_results(self, mock_get_active, mock_agent, mock_store):
+    @patch("src.batch.build_knowledge_context", return_value=None)
+    async def test_mixed_results(self, mock_kb, mock_get_active, mock_agent, mock_store):
         """Mix of normal, skipped, and error projects."""
         def get_active(pid):
             if pid == "proj-skip":
@@ -193,7 +199,7 @@ class TestRunBatch:
         mock_get_active.side_effect = get_active
 
         call_count = 0
-        async def fake_agent(project):
+        async def fake_agent(project, knowledge_context=None):
             nonlocal call_count
             call_count += 1
             if project["id"] == "proj-err":
@@ -201,7 +207,7 @@ class TestRunBatch:
             return _fake_agent_result()
 
         mock_agent.side_effect = fake_agent
-        mock_store.side_effect = lambda pid, *a: _fake_discovery(pid)
+        mock_store.side_effect = lambda pid, *a, **kw: _fake_discovery(pid)
 
         projects = [
             {"id": "proj-ok", "queue_id": "Q-1", "project_name": "Good"},
@@ -223,7 +229,8 @@ class TestRunBatch:
     @patch("src.batch.store_discovery")
     @patch("src.batch.run_agent_async", new_callable=AsyncMock)
     @patch("src.batch.get_active_discovery")
-    async def test_semaphore_limits_concurrency(self, mock_get_active, mock_agent, mock_store):
+    @patch("src.batch.build_knowledge_context", return_value=None)
+    async def test_semaphore_limits_concurrency(self, mock_kb, mock_get_active, mock_agent, mock_store):
         """At most `concurrency` agents run simultaneously."""
         mock_get_active.return_value = None
 
@@ -233,7 +240,7 @@ class TestRunBatch:
 
         original_return = _fake_agent_result()
 
-        async def slow_agent(project):
+        async def slow_agent(project, knowledge_context=None):
             nonlocal max_concurrent, current_concurrent
             async with lock:
                 current_concurrent += 1
@@ -244,7 +251,7 @@ class TestRunBatch:
             return original_return
 
         mock_agent.side_effect = slow_agent
-        mock_store.side_effect = lambda pid, *a: _fake_discovery(pid)
+        mock_store.side_effect = lambda pid, *a, **kw: _fake_discovery(pid)
 
         projects = [
             {"id": f"proj-{i}", "queue_id": f"Q-{i}", "project_name": f"Solar {i}"}
@@ -261,7 +268,8 @@ class TestRunBatch:
     @patch("src.batch.store_discovery")
     @patch("src.batch.run_agent_async", new_callable=AsyncMock)
     @patch("src.batch.get_active_discovery")
-    async def test_empty_project_list(self, mock_get_active, mock_agent, mock_store):
+    @patch("src.batch.build_knowledge_context", return_value=None)
+    async def test_empty_project_list(self, mock_kb, mock_get_active, mock_agent, mock_store):
         progress_events = []
         async def on_progress(update):
             progress_events.append(update)
