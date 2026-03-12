@@ -311,13 +311,14 @@ class TestTokenCounting:
 # ---------------------------------------------------------------------------
 
 class TestCompaction:
+    @patch("src.research.estimate_context_size", return_value=400_000)
     @patch("src.research.compact_messages")
     @patch("src.research.execute_tool", new_callable=AsyncMock)
     @patch("src.research.anthropic.AsyncAnthropic")
     async def test_compaction_called_during_multi_turn(
-        self, MockClient, mock_exec_tool, mock_compact, sample_project
+        self, MockClient, mock_exec_tool, mock_compact, mock_estimate, sample_project
     ):
-        """compact_messages is called after tool results are appended."""
+        """compact_messages is called when context exceeds threshold."""
         # Turn 1: web_search
         search_block = make_tool_use_block(
             name="web_search", block_id="ws-c1",
@@ -351,10 +352,10 @@ class TestCompaction:
 
         result, log, tokens = await run_research(sample_project)
 
-        # compact_messages should have been called once (after turn 1 tool results)
+        # compact_messages should have been called once (context exceeded 300K)
         assert mock_compact.call_count == 1
         call_kwargs = mock_compact.call_args[1]
-        assert call_kwargs["max_context_chars"] == 60_000
+        assert call_kwargs["max_context_chars"] == 300_000
         assert call_kwargs["keep_recent_turns"] == 4
 
 

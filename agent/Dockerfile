@@ -8,11 +8,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-COPY agent/pyproject.toml .
+COPY pyproject.toml .
 RUN pip install --no-cache-dir .
 
 # Copy source code
-COPY agent/src/ src/
+COPY src/ src/
 
 # Railway injects PORT env var (default 8000)
 ENV PORT=8000
