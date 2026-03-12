@@ -2,9 +2,32 @@
 
 from __future__ import annotations
 
+import json
 import os
+import re
 
+import anthropic
 from supabase import create_client, Client
+
+
+# ---------------------------------------------------------------------------
+# Anthropic API key helpers
+# ---------------------------------------------------------------------------
+
+_KEY_RE = re.compile(r"sk-ant-[A-Za-z0-9_-]{10,}")
+
+
+def sanitize_key_from_string(s: str) -> str:
+    """Redact any Anthropic API keys found in a string."""
+    return _KEY_RE.sub("sk-ant-***REDACTED***", s)
+
+
+def get_anthropic_client(api_key: str | None = None) -> anthropic.AsyncAnthropic:
+    """Create an AsyncAnthropic client, using the provided key or falling back to env."""
+    key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+    if not key:
+        raise KeyError("No Anthropic API key provided")
+    return anthropic.AsyncAnthropic(api_key=key)
 
 
 def get_client() -> Client:
@@ -91,7 +114,7 @@ def store_discovery(
         "epc_contractor": result.epc_contractor or "Unknown",
         "confidence": result.confidence,
         "sources": [s.model_dump() for s in result.sources],
-        "reasoning": result.reasoning,
+        "reasoning": json.dumps(result.reasoning) if isinstance(result.reasoning, dict) else result.reasoning,
         "related_leads": result.related_leads,
         "searches_performed": result.searches_performed,
         "review_status": "pending",
@@ -160,6 +183,8 @@ def search_projects(
     search: str | None = None,
     cod_min: str | None = "2025-01-01",
     cod_max: str | None = "2028-12-31",
+    min_lead_score: int | None = None,
+    sort_by: str = "capacity",
     limit: int = 20,
 ) -> list[dict]:
     """Dynamic project search with optional filters.
@@ -192,6 +217,8 @@ def search_projects(
         query = query.is_("epc_company", "null")
     if needs_research is True:
         query = query.is_("epc_company", "null")
+    if min_lead_score is not None:
+        query = query.gte("lead_score", min_lead_score)
     if search:
         query = query.or_(
             f"project_name.ilike.%{search}%,"
@@ -199,7 +226,8 @@ def search_projects(
             f"queue_id.ilike.%{search}%"
         )
 
-    query = query.order("mw_capacity", desc=True).limit(limit)
+    order_col = "lead_score" if sort_by == "lead_score" else "mw_capacity"
+    query = query.order(order_col, desc=True).limit(limit)
     resp = query.execute()
     return resp.data
 
@@ -236,7 +264,7 @@ def search_projects_with_epc(
             client.table("epc_discoveries")
             .select(
                 "id, epc_contractor, confidence, review_status, source_count, created_at, "
-                "project:project_id(id, project_name, developer, mw_capacity, state, expected_cod, fuel_type, epc_company)"
+                "project:project_id(id, project_name, developer, mw_capacity, state, expected_cod, fuel_type, epc_company, lead_score)"
             )
             .ilike("epc_contractor", f"%{epc_name}%")
             .neq("review_status", "rejected")
@@ -254,7 +282,7 @@ def search_projects_with_epc(
     else:
         # ---- Mode 1: Project-first ----
         query = client.table("projects").select(
-            "id, project_name, developer, mw_capacity, state, expected_cod, fuel_type, epc_company, "
+            "id, project_name, developer, mw_capacity, state, expected_cod, fuel_type, epc_company, lead_score, "
             "latest_discovery:epc_discoveries(id, epc_contractor, confidence, review_status, source_count, created_at)"
         )
         if state:
@@ -336,6 +364,7 @@ def _normalize_epc_first(data: list[dict]) -> list[dict]:
             "mw_capacity": proj.get("mw_capacity"),
             "state": proj.get("state"),
             "expected_cod": proj.get("expected_cod"),
+            "lead_score": proj.get("lead_score"),
             "epc_contractor": row.get("epc_contractor"),
             "confidence": row.get("confidence"),
             "review_status": row.get("review_status"),

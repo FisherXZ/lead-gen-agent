@@ -13,7 +13,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException, Query
+import anthropic
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -28,7 +29,7 @@ from .agent_jobs import (
     set_task,
 )
 from .batch import run_batch
-from .batch_progress import get_batch
+from .batch_progress import cancel_batch, cancel_batch_for_conversation, get_batch
 from .knowledge_base import build_knowledge_context, promote_discovery_to_kb, process_rejection_into_kb
 from .research import run_research, run_research_plan
 from .chat_agent import run_chat_agent
@@ -37,6 +38,18 @@ from .models import AgentResult, BatchDiscoverRequest, ChatRequest, DiscoverPlan
 from .sse import StreamWriter
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_reasoning(raw):
+    """Parse JSON reasoning string back to dict for API response."""
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict) and "summary" in parsed:
+                return parsed
+        except (json.JSONDecodeError, ValueError):
+            pass
+    return raw
 
 app = FastAPI(title="EPC Discovery Agent")
 
@@ -54,13 +67,34 @@ def health():
     return {"status": "ok"}
 
 
+@app.post("/api/settings/validate-key")
+async def validate_key(request: Request):
+    """Validate a user-provided Anthropic API key."""
+    key = request.headers.get("x-anthropic-api-key")
+    if not key:
+        raise HTTPException(400, "No key provided")
+    try:
+        client = anthropic.AsyncAnthropic(api_key=key)
+        await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1,
+            messages=[{"role": "user", "content": "hi"}],
+        )
+        return {"valid": True}
+    except anthropic.AuthenticationError:
+        return {"valid": False, "error": "Invalid API key"}
+    except Exception as e:
+        return {"valid": False, "error": type(e).__name__}
+
+
 @app.post("/api/discover/plan")
-async def discover_plan(req: DiscoverPlanRequest):
+async def discover_plan(req: DiscoverPlanRequest, request: Request):
     """Generate a research plan for a project (without executing research).
 
     Returns the plan text for user review. The user can approve it and
     pass it to POST /api/discover with the plan parameter.
     """
+    api_key = request.headers.get("x-anthropic-api-key")
     project = db.get_project(req.project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -68,12 +102,12 @@ async def discover_plan(req: DiscoverPlanRequest):
     try:
         knowledge_context = build_knowledge_context(project)
         plan_text, agent_log, total_tokens = await run_research_plan(
-            project, knowledge_context
+            project, knowledge_context, api_key=api_key
         )
     except KeyError as exc:
         raise HTTPException(status_code=503, detail=f"Missing configuration: {exc}")
     except Exception:
-        tb = traceback.format_exc()
+        tb = db.sanitize_key_from_string(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Planning error: {tb[:500]}")
 
     return {
@@ -85,11 +119,12 @@ async def discover_plan(req: DiscoverPlanRequest):
 
 
 @app.post("/api/discover")
-async def discover(req: DiscoverRequest):
+async def discover(req: DiscoverRequest, request: Request):
     """Run EPC discovery for a project.
 
     Optionally accepts an approved plan from /api/discover/plan.
     """
+    api_key = request.headers.get("x-anthropic-api-key")
     project = db.get_project(req.project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -106,7 +141,7 @@ async def discover(req: DiscoverRequest):
     try:
         knowledge_context = build_knowledge_context(project)
         result, agent_log, total_tokens = await run_research(
-            project, knowledge_context, approved_plan=req.plan
+            project, knowledge_context, approved_plan=req.plan, api_key=api_key
         )
     except KeyError as exc:
         raise HTTPException(
@@ -114,7 +149,7 @@ async def discover(req: DiscoverRequest):
             detail=f"Missing configuration: {exc}",
         )
     except Exception:
-        tb = traceback.format_exc()
+        tb = db.sanitize_key_from_string(traceback.format_exc())
         raise HTTPException(
             status_code=500,
             detail=f"Agent error: {tb[:500]}",
@@ -179,7 +214,11 @@ async def discover_handoff(discovery_id: str = None, project_id: str = None):
     # Build the research context summary
     epc = discovery.get("epc_contractor", "Unknown")
     confidence = discovery.get("confidence", "unknown")
-    reasoning = discovery.get("reasoning", "")
+    reasoning_raw = _parse_reasoning(discovery.get("reasoning", ""))
+    if isinstance(reasoning_raw, dict):
+        reasoning = reasoning_raw.get("summary", "")
+    else:
+        reasoning = reasoning_raw
     sources = discovery.get("sources", [])
     searches = discovery.get("searches_performed", [])
 
@@ -223,8 +262,9 @@ You can ask me questions about this research, request more investigation, or app
 
 
 @app.post("/api/discover/batch")
-async def discover_batch(req: BatchDiscoverRequest):
+async def discover_batch(req: BatchDiscoverRequest, request: Request):
     """Run EPC discovery on multiple projects, streaming progress via SSE."""
+    api_key = request.headers.get("x-anthropic-api-key")
     if not req.project_ids:
         raise HTTPException(status_code=400, detail="project_ids must not be empty")
 
@@ -245,7 +285,7 @@ async def discover_batch(req: BatchDiscoverRequest):
             await queue.put(update)
 
         async def run():
-            await run_batch(projects, on_progress)
+            await run_batch(projects, on_progress, api_key=api_key)
             await queue.put(None)  # sentinel
 
         task = asyncio.create_task(run())
@@ -332,7 +372,7 @@ def review_discovery(discovery_id: str, req: ReviewRequest):
                     epc_contractor=discovery.get("epc_contractor"),
                     confidence=discovery.get("confidence", "unknown"),
                     sources=sources,
-                    reasoning=discovery.get("reasoning", ""),
+                    reasoning=_parse_reasoning(discovery.get("reasoning", "")),
                     related_leads=discovery.get("related_leads", []),
                     searches_performed=discovery.get("searches_performed", []),
                 )
@@ -363,13 +403,19 @@ def review_discovery(discovery_id: str, req: ReviewRequest):
 @app.get("/api/discoveries")
 def list_discoveries():
     """List all EPC discoveries."""
-    return db.list_discoveries()
+    discoveries = db.list_discoveries()
+    for d in discoveries:
+        d["reasoning"] = _parse_reasoning(d.get("reasoning", ""))
+    return discoveries
 
 
 @app.get("/api/discoveries/pending")
 def list_pending_discoveries():
     """List pending discoveries with project metadata, sorted by confidence."""
-    return db.list_pending_discoveries()
+    discoveries = db.list_pending_discoveries()
+    for d in discoveries:
+        d["reasoning"] = _parse_reasoning(d.get("reasoning", ""))
+    return discoveries
 
 
 # ---------------------------------------------------------------------------
@@ -415,6 +461,24 @@ def rebuild_entity_profile(entity_id: str):
 # ---------------------------------------------------------------------------
 
 
+@app.post("/api/batch/{batch_id}/cancel")
+def cancel_batch_endpoint(batch_id: str):
+    """Cancel a running batch research job."""
+    cancelled = cancel_batch(batch_id)
+    if not cancelled:
+        raise HTTPException(status_code=404, detail="Batch not found or already finished")
+    return {"status": "cancelled"}
+
+
+@app.post("/api/conversations/{conversation_id}/cancel-batch")
+def cancel_conversation_batch(conversation_id: str):
+    """Cancel the active batch research for a conversation (keeps the chat job alive)."""
+    cancelled = cancel_batch_for_conversation(conversation_id)
+    if not cancelled:
+        raise HTTPException(status_code=404, detail="No active batch for this conversation")
+    return {"status": "cancelled"}
+
+
 @app.get("/api/batch-progress/{batch_id}")
 async def batch_progress(batch_id: str):
     """Stream batch research progress as SSE events."""
@@ -446,6 +510,7 @@ def _batch_snapshot(state) -> dict:
         "completed": state.completed,
         "errors": state.errors,
         "done": state.done,
+        "cancelled": state.cancelled,
         "projects": [
             {
                 "project_id": p.project_id,
@@ -465,12 +530,13 @@ def _batch_snapshot(state) -> dict:
 
 
 @app.post("/api/chat")
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest, request: Request):
     """Chat with the EPC discovery agent. Streams response via SSE.
 
     The agent runs as a background task so it survives client disconnects.
     If a job is already running for this conversation, reconnects to it.
     """
+    api_key = request.headers.get("x-anthropic-api-key")
     # Create or reuse conversation
     if req.conversation_id:
         conversation_id = req.conversation_id
@@ -521,7 +587,7 @@ async def chat(req: ChatRequest):
     job = create_job(job_id, conversation_id)
 
     stream_writer = StreamWriter()
-    task = asyncio.create_task(_run_agent_job(job, messages, conversation_id, stream_writer))
+    task = asyncio.create_task(_run_agent_job(job, messages, conversation_id, stream_writer, api_key=api_key))
     set_task(job_id, task)
 
     return StreamingResponse(
@@ -536,11 +602,12 @@ async def chat(req: ChatRequest):
 
 
 async def _run_agent_job(
-    job, messages: list[dict], conversation_id: str, stream_writer: StreamWriter
+    job, messages: list[dict], conversation_id: str, stream_writer: StreamWriter,
+    api_key: str | None = None,
 ) -> None:
     """Background wrapper: consumes the chat agent generator, pushes events to job store."""
     try:
-        async for event in run_chat_agent(messages, conversation_id, stream_writer):
+        async for event in run_chat_agent(messages, conversation_id, stream_writer, api_key=api_key):
             job.append_event(event)
         mark_job_done(job.job_id)
     except asyncio.CancelledError:
@@ -557,13 +624,19 @@ async def _run_agent_job(
             role="assistant",
             content="[Stopped by user]",
         )
+    except anthropic.AuthenticationError:
+        error_sw = StreamWriter()
+        job.append_event(error_sw.text("\n\n**Authentication failed.** Your API key is invalid or expired. Check Settings to update it."))
+        job.append_event(error_sw.finish("error"))
+        job.append_event(error_sw.done())
+        mark_job_done(job.job_id, error="Authentication failed")
     except Exception:
         logger.exception("Agent job %s failed", job.job_id)
         # Push error events so any connected client sees the failure
         error_sw = StreamWriter()
         job.append_event(error_sw.finish("error"))
         job.append_event(error_sw.done())
-        mark_job_done(job.job_id, error=traceback.format_exc()[:500])
+        mark_job_done(job.job_id, error=db.sanitize_key_from_string(traceback.format_exc()[:500]))
 
 
 async def _stream_from_job(job, cursor: int = 0):

@@ -60,6 +60,7 @@ async def run_research(
     project: dict,
     knowledge_context: str | None = None,
     approved_plan: str | None = None,
+    api_key: str | None = None,
 ) -> tuple[AgentResult, list[dict], int]:
     """Run EPC research for a single project.
 
@@ -67,11 +68,13 @@ async def run_research(
         project: Project dict from DB.
         knowledge_context: Optional KB briefing to include in the prompt.
         approved_plan: Optional approved research plan text to inject.
+        api_key: Optional user-provided Anthropic API key.
 
     Returns:
         (result, agent_log, total_tokens)
     """
-    client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    from .db import get_anthropic_client
+    client = get_anthropic_client(api_key)
 
     session_id = f"research-{project.get('id', 'unknown')}-{uuid4().hex[:8]}"
     user_msg = build_user_message(project, knowledge_context)
@@ -254,6 +257,7 @@ async def run_research(
 async def run_research_plan(
     project: dict,
     knowledge_context: str | None = None,
+    api_key: str | None = None,
 ) -> tuple[str, list[dict], int]:
     """Generate a research plan for a project WITHOUT executing full research.
 
@@ -263,11 +267,13 @@ async def run_research_plan(
     Args:
         project: Project dict from DB.
         knowledge_context: Optional KB briefing to include in the prompt.
+        api_key: Optional user-provided Anthropic API key.
 
     Returns:
         (plan_text, agent_log, total_tokens)
     """
-    client = anthropic.AsyncAnthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    from .db import get_anthropic_client
+    client = get_anthropic_client(api_key)
 
     user_msg = build_user_message(project, knowledge_context)
     messages = [{"role": "user", "content": user_msg}]
@@ -320,7 +326,14 @@ async def run_research_plan(
 
             if block.name == "report_findings":
                 # The plan is in the reasoning field
-                plan_text = block.input.get("reasoning", "")
+                raw_reasoning = block.input.get("reasoning", "")
+                if isinstance(raw_reasoning, dict):
+                    plan_text = raw_reasoning.get("summary", "")
+                    evidence = raw_reasoning.get("supporting_evidence", [])
+                    if evidence:
+                        plan_text += "\n\n" + "\n".join(f"- {e}" for e in evidence)
+                else:
+                    plan_text = raw_reasoning
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": block.id,

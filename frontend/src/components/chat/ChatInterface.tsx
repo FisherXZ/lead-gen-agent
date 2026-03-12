@@ -3,6 +3,7 @@
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { apiKeyHeader } from "@/lib/api-key";
 import ChatMessage from "./ChatMessage";
 import FileAttachment from "./FileAttachment";
 import SuggestedPrompts from "./SuggestedPrompts";
@@ -75,7 +76,11 @@ export default function ChatInterface() {
         api: `${AGENT_API_URL}/api/chat`,
         body: () => ({ conversation_id: conversationIdRef.current }),
         fetch: async (url, init) => {
-          const res = await globalThis.fetch(url, init);
+          const headers = new Headers(init?.headers);
+          for (const [k, v] of Object.entries(apiKeyHeader())) {
+            headers.set(k, v);
+          }
+          const res = await globalThis.fetch(url, { ...init, headers });
           const id = res.headers.get("x-conversation-id");
           if (id) {
             conversationIdRef.current = id;
@@ -103,6 +108,23 @@ export default function ChatInterface() {
     }
     window.addEventListener("populate-chat-input", handlePopulate);
     return () => window.removeEventListener("populate-chat-input", handlePopulate);
+  }, []);
+
+  // Listen for batch cancel requests from BatchStopButton
+  useEffect(() => {
+    function handleCancelBatch() {
+      const cid = conversationIdRef.current;
+      if (!cid) return;
+      globalThis
+        .fetch(`${AGENT_API_URL}/api/conversations/${cid}/cancel-batch`, {
+          method: "POST",
+        })
+        .catch(() => {
+          // best-effort
+        });
+    }
+    window.addEventListener("cancel-batch", handleCancelBatch);
+    return () => window.removeEventListener("cancel-batch", handleCancelBatch);
   }, []);
 
   // Auto-scroll to bottom on new messages
@@ -229,13 +251,21 @@ export default function ChatInterface() {
             if (evt.type === "text-delta" && evt.delta) {
               textAccum += evt.delta;
             } else if (evt.type === "tool-input-available") {
-              parts.push({
-                type: "tool-invocation",
-                toolCallId: evt.toolCallId,
-                toolName: evt.toolName,
-                state: "partial-call",
-                input: evt.input,
-              });
+              const existingPart = parts.find(
+                (p) => p.type === "tool-invocation" && p.toolCallId === evt.toolCallId
+              );
+              if (existingPart) {
+                // Re-emitted with enriched input (e.g. _batch_id) — update in place
+                existingPart.input = evt.input;
+              } else {
+                parts.push({
+                  type: "tool-invocation",
+                  toolCallId: evt.toolCallId,
+                  toolName: evt.toolName,
+                  state: "partial-call",
+                  input: evt.input,
+                });
+              }
             } else if (evt.type === "tool-output-available") {
               const existing = parts.find(
                 (p) =>
@@ -456,15 +486,15 @@ export default function ChatInterface() {
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
       {/* Sidebar */}
       <div
-        className={`shrink-0 border-r border-slate-200 bg-white transition-all ${
+        className={`shrink-0 border-r border-border-subtle bg-surface-primary transition-all ${
           sidebarOpen ? "w-64" : "w-0"
         } overflow-hidden`}
       >
         <div className="flex h-full w-64 flex-col">
-          <div className="border-b border-slate-100 p-3">
+          <div className="border-b border-border-subtle p-3">
             <button
               onClick={handleNewConversation}
-              className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800"
+              className="w-full rounded-md bg-accent-amber px-3 py-2 text-sm font-medium text-surface-primary transition-colors hover:bg-accent-amber/90"
             >
               New conversation
             </button>
@@ -474,14 +504,14 @@ export default function ChatInterface() {
               <button
                 key={c.id}
                 onClick={() => loadConversation(c.id)}
-                className={`w-full border-b border-slate-50 px-3 py-2.5 text-left transition-colors hover:bg-slate-50 ${
-                  conversationId === c.id ? "bg-blue-50" : ""
+                className={`w-full border-b border-border-subtle px-3 py-2.5 text-left transition-colors hover:bg-surface-overlay ${
+                  conversationId === c.id ? "bg-accent-amber-muted" : ""
                 }`}
               >
-                <p className="truncate text-sm text-slate-700">
+                <p className="truncate text-sm text-text-primary">
                   {c.title || "Untitled"}
                 </p>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-text-tertiary">
                   {new Date(c.updated_at).toLocaleDateString()}
                 </p>
               </button>
@@ -493,10 +523,10 @@ export default function ChatInterface() {
       {/* Main chat area */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Header */}
-        <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3">
+        <div className="flex items-center gap-3 border-b border-border-subtle bg-surface-raised px-4 py-3">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-100"
+            className="rounded-md p-1.5 text-text-tertiary transition-colors hover:bg-surface-overlay hover:text-text-primary"
             title="Toggle conversations"
           >
             <svg
@@ -514,14 +544,14 @@ export default function ChatInterface() {
               <line x1="3" y1="18" x2="21" y2="18" />
             </svg>
           </button>
-          <h2 className="text-sm font-medium text-slate-700">
+          <h2 className="text-sm font-medium text-text-primary">
             EPC Discovery Chat
           </h2>
         </div>
 
         {/* Messages — drop zone */}
         <div
-          className={`flex-1 overflow-y-auto px-4 py-6 transition-colors ${isDragOver ? "bg-blue-50/50 ring-2 ring-inset ring-blue-200" : ""}`}
+          className={`flex-1 overflow-y-auto px-4 py-6 transition-colors ${isDragOver ? "bg-accent-amber-muted ring-2 ring-inset ring-accent-amber/30" : ""}`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
@@ -529,10 +559,10 @@ export default function ChatInterface() {
           {messages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-6">
               <div className="text-center">
-                <h3 className="text-lg font-semibold text-slate-800">
+                <h3 className="text-lg font-semibold font-serif text-text-primary">
                   Solar Project Research Assistant
                 </h3>
-                <p className="mt-1 text-sm text-slate-500">
+                <p className="mt-1 text-sm text-text-secondary">
                   Search projects, discover EPC contractors, and review findings.
                 </p>
               </div>
@@ -551,15 +581,15 @@ export default function ChatInterface() {
                   }
                 />
               ))}
-              {/* Thinking indicator — muted, Level 2 style */}
+              {/* Thinking indicator */}
               {(status === "submitted" || (reconnecting && messages.length > 0 && messages[messages.length - 1]?.role !== "assistant")) && (
                 <div className="flex items-center gap-2 py-2">
                   <div className="flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300" style={{ animationDelay: "0ms" }} />
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300" style={{ animationDelay: "150ms" }} />
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-300" style={{ animationDelay: "300ms" }} />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-tertiary" style={{ animationDelay: "0ms" }} />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-tertiary" style={{ animationDelay: "150ms" }} />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-tertiary" style={{ animationDelay: "300ms" }} />
                   </div>
-                  <span className="text-[13px] text-slate-400">Thinking...</span>
+                  <span className="text-[13px] text-text-tertiary">Thinking...</span>
                 </div>
               )}
               <div ref={messagesEndRef} />
@@ -568,7 +598,7 @@ export default function ChatInterface() {
         </div>
 
         {/* Input */}
-        <div className="border-t border-slate-200 bg-white px-4 py-3">
+        <div className="border-t border-border-subtle bg-surface-raised px-4 py-3">
           {/* File attachment chips */}
           {pendingFiles.length > 0 && (
             <div className="mx-auto mb-2 flex max-w-3xl flex-wrap gap-2">
@@ -604,7 +634,7 @@ export default function ChatInterface() {
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={isLoading || pendingFiles.length >= MAX_FILES}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:opacity-40"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border-default bg-surface-raised text-text-tertiary transition-colors hover:bg-surface-overlay hover:text-text-primary disabled:opacity-40"
               title="Attach file (PDF, image, text)"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -617,14 +647,14 @@ export default function ChatInterface() {
               onChange={(e) => setInputValue(e.target.value)}
               onPaste={handlePaste}
               placeholder={pendingFiles.length > 0 ? "Add a message about your files..." : "Ask about solar projects or EPC contractors..."}
-              className="h-10 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-300 focus:outline-none focus:ring-1 focus:ring-blue-300"
+              className="h-10 flex-1 rounded-lg border border-border-default bg-surface-overlay px-4 text-sm text-text-primary placeholder:text-text-tertiary focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
               disabled={isLoading}
             />
             {isLoading ? (
               <button
                 type="button"
                 onClick={handleStop}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-white transition-colors hover:bg-slate-700"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent-amber text-surface-primary transition-colors hover:bg-accent-amber/90"
                 title="Stop generating"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -635,7 +665,7 @@ export default function ChatInterface() {
               <button
                 type="submit"
                 disabled={!inputValue.trim() && pendingFiles.length === 0}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-white transition-colors hover:bg-slate-700 disabled:opacity-50"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent-amber text-surface-primary transition-colors hover:bg-accent-amber/90 disabled:opacity-50"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="22" y1="2" x2="11" y2="13" />

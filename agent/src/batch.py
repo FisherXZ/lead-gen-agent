@@ -10,7 +10,7 @@ from typing import Any, Callable, Awaitable
 logger = logging.getLogger(__name__)
 
 from .research import run_research
-from .db import get_active_discovery, store_discovery
+from .db import get_active_discovery, sanitize_key_from_string, store_discovery
 from .knowledge_base import build_knowledge_context
 
 
@@ -18,10 +18,20 @@ async def _research_one(
     project: dict,
     semaphore: asyncio.Semaphore,
     on_progress: Callable[[dict], Awaitable[None]],
+    cancel_event: asyncio.Event | None = None,
+    api_key: str | None = None,
 ) -> dict:
     """Research a single project under semaphore control."""
     project_id = project["id"]
     project_label = project.get("project_name") or project["queue_id"]
+
+    # Check cancellation before doing any work
+    if cancel_event and cancel_event.is_set():
+        return {
+            "project_id": project_id,
+            "project_name": project_label,
+            "status": "cancelled",
+        }
 
     # Skip projects that already have an accepted discovery
     existing = get_active_discovery(project_id)
@@ -36,6 +46,13 @@ async def _research_one(
         return result
 
     async with semaphore:
+        # Check cancellation again after acquiring semaphore
+        if cancel_event and cancel_event.is_set():
+            return {
+                "project_id": project_id,
+                "project_name": project_label,
+                "status": "cancelled",
+            }
         await on_progress({
             "project_id": project_id,
             "status": "started",
@@ -45,7 +62,7 @@ async def _research_one(
         try:
             knowledge_context = build_knowledge_context(project)
             agent_result, agent_log, total_tokens = await run_research(
-                project, knowledge_context
+                project, knowledge_context, api_key=api_key
             )
             discovery = store_discovery(
                 project_id, agent_result, agent_log, total_tokens,
@@ -62,7 +79,7 @@ async def _research_one(
                 "project_id": project_id,
                 "project_name": project_label,
                 "status": "error",
-                "error": traceback.format_exc(),
+                "error": sanitize_key_from_string(traceback.format_exc()),
             }
 
         await on_progress(result)
@@ -73,6 +90,8 @@ async def run_batch(
     projects: list[dict],
     on_progress: Callable[[dict], Awaitable[None]],
     concurrency: int = 10,
+    cancel_event: asyncio.Event | None = None,
+    api_key: str | None = None,
 ) -> list[dict]:
     """Run EPC discovery on multiple projects concurrently.
 
@@ -80,13 +99,15 @@ async def run_batch(
         projects: List of project dicts from DB.
         on_progress: Async callback called for each status update.
         concurrency: Max concurrent agent runs (default 10).
+        cancel_event: When set, pending tasks skip instead of starting.
+        api_key: Optional user-provided Anthropic API key.
 
     Returns:
         List of result dicts, one per project.
     """
     semaphore = asyncio.Semaphore(concurrency)
     tasks = [
-        _research_one(project, semaphore, on_progress)
+        _research_one(project, semaphore, on_progress, cancel_event, api_key=api_key)
         for project in projects
     ]
     raw_results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -105,7 +126,10 @@ async def run_batch(
                 "status": "error",
                 "error": f"Uncaught exception: {type(r).__name__}: {r}",
             }
-            await on_progress(error_dict)
+            try:
+                await on_progress(error_dict)
+            except Exception:
+                logger.warning("Failed to send progress update for %s", project_id)
             results.append(error_dict)
         else:
             results.append(r)
