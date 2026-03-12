@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import traceback
 import uuid
 
@@ -39,9 +40,13 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="EPC Discovery Agent")
 
+_default_origins = ["http://localhost:3000", "http://localhost:3001"]
+_extra = os.environ.get("CORS_ORIGINS", "")  # comma-separated extra origins
+_origins = _default_origins + [o.strip() for o in _extra.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_origins=_origins,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["x-conversation-id", "x-vercel-ai-ui-message-stream", "x-job-id"],
