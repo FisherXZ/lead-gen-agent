@@ -33,7 +33,7 @@ export default function EpcResultCard({ data }: EpcResultCardProps) {
 
   if (data.error) {
     return (
-      <div className="my-2 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+      <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
         Research error: {data.error}
       </div>
     );
@@ -41,7 +41,7 @@ export default function EpcResultCard({ data }: EpcResultCardProps) {
 
   if (data.skipped) {
     return (
-      <div className="my-2 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
         Skipped — already has an accepted EPC discovery.
       </div>
     );
@@ -74,7 +74,7 @@ export default function EpcResultCard({ data }: EpcResultCardProps) {
   }
 
   return (
-    <div className="my-2 rounded-lg border border-slate-200 bg-white p-4">
+    <div className="bg-white p-4">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-slate-900">

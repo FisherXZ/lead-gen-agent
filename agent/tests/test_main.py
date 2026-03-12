@@ -69,13 +69,15 @@ class TestHealth:
 
 class TestDiscover:
     @patch("src.main.db.store_discovery")
-    @patch("src.main.run_agent")
+    @patch("src.main.run_research", new_callable=AsyncMock)
+    @patch("src.main.build_knowledge_context")
     @patch("src.main.db.get_active_discovery")
     @patch("src.main.db.get_project")
-    async def test_success(self, mock_get_proj, mock_get_active, mock_agent, mock_store, client, sample_project, sample_discovery):
+    async def test_success(self, mock_get_proj, mock_get_active, mock_kb, mock_research, mock_store, client, sample_project, sample_discovery):
         mock_get_proj.return_value = sample_project
         mock_get_active.return_value = None
-        mock_agent.return_value = (
+        mock_kb.return_value = None
+        mock_research.return_value = (
             AgentResult(epc_contractor="McCarthy", confidence="likely", reasoning="ok"),
             [{"iteration": 0}],
             3000,
@@ -104,13 +106,15 @@ class TestDiscover:
         resp = await client.post("/api/discover", json={"project_id": "proj-001"})
         assert resp.status_code == 409
 
-    @patch("src.main.run_agent")
+    @patch("src.main.run_research", new_callable=AsyncMock)
+    @patch("src.main.build_knowledge_context")
     @patch("src.main.db.get_active_discovery")
     @patch("src.main.db.get_project")
-    async def test_500_agent_error(self, mock_get_proj, mock_get_active, mock_agent, client, sample_project):
+    async def test_500_agent_error(self, mock_get_proj, mock_get_active, mock_kb, mock_research, client, sample_project):
         mock_get_proj.return_value = sample_project
         mock_get_active.return_value = None
-        mock_agent.side_effect = RuntimeError("Agent crashed")
+        mock_kb.return_value = None
+        mock_research.side_effect = RuntimeError("Agent crashed")
 
         resp = await client.post("/api/discover", json={"project_id": "proj-001"})
         assert resp.status_code == 500

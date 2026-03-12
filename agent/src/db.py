@@ -93,9 +93,11 @@ def store_discovery(
         "sources": [s.model_dump() for s in result.sources],
         "reasoning": result.reasoning,
         "related_leads": result.related_leads,
+        "searches_performed": result.searches_performed,
         "review_status": "pending",
         "agent_log": agent_log,
         "tokens_used": total_tokens,
+        "source_count": result.source_count,
     }
     discovery = insert_discovery(discovery_data)
 
@@ -122,6 +124,23 @@ def list_discoveries() -> list[dict]:
         .execute()
     )
     return resp.data
+
+
+def list_pending_discoveries() -> list[dict]:
+    """List pending discoveries joined with project metadata, sorted by confidence."""
+    client = get_client()
+    resp = (
+        client.table("epc_discoveries")
+        .select("*, project:project_id(id, project_name, developer, mw_capacity, state)")
+        .eq("review_status", "pending")
+        .execute()
+    )
+    discoveries = resp.data
+
+    # Sort by confidence rank: confirmed first, unknown last
+    confidence_rank = {"confirmed": 0, "likely": 1, "possible": 2, "unknown": 3}
+    discoveries.sort(key=lambda d: confidence_rank.get(d.get("confidence", "unknown"), 3))
+    return discoveries
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +204,147 @@ def search_projects(
     return resp.data
 
 
+CONFIDENCE_RANK = {"confirmed": 0, "likely": 1, "possible": 2, "unknown": 3}
+
+
+def search_projects_with_epc(
+    *,
+    state: str | None = None,
+    cod_year: int | None = None,
+    epc_name: str | None = None,
+    developer: str | None = None,
+    mw_min: float | None = None,
+    confidence_min: str | None = None,
+    include_pending: bool = True,
+    limit: int = 30,
+) -> list[dict]:
+    """Search projects joined with their latest EPC discovery.
+
+    Two modes:
+    - Project-first (default): queries projects table with foreign-key join to
+      latest_discovery. Used when epc_name is not provided.
+    - EPC-first: queries epc_discoveries filtered by contractor name. Used when
+      epc_name is provided.
+
+    Both modes return the same flat dict shape.
+    """
+    client = get_client()
+
+    if epc_name:
+        # ---- Mode 2: EPC-first ----
+        query = (
+            client.table("epc_discoveries")
+            .select(
+                "id, epc_contractor, confidence, review_status, source_count, created_at, "
+                "project:project_id(id, project_name, developer, mw_capacity, state, expected_cod, fuel_type, epc_company)"
+            )
+            .ilike("epc_contractor", f"%{epc_name}%")
+            .neq("review_status", "rejected")
+        )
+        if confidence_min:
+            # confidence_min filtering done post-query
+            pass
+        query = query.order("created_at", desc=True).limit(limit)
+        try:
+            resp = query.execute()
+            data = resp.data or []
+        except Exception:
+            return []
+        rows = _normalize_epc_first(data)
+    else:
+        # ---- Mode 1: Project-first ----
+        query = client.table("projects").select(
+            "id, project_name, developer, mw_capacity, state, expected_cod, fuel_type, epc_company, "
+            "latest_discovery:epc_discoveries(id, epc_contractor, confidence, review_status, source_count, created_at)"
+        )
+        if state:
+            query = query.eq("state", state.upper())
+        if cod_year is not None:
+            query = query.gte("expected_cod", f"{cod_year}-01-01").lte("expected_cod", f"{cod_year}-12-31")
+        if developer:
+            query = query.ilike("developer", f"%{developer}%")
+        if mw_min is not None:
+            query = query.gte("mw_capacity", mw_min)
+        query = query.order("mw_capacity", desc=True).limit(limit)
+        try:
+            resp = query.execute()
+            data = resp.data or []
+        except Exception:
+            return []
+        rows = _normalize_project_first(data)
+
+    # ---- Post-query filters (both modes) ----
+    if state and epc_name:
+        rows = [r for r in rows if r.get("state", "").upper() == state.upper()]
+    if developer and epc_name:
+        rows = [r for r in rows if r.get("developer") and developer.lower() in r["developer"].lower()]
+    if mw_min is not None and epc_name:
+        rows = [r for r in rows if r.get("mw_capacity") is not None and r["mw_capacity"] >= mw_min]
+    if cod_year is not None and epc_name:
+        year_str = str(cod_year)
+        rows = [r for r in rows if r.get("expected_cod") and r["expected_cod"].startswith(year_str)]
+
+    if confidence_min:
+        min_rank = CONFIDENCE_RANK.get(confidence_min, 3)
+        rows = [
+            r for r in rows
+            if r.get("confidence") is None  # keep unresearched projects
+            or CONFIDENCE_RANK.get(r["confidence"], 3) <= min_rank
+        ]
+
+    if not include_pending:
+        rows = [r for r in rows if r.get("review_status") != "pending"]
+
+    return rows[:limit]
+
+
+def _normalize_project_first(data: list[dict]) -> list[dict]:
+    """Flatten project rows with nested latest_discovery list."""
+    results = []
+    for row in data:
+        disc_list = row.get("latest_discovery") or []
+        # Filter out rejected, sort by newest first
+        disc_list = [d for d in disc_list if d.get("review_status") != "rejected"]
+        if disc_list:
+            disc_list.sort(key=lambda d: d.get("created_at", ""), reverse=True)
+        disc = disc_list[0] if disc_list else {}
+        results.append({
+            "project_id": row["id"],
+            "project_name": row.get("project_name"),
+            "developer": row.get("developer"),
+            "mw_capacity": row.get("mw_capacity"),
+            "state": row.get("state"),
+            "expected_cod": row.get("expected_cod"),
+            "epc_contractor": disc.get("epc_contractor"),
+            "confidence": disc.get("confidence"),
+            "review_status": disc.get("review_status"),
+            "source_count": disc.get("source_count"),
+            "discovery_date": disc.get("created_at"),
+        })
+    return results
+
+
+def _normalize_epc_first(data: list[dict]) -> list[dict]:
+    """Flatten discovery rows with nested project object."""
+    results = []
+    for row in data:
+        proj = row.get("project") or {}
+        results.append({
+            "project_id": proj.get("id"),
+            "project_name": proj.get("project_name"),
+            "developer": proj.get("developer"),
+            "mw_capacity": proj.get("mw_capacity"),
+            "state": proj.get("state"),
+            "expected_cod": proj.get("expected_cod"),
+            "epc_contractor": row.get("epc_contractor"),
+            "confidence": row.get("confidence"),
+            "review_status": row.get("review_status"),
+            "source_count": row.get("source_count"),
+            "discovery_date": row.get("created_at"),
+        })
+    return results
+
+
 def get_discoveries_for_projects(project_ids: list[str]) -> list[dict]:
     """Fetch discoveries for a list of project IDs."""
     if not project_ids:
@@ -197,6 +357,112 @@ def get_discoveries_for_projects(project_ids: list[str]) -> list[dict]:
         .order("created_at", desc=True)
         .execute()
     )
+    return resp.data
+
+
+# ---------------------------------------------------------------------------
+# Agent memory
+# ---------------------------------------------------------------------------
+
+def save_memory(
+    memory: str,
+    scope: str,
+    memory_key: str | None = None,
+    importance: int = 5,
+    conversation_id: str | None = None,
+    project_id: str | None = None,
+) -> dict:
+    """Insert or upsert a memory.
+
+    If memory_key is provided, uses an atomic upsert on (memory_key, scope).
+    Otherwise inserts a new row.
+    """
+    client = get_client()
+    data = {
+        "memory": memory,
+        "scope": scope,
+        "importance": max(1, min(10, importance)),
+        "memory_key": memory_key,
+        "conversation_id": conversation_id,
+        "project_id": project_id,
+    }
+
+    if memory_key:
+        # Atomic upsert — no race condition between select + update
+        resp = (
+            client.table("agent_memory")
+            .upsert(data, on_conflict="memory_key,scope")
+            .execute()
+        )
+    else:
+        resp = client.table("agent_memory").insert(data).execute()
+
+    return resp.data[0]
+
+
+def search_memories(
+    keyword: str | None = None,
+    scope: str | None = None,
+    project_id: str | None = None,
+    limit: int = 10,
+) -> list[dict]:
+    """Search memories. Uses ilike for keyword matching.
+    Ordered by importance DESC, then created_at DESC.
+    """
+    client = get_client()
+    query = client.table("agent_memory").select("id, memory, scope, memory_key, importance, project_id, created_at")
+
+    if keyword:
+        query = query.ilike("memory", f"%{keyword}%")
+    if scope:
+        query = query.eq("scope", scope)
+    if project_id:
+        query = query.eq("project_id", project_id)
+
+    query = query.order("importance", desc=True).order("created_at", desc=True).limit(limit)
+    try:
+        resp = query.execute()
+        return resp.data
+    except Exception:
+        return []
+
+
+# ---------------------------------------------------------------------------
+# Research scratchpad
+# ---------------------------------------------------------------------------
+
+
+def upsert_scratch(session_id: str, key: str, value: dict) -> dict:
+    """Upsert a scratchpad entry for a research session."""
+    client = get_client()
+    resp = (
+        client.table("research_scratch")
+        .upsert(
+            {
+                "session_id": session_id,
+                "key": key,
+                "value": value,
+                "updated_at": "now()",
+            },
+            on_conflict="session_id,key",
+        )
+        .execute()
+    )
+    return resp.data[0] if resp.data else {}
+
+
+def read_scratch(session_id: str, key: str | None = None) -> list[dict]:
+    """Read scratchpad entries for a research session."""
+    client = get_client()
+    query = (
+        client.table("research_scratch")
+        .select("key, value, updated_at")
+        .eq("session_id", session_id)
+    )
+    if key:
+        query = query.eq("key", key)
+    query = query.order("updated_at")
+    resp = query.execute()
     return resp.data
 
 

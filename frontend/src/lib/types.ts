@@ -60,6 +60,8 @@ export interface EpcSource {
   url: string | null;
   excerpt: string;
   reliability: "high" | "medium" | "low";
+  search_query?: string | null;
+  source_method?: string | null;
 }
 
 export interface EpcDiscovery {
@@ -73,8 +75,21 @@ export interface EpcDiscovery {
   review_status: "pending" | "accepted" | "rejected";
   agent_log: Record<string, unknown>[];
   tokens_used: number;
+  searches_performed?: string[];
+  rejection_reason?: string | null;
+  source_count?: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface PendingDiscoveryWithProject extends EpcDiscovery {
+  project: {
+    id: string;
+    project_name: string | null;
+    developer: string | null;
+    mw_capacity: number | null;
+    state: string | null;
+  };
 }
 
 export type EpcFilter = "all" | "needs_research" | "has_epc" | "pending_review";

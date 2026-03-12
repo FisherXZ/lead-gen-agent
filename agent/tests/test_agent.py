@@ -1,12 +1,13 @@
-"""Tests for agent.py — async agent loop."""
+"""Tests for research.py — standalone EPC research runner."""
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch, MagicMock, PropertyMock
 
+import anthropic
 import pytest
 
-from src.agent import run_agent_async
+from src.research import run_research
 from src.models import AgentResult
 
 from tests.conftest import (
@@ -21,9 +22,9 @@ from tests.conftest import (
 # ---------------------------------------------------------------------------
 
 class TestReportFindings:
-    @patch("src.agent.tavily_search")
-    @patch("src.agent.anthropic.AsyncAnthropic")
-    async def test_single_turn_report(self, MockClient, mock_tavily, sample_project):
+    @patch("src.research.execute_tool", new_callable=AsyncMock)
+    @patch("src.research.anthropic.AsyncAnthropic")
+    async def test_single_turn_report(self, MockClient, mock_exec_tool, sample_project):
         """Agent calls report_findings on the first tool_use turn."""
         report_block = make_tool_use_block(
             name="report_findings",
@@ -57,7 +58,7 @@ class TestReportFindings:
         mock_client.messages.create = AsyncMock(return_value=resp)
         MockClient.return_value = mock_client
 
-        result, log, tokens = await run_agent_async(sample_project)
+        result, log, tokens = await run_research(sample_project)
 
         assert isinstance(result, AgentResult)
         assert result.epc_contractor == "Blattner Energy"
@@ -67,9 +68,9 @@ class TestReportFindings:
         assert result.reasoning == "Two sources confirm."
         assert tokens == 300
 
-    @patch("src.agent.tavily_search")
-    @patch("src.agent.anthropic.AsyncAnthropic")
-    async def test_report_with_null_epc(self, MockClient, mock_tavily, sample_project):
+    @patch("src.research.execute_tool", new_callable=AsyncMock)
+    @patch("src.research.anthropic.AsyncAnthropic")
+    async def test_report_with_null_epc(self, MockClient, mock_exec_tool, sample_project):
         """Agent reports unknown with null epc_contractor."""
         report_block = make_tool_use_block(
             name="report_findings",
@@ -91,7 +92,7 @@ class TestReportFindings:
         mock_client.messages.create = AsyncMock(return_value=resp)
         MockClient.return_value = mock_client
 
-        result, log, tokens = await run_agent_async(sample_project)
+        result, log, tokens = await run_research(sample_project)
 
         assert result.epc_contractor is None
         assert result.confidence == "unknown"
@@ -103,9 +104,9 @@ class TestReportFindings:
 # ---------------------------------------------------------------------------
 
 class TestMultiTurn:
-    @patch("src.agent.tavily_search")
-    @patch("src.agent.anthropic.AsyncAnthropic")
-    async def test_search_then_report(self, MockClient, mock_tavily, sample_project):
+    @patch("src.research.execute_tool", new_callable=AsyncMock)
+    @patch("src.research.anthropic.AsyncAnthropic")
+    async def test_search_then_report(self, MockClient, mock_exec_tool, sample_project):
         """Agent does a web_search, then calls report_findings."""
         # Turn 1: web_search
         search_block = make_tool_use_block(
@@ -119,9 +120,11 @@ class TestMultiTurn:
             input_tokens=150,
             output_tokens=80,
         )
-        mock_tavily.return_value = [
-            {"title": "Article", "url": "https://example.com", "content": "Blattner EPC", "score": 0.9}
-        ]
+        mock_exec_tool.return_value = {
+            "results": [
+                {"title": "Article", "url": "https://example.com", "content": "Blattner EPC", "score": 0.9}
+            ]
+        }
 
         # Turn 2: report_findings
         report_block = make_tool_use_block(
@@ -147,14 +150,14 @@ class TestMultiTurn:
         mock_client.messages.create = AsyncMock(side_effect=[turn1, turn2])
         MockClient.return_value = mock_client
 
-        result, log, tokens = await run_agent_async(sample_project)
+        result, log, tokens = await run_research(sample_project)
 
         assert result.epc_contractor == "Blattner Energy"
         assert result.confidence == "likely"
         assert tokens == 150 + 80 + 300 + 120
         # Log should have 2 iterations + a web_search entry
         assert any(entry.get("tool") == "web_search" for entry in log)
-        assert mock_tavily.call_count == 1
+        assert mock_exec_tool.call_count == 1
 
 
 # ---------------------------------------------------------------------------
@@ -162,9 +165,9 @@ class TestMultiTurn:
 # ---------------------------------------------------------------------------
 
 class TestEndTurn:
-    @patch("src.agent.tavily_search")
-    @patch("src.agent.anthropic.AsyncAnthropic")
-    async def test_end_turn_extracts_text(self, MockClient, mock_tavily, sample_project):
+    @patch("src.research.execute_tool", new_callable=AsyncMock)
+    @patch("src.research.anthropic.AsyncAnthropic")
+    async def test_end_turn_extracts_text(self, MockClient, mock_exec_tool, sample_project):
         text_block = make_text_block("I could not determine the EPC.")
         resp = make_claude_response(
             stop_reason="end_turn",
@@ -178,7 +181,7 @@ class TestEndTurn:
         mock_client.messages.create = AsyncMock(return_value=resp)
         MockClient.return_value = mock_client
 
-        result, log, tokens = await run_agent_async(sample_project)
+        result, log, tokens = await run_research(sample_project)
 
         assert result.reasoning == "I could not determine the EPC."
         assert result.epc_contractor is None
@@ -190,10 +193,10 @@ class TestEndTurn:
 # ---------------------------------------------------------------------------
 
 class TestMaxIterations:
-    @patch("src.agent.MAX_ITERATIONS", 2)
-    @patch("src.agent.tavily_search")
-    @patch("src.agent.anthropic.AsyncAnthropic")
-    async def test_max_iterations_returns_fallback(self, MockClient, mock_tavily, sample_project):
+    @patch("src.research.MAX_ITERATIONS", 2)
+    @patch("src.research.execute_tool", new_callable=AsyncMock)
+    @patch("src.research.anthropic.AsyncAnthropic")
+    async def test_max_iterations_returns_fallback(self, MockClient, mock_exec_tool, sample_project):
         """If agent hits max iterations without report_findings, return fallback."""
         search_block = make_tool_use_block(
             name="web_search",
@@ -204,16 +207,18 @@ class TestMaxIterations:
             stop_reason="tool_use",
             content=[search_block],
         )
-        mock_tavily.return_value = []
+        mock_exec_tool.return_value = {"results": []}
 
         mock_client = MagicMock()
         mock_client.messages = MagicMock()
         mock_client.messages.create = AsyncMock(return_value=resp)
         MockClient.return_value = mock_client
 
-        result, log, tokens = await run_agent_async(sample_project)
+        result, log, tokens = await run_research(sample_project)
 
-        assert "Max iterations" in result.reasoning
+        assert "timed out" in result.reasoning.lower()
+        assert result.error is not None
+        assert result.error.category == "max_iterations"
         assert mock_client.messages.create.call_count == 2
 
 
@@ -222,10 +227,10 @@ class TestMaxIterations:
 # ---------------------------------------------------------------------------
 
 class TestSearchErrors:
-    @patch("src.agent.tavily_search")
-    @patch("src.agent.anthropic.AsyncAnthropic")
-    async def test_search_error_feeds_back_error(self, MockClient, mock_tavily, sample_project):
-        """Tavily exception → error tool_result fed back, loop continues."""
+    @patch("src.research.execute_tool", new_callable=AsyncMock)
+    @patch("src.research.anthropic.AsyncAnthropic")
+    async def test_search_error_feeds_back_error(self, MockClient, mock_exec_tool, sample_project):
+        """Tool exception → error tool_result fed back, loop continues."""
         search_block = make_tool_use_block(
             name="web_search",
             block_id="ws-err",
@@ -235,7 +240,10 @@ class TestSearchErrors:
             stop_reason="tool_use",
             content=[search_block],
         )
-        mock_tavily.side_effect = RuntimeError("Tavily API down")
+        mock_exec_tool.side_effect = [
+            RuntimeError("Tavily API down"),
+            None,  # won't be reached
+        ]
 
         # Turn 2: agent gives up and reports
         report_block = make_tool_use_block(
@@ -257,41 +265,9 @@ class TestSearchErrors:
         mock_client.messages.create = AsyncMock(side_effect=[turn1, turn2])
         MockClient.return_value = mock_client
 
-        result, log, tokens = await run_agent_async(sample_project)
+        result, log, tokens = await run_research(sample_project)
 
         assert result.confidence == "unknown"
-
-    @patch("src.agent.tavily_search")
-    @patch("src.agent.anthropic.AsyncAnthropic")
-    async def test_max_results_capped_at_10(self, MockClient, mock_tavily, sample_project):
-        """max_results in tool input is capped at 10."""
-        search_block = make_tool_use_block(
-            name="web_search",
-            block_id="ws-cap",
-            input_data={"query": "big search", "max_results": 50},
-        )
-        turn1 = make_claude_response(stop_reason="tool_use", content=[search_block])
-        mock_tavily.return_value = []
-
-        report_block = make_tool_use_block(
-            name="report_findings",
-            block_id="rf-cap",
-            input_data={
-                "confidence": "unknown",
-                "reasoning": "Nothing.",
-                "searches_performed": ["big search"],
-            },
-        )
-        turn2 = make_claude_response(stop_reason="tool_use", content=[report_block])
-
-        mock_client = MagicMock()
-        mock_client.messages = MagicMock()
-        mock_client.messages.create = AsyncMock(side_effect=[turn1, turn2])
-        MockClient.return_value = mock_client
-
-        await run_agent_async(sample_project)
-
-        mock_tavily.assert_called_once_with("big search", max_results=10)
 
 
 # ---------------------------------------------------------------------------
@@ -299,9 +275,9 @@ class TestSearchErrors:
 # ---------------------------------------------------------------------------
 
 class TestTokenCounting:
-    @patch("src.agent.tavily_search")
-    @patch("src.agent.anthropic.AsyncAnthropic")
-    async def test_tokens_accumulated_across_turns(self, MockClient, mock_tavily, sample_project):
+    @patch("src.research.execute_tool", new_callable=AsyncMock)
+    @patch("src.research.anthropic.AsyncAnthropic")
+    async def test_tokens_accumulated_across_turns(self, MockClient, mock_exec_tool, sample_project):
         search_block = make_tool_use_block(
             name="web_search", block_id="ws-t", input_data={"query": "q"},
         )
@@ -309,7 +285,7 @@ class TestTokenCounting:
             stop_reason="tool_use", content=[search_block],
             input_tokens=500, output_tokens=200,
         )
-        mock_tavily.return_value = []
+        mock_exec_tool.return_value = {"results": []}
 
         report_block = make_tool_use_block(
             name="report_findings", block_id="rf-t",
@@ -325,6 +301,164 @@ class TestTokenCounting:
         mock_client.messages.create = AsyncMock(side_effect=[turn1, turn2])
         MockClient.return_value = mock_client
 
-        _, _, tokens = await run_agent_async(sample_project)
+        _, _, tokens = await run_research(sample_project)
 
         assert tokens == 500 + 200 + 800 + 150
+
+
+# ---------------------------------------------------------------------------
+# Compaction integration
+# ---------------------------------------------------------------------------
+
+class TestCompaction:
+    @patch("src.research.compact_messages")
+    @patch("src.research.execute_tool", new_callable=AsyncMock)
+    @patch("src.research.anthropic.AsyncAnthropic")
+    async def test_compaction_called_during_multi_turn(
+        self, MockClient, mock_exec_tool, mock_compact, sample_project
+    ):
+        """compact_messages is called after tool results are appended."""
+        # Turn 1: web_search
+        search_block = make_tool_use_block(
+            name="web_search", block_id="ws-c1",
+            input_data={"query": "test query"},
+        )
+        turn1 = make_claude_response(
+            stop_reason="tool_use", content=[search_block],
+        )
+        mock_exec_tool.return_value = {"results": []}
+
+        # Turn 2: report_findings
+        report_block = make_tool_use_block(
+            name="report_findings", block_id="rf-c1",
+            input_data={
+                "confidence": "unknown",
+                "reasoning": "Nothing found.",
+                "searches_performed": ["test query"],
+            },
+        )
+        turn2 = make_claude_response(
+            stop_reason="tool_use", content=[report_block],
+        )
+
+        mock_client = MagicMock()
+        mock_client.messages = MagicMock()
+        mock_client.messages.create = AsyncMock(side_effect=[turn1, turn2])
+        MockClient.return_value = mock_client
+
+        # compact_messages should return messages unchanged (pass-through)
+        mock_compact.side_effect = lambda msgs, **kw: msgs
+
+        result, log, tokens = await run_research(sample_project)
+
+        # compact_messages should have been called once (after turn 1 tool results)
+        assert mock_compact.call_count == 1
+        call_kwargs = mock_compact.call_args[1]
+        assert call_kwargs["max_context_chars"] == 60_000
+        assert call_kwargs["keep_recent_turns"] == 4
+
+
+# ---------------------------------------------------------------------------
+# Tenacity retry behavior
+# ---------------------------------------------------------------------------
+
+class TestTenacityRetry:
+    @patch("src.research.execute_tool", new_callable=AsyncMock)
+    @patch("src.research.anthropic.AsyncAnthropic")
+    async def test_rate_limit_retries_then_succeeds(
+        self, MockClient, mock_exec_tool, sample_project
+    ):
+        """RateLimitError on first call, success on retry -> normal result."""
+        mock_response = MagicMock()
+        mock_response.status_code = 429
+        mock_response.headers = {}
+        mock_response.request = MagicMock()
+        rate_err = anthropic.RateLimitError(
+            message="rate limited",
+            response=mock_response,
+            body=None,
+        )
+
+        report_block = make_tool_use_block(
+            name="report_findings", block_id="rf-retry",
+            input_data={
+                "epc_contractor": "Blattner",
+                "confidence": "likely",
+                "reasoning": "Found after retry.",
+                "searches_performed": ["q"],
+                "sources": [],
+            },
+        )
+        success_resp = make_claude_response(
+            stop_reason="tool_use", content=[report_block],
+        )
+
+        mock_client = MagicMock()
+        mock_client.messages = MagicMock()
+        mock_client.messages.create = AsyncMock(
+            side_effect=[rate_err, success_resp]
+        )
+        MockClient.return_value = mock_client
+
+        with patch("src.research._call_api.retry.wait", return_value=0):
+            result, log, tokens = await run_research(sample_project)
+
+        assert result.epc_contractor == "Blattner"
+        assert mock_client.messages.create.call_count == 2
+
+    @patch("src.research.execute_tool", new_callable=AsyncMock)
+    @patch("src.research.anthropic.AsyncAnthropic")
+    async def test_auth_error_fails_immediately(
+        self, MockClient, mock_exec_tool, sample_project
+    ):
+        """AuthenticationError -> immediate failure, no retries."""
+        mock_response = MagicMock()
+        mock_response.status_code = 401
+        mock_response.headers = {}
+        mock_response.request = MagicMock()
+        auth_err = anthropic.AuthenticationError(
+            message="invalid key",
+            response=mock_response,
+            body=None,
+        )
+
+        mock_client = MagicMock()
+        mock_client.messages = MagicMock()
+        mock_client.messages.create = AsyncMock(side_effect=auth_err)
+        MockClient.return_value = mock_client
+
+        result, log, tokens = await run_research(sample_project)
+
+        assert result.error is not None
+        assert result.error.category == "api_key_missing"
+        assert mock_client.messages.create.call_count == 1
+
+    @patch("src.research.execute_tool", new_callable=AsyncMock)
+    @patch("src.research.anthropic.AsyncAnthropic")
+    async def test_three_rate_limits_returns_error(
+        self, MockClient, mock_exec_tool, sample_project
+    ):
+        """3 consecutive RateLimitErrors -> error result."""
+        mock_response = MagicMock()
+        mock_response.status_code = 429
+        mock_response.headers = {}
+        mock_response.request = MagicMock()
+        rate_err = anthropic.RateLimitError(
+            message="rate limited",
+            response=mock_response,
+            body=None,
+        )
+
+        mock_client = MagicMock()
+        mock_client.messages = MagicMock()
+        mock_client.messages.create = AsyncMock(
+            side_effect=[rate_err, rate_err, rate_err]
+        )
+        MockClient.return_value = mock_client
+
+        with patch("src.research._call_api.retry.wait", return_value=0):
+            result, log, tokens = await run_research(sample_project)
+
+        assert result.error is not None
+        assert "rate limit" in result.error.message.lower()
+        assert mock_client.messages.create.call_count == 3

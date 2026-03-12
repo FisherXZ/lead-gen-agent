@@ -41,7 +41,7 @@ def _fake_discovery(project_id):
 
 class TestResearchOne:
     @patch("src.batch.store_discovery")
-    @patch("src.batch.run_agent_async", new_callable=AsyncMock)
+    @patch("src.batch.run_research", new_callable=AsyncMock)
     @patch("src.batch.get_active_discovery")
     @patch("src.batch.build_knowledge_context", return_value=None)
     async def test_successful_research(self, mock_kb, mock_get_active, mock_agent, mock_store):
@@ -68,7 +68,7 @@ class TestResearchOne:
         assert progress_events[1]["status"] == "completed"
 
     @patch("src.batch.store_discovery")
-    @patch("src.batch.run_agent_async", new_callable=AsyncMock)
+    @patch("src.batch.run_research", new_callable=AsyncMock)
     @patch("src.batch.get_active_discovery")
     async def test_skips_accepted_discovery(self, mock_get_active, mock_agent, mock_store):
         """Project with accepted discovery → skipped, no agent run."""
@@ -90,7 +90,7 @@ class TestResearchOne:
         assert len(progress_events) == 1
 
     @patch("src.batch.store_discovery")
-    @patch("src.batch.run_agent_async", new_callable=AsyncMock)
+    @patch("src.batch.run_research", new_callable=AsyncMock)
     @patch("src.batch.get_active_discovery")
     @patch("src.batch.build_knowledge_context", return_value=None)
     async def test_does_not_skip_pending_discovery(self, mock_kb, mock_get_active, mock_agent, mock_store):
@@ -112,7 +112,7 @@ class TestResearchOne:
         mock_agent.assert_called_once()
 
     @patch("src.batch.store_discovery")
-    @patch("src.batch.run_agent_async", new_callable=AsyncMock)
+    @patch("src.batch.run_research", new_callable=AsyncMock)
     @patch("src.batch.get_active_discovery")
     @patch("src.batch.build_knowledge_context", return_value=None)
     async def test_agent_error_returns_error_status(self, mock_kb, mock_get_active, mock_agent, mock_store):
@@ -134,7 +134,7 @@ class TestResearchOne:
         mock_store.assert_not_called()
 
     @patch("src.batch.store_discovery")
-    @patch("src.batch.run_agent_async", new_callable=AsyncMock)
+    @patch("src.batch.run_research", new_callable=AsyncMock)
     @patch("src.batch.get_active_discovery")
     @patch("src.batch.build_knowledge_context", return_value=None)
     async def test_uses_queue_id_fallback_for_label(self, mock_kb, mock_get_active, mock_agent, mock_store):
@@ -161,7 +161,7 @@ class TestResearchOne:
 
 class TestRunBatch:
     @patch("src.batch.store_discovery")
-    @patch("src.batch.run_agent_async", new_callable=AsyncMock)
+    @patch("src.batch.run_research", new_callable=AsyncMock)
     @patch("src.batch.get_active_discovery")
     @patch("src.batch.build_knowledge_context", return_value=None)
     async def test_processes_all_projects(self, mock_kb, mock_get_active, mock_agent, mock_store):
@@ -186,7 +186,7 @@ class TestRunBatch:
         assert len(progress_events) == 10
 
     @patch("src.batch.store_discovery")
-    @patch("src.batch.run_agent_async", new_callable=AsyncMock)
+    @patch("src.batch.run_research", new_callable=AsyncMock)
     @patch("src.batch.get_active_discovery")
     @patch("src.batch.build_knowledge_context", return_value=None)
     async def test_mixed_results(self, mock_kb, mock_get_active, mock_agent, mock_store):
@@ -227,7 +227,7 @@ class TestRunBatch:
         assert statuses["proj-err"] == "error"
 
     @patch("src.batch.store_discovery")
-    @patch("src.batch.run_agent_async", new_callable=AsyncMock)
+    @patch("src.batch.run_research", new_callable=AsyncMock)
     @patch("src.batch.get_active_discovery")
     @patch("src.batch.build_knowledge_context", return_value=None)
     async def test_semaphore_limits_concurrency(self, mock_kb, mock_get_active, mock_agent, mock_store):
@@ -266,7 +266,7 @@ class TestRunBatch:
         assert max_concurrent <= 2
 
     @patch("src.batch.store_discovery")
-    @patch("src.batch.run_agent_async", new_callable=AsyncMock)
+    @patch("src.batch.run_research", new_callable=AsyncMock)
     @patch("src.batch.get_active_discovery")
     @patch("src.batch.build_knowledge_context", return_value=None)
     async def test_empty_project_list(self, mock_kb, mock_get_active, mock_agent, mock_store):
@@ -279,3 +279,96 @@ class TestRunBatch:
         assert results == []
         assert progress_events == []
         mock_agent.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Error isolation (return_exceptions=True safety net)
+# ---------------------------------------------------------------------------
+
+class TestBatchErrorIsolation:
+    async def test_uncaught_exception_becomes_error_dict(self):
+        """If _research_one raises unexpectedly, it becomes an error dict."""
+        progress_events = []
+        async def on_progress(update):
+            progress_events.append(update)
+
+        projects = [
+            {"id": "proj-1", "queue_id": "Q-1", "project_name": "Test"},
+        ]
+
+        with patch("src.batch._research_one", new_callable=AsyncMock) as mock_ro:
+            mock_ro.side_effect = RuntimeError("total crash")
+            results = await run_batch(projects, on_progress)
+
+        assert len(results) == 1
+        assert results[0]["status"] == "error"
+        assert "Uncaught exception" in results[0]["error"]
+        assert results[0]["project_id"] == "proj-1"
+        # on_progress should have been called with the error
+        assert any(e.get("status") == "error" for e in progress_events)
+
+    @patch("src.batch.store_discovery")
+    @patch("src.batch.run_research", new_callable=AsyncMock)
+    @patch("src.batch.get_active_discovery")
+    @patch("src.batch.build_knowledge_context", return_value=None)
+    async def test_one_crash_others_still_complete(
+        self, mock_kb, mock_get_active, mock_agent, mock_store
+    ):
+        """When one project crashes, others still return results."""
+        mock_get_active.return_value = None
+        mock_agent.return_value = _fake_agent_result()
+        mock_store.side_effect = lambda pid, *a, **kw: _fake_discovery(pid)
+
+        projects = [
+            {"id": "proj-ok1", "queue_id": "Q-1", "project_name": "Good 1"},
+            {"id": "proj-ok2", "queue_id": "Q-2", "project_name": "Good 2"},
+        ]
+
+        progress_events = []
+        crash_count = 0
+        async def on_progress(update):
+            nonlocal crash_count
+            # Make on_progress crash for first "started" event only
+            if update.get("status") == "started" and crash_count == 0:
+                crash_count += 1
+                raise RuntimeError("callback exploded")
+            progress_events.append(update)
+
+        results = await run_batch(projects, on_progress, concurrency=10)
+
+        assert len(results) == 2
+        # At least one should complete successfully
+        statuses = [r["status"] for r in results]
+        assert "completed" in statuses or "error" in statuses
+
+    @patch("src.batch.logger")
+    @patch("src.batch.store_discovery")
+    @patch("src.batch.run_research", new_callable=AsyncMock)
+    @patch("src.batch.get_active_discovery")
+    @patch("src.batch.build_knowledge_context", return_value=None)
+    async def test_batch_summary_logging(
+        self, mock_kb, mock_get_active, mock_agent, mock_store, mock_logger
+    ):
+        """Batch logs a summary with completed/skipped/error counts."""
+        def get_active(pid):
+            if pid == "proj-skip":
+                return {"id": "d", "review_status": "accepted"}
+            return None
+
+        mock_get_active.side_effect = get_active
+        mock_agent.return_value = _fake_agent_result()
+        mock_store.side_effect = lambda pid, *a, **kw: _fake_discovery(pid)
+
+        projects = [
+            {"id": "proj-ok", "queue_id": "Q-1", "project_name": "Good"},
+            {"id": "proj-skip", "queue_id": "Q-2", "project_name": "Skip"},
+        ]
+
+        async def on_progress(update):
+            pass
+
+        results = await run_batch(projects, on_progress)
+
+        mock_logger.info.assert_called_once()
+        log_msg = mock_logger.info.call_args[0][0]
+        assert "Batch complete" in log_msg

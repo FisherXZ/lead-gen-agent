@@ -66,7 +66,7 @@ TOOLS = [
                         "properties": {
                             "channel": {"type": "string"},
                             "publication": {"type": ["string", "null"]},
-                            "date": {"type": ["string", "null"]},
+                            "date": {"type": "string"},
                             "url": {"type": ["string", "null"]},
                             "excerpt": {"type": "string"},
                             "reliability": {
@@ -74,7 +74,7 @@ TOOLS = [
                                 "enum": ["high", "medium", "low"],
                             },
                         },
-                        "required": ["channel", "excerpt"],
+                        "required": ["channel", "excerpt", "date"],
                     },
                     "description": "Sources found during research.",
                 },
@@ -122,7 +122,7 @@ async def run_agent_async(
 
     for iteration in range(MAX_ITERATIONS):
         response = await client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-6",
             max_tokens=4096,
             system=[{
                 "type": "text",

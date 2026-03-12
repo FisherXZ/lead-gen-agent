@@ -2,6 +2,8 @@
 
 interface ConfidenceBadgeProps {
   confidence: string;
+  sourceCount?: number;
+  warning?: string;
 }
 
 const BADGE_STYLES: Record<string, string> = {
@@ -11,14 +13,30 @@ const BADGE_STYLES: Record<string, string> = {
   unknown: "bg-slate-100 text-slate-600",
 };
 
-export default function ConfidenceBadge({ confidence }: ConfidenceBadgeProps) {
+export default function ConfidenceBadge({
+  confidence,
+  sourceCount,
+  warning,
+}: ConfidenceBadgeProps) {
   const style = BADGE_STYLES[confidence] || BADGE_STYLES.unknown;
 
+  const label =
+    sourceCount && sourceCount > 0
+      ? `${confidence} (${sourceCount} source${sourceCount !== 1 ? "s" : ""})`
+      : confidence;
+
   return (
-    <span
-      className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${style}`}
-    >
-      {confidence}
+    <span className="inline-flex items-center gap-1.5">
+      <span
+        className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${style}`}
+      >
+        {label}
+      </span>
+      {warning && (
+        <span className="inline-block rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-600">
+          Unverified
+        </span>
+      )}
     </span>
   );
 }

@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import traceback
 from typing import Any, Callable, Awaitable
 
-from .agent import run_agent_async
+logger = logging.getLogger(__name__)
+
+from .research import run_research
 from .db import get_active_discovery, store_discovery
 from .knowledge_base import build_knowledge_context
 
@@ -25,6 +28,7 @@ async def _research_one(
     if existing and existing["review_status"] == "accepted":
         result = {
             "project_id": project_id,
+            "project_name": project_label,
             "status": "skipped",
             "reason": "already_accepted",
         }
@@ -40,7 +44,7 @@ async def _research_one(
 
         try:
             knowledge_context = build_knowledge_context(project)
-            agent_result, agent_log, total_tokens = await run_agent_async(
+            agent_result, agent_log, total_tokens = await run_research(
                 project, knowledge_context
             )
             discovery = store_discovery(
@@ -49,12 +53,14 @@ async def _research_one(
             )
             result = {
                 "project_id": project_id,
+                "project_name": project_label,
                 "status": "completed",
                 "discovery": discovery,
             }
         except Exception:
             result = {
                 "project_id": project_id,
+                "project_name": project_label,
                 "status": "error",
                 "error": traceback.format_exc(),
             }
@@ -73,7 +79,7 @@ async def run_batch(
     Args:
         projects: List of project dicts from DB.
         on_progress: Async callback called for each status update.
-        concurrency: Max concurrent agent runs (default 3).
+        concurrency: Max concurrent agent runs (default 10).
 
     Returns:
         List of result dicts, one per project.
@@ -83,4 +89,34 @@ async def run_batch(
         _research_one(project, semaphore, on_progress)
         for project in projects
     ]
-    return await asyncio.gather(*tasks)
+    raw_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Normalize: convert any bare Exception objects to error dicts
+    results: list[dict] = []
+    for i, r in enumerate(raw_results):
+        if isinstance(r, BaseException):
+            project_id = projects[i]["id"] if i < len(projects) else "unknown"
+            logger.error(
+                "Uncaught exception in _research_one for %s: %s",
+                project_id, r,
+            )
+            error_dict = {
+                "project_id": project_id,
+                "status": "error",
+                "error": f"Uncaught exception: {type(r).__name__}: {r}",
+            }
+            await on_progress(error_dict)
+            results.append(error_dict)
+        else:
+            results.append(r)
+
+    # Batch summary
+    completed = sum(1 for r in results if r.get("status") == "completed")
+    skipped = sum(1 for r in results if r.get("status") == "skipped")
+    errors = sum(1 for r in results if r.get("status") == "error")
+    logger.info(
+        "Batch complete: %d projects — %d completed, %d skipped, %d errors",
+        len(results), completed, skipped, errors,
+    )
+
+    return results

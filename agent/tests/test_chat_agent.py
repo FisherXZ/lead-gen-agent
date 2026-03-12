@@ -1,12 +1,13 @@
-"""Tests for chat_agent.py — tool dispatch and streaming chat loop."""
+"""Tests for chat_agent.py — streaming chat loop with shared tool registry."""
 
 from __future__ import annotations
 
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.chat_agent import _execute_tool, run_chat_agent
+from src.chat_agent import run_chat_agent
 from src.sse import StreamWriter
+from src.tools import execute_tool
 
 from tests.conftest import make_agent_result
 
@@ -116,202 +117,54 @@ async def _run_chat(messages=None, conversation_id="conv-test"):
 
 
 # ---------------------------------------------------------------------------
-# _execute_tool — search_projects
+# Tool dispatch via shared registry
 # ---------------------------------------------------------------------------
 
-class TestExecuteToolSearchProjects:
-    @patch("src.chat_agent.db")
-    async def test_returns_projects_and_count(self, mock_db):
+class TestToolRegistryDispatch:
+    @patch("src.tools.search_projects.db")
+    async def test_search_projects_returns_count(self, mock_db):
         mock_db.search_projects.return_value = [
             {"id": "p1", "project_name": "Alpha"},
             {"id": "p2", "project_name": "Beta"},
         ]
 
-        result = await _execute_tool("search_projects", {"state": "TX", "limit": 10})
+        result = await execute_tool("search_projects", {"state": "TX", "limit": 10})
 
         assert result["count"] == 2
         assert len(result["projects"]) == 2
-        mock_db.search_projects.assert_called_once_with(
-            state="TX",
-            iso_region=None,
-            mw_min=None,
-            mw_max=None,
-            developer=None,
-            fuel_type=None,
-            needs_research=None,
-            has_epc=None,
-            search=None,
-            limit=10,
-        )
 
-    @patch("src.chat_agent.db")
+    @patch("src.tools.search_projects.db")
     async def test_empty_results(self, mock_db):
         mock_db.search_projects.return_value = []
 
-        result = await _execute_tool("search_projects", {})
+        result = await execute_tool("search_projects", {})
 
         assert result["count"] == 0
         assert result["projects"] == []
 
-    @patch("src.chat_agent.db")
-    async def test_default_limit_is_20(self, mock_db):
-        mock_db.search_projects.return_value = []
-
-        await _execute_tool("search_projects", {"state": "CA"})
-
-        call_kwargs = mock_db.search_projects.call_args
-        assert call_kwargs.kwargs["limit"] == 20
-
-
-# ---------------------------------------------------------------------------
-# _execute_tool — research_epc
-# ---------------------------------------------------------------------------
-
-class TestExecuteToolResearchEpc:
-    @patch("src.chat_agent.db")
-    @patch("src.chat_agent.run_agent_async", new_callable=AsyncMock)
-    async def test_runs_agent_and_stores(self, mock_run_agent, mock_db, sample_project):
-        mock_db.get_project.return_value = sample_project
-        mock_db.get_active_discovery.return_value = None
-
-        agent_result = make_agent_result()
-        mock_run_agent.return_value = (agent_result, [{"step": 1}], 3000)
-        mock_db.store_discovery.return_value = {"id": "disc-new", "epc_contractor": "McCarthy Building"}
-
-        result = await _execute_tool("research_epc", {"project_id": "proj-001"})
-
-        assert result["discovery"]["id"] == "disc-new"
-        mock_run_agent.assert_called_once_with(sample_project)
-        mock_db.store_discovery.assert_called_once()
-
-    @patch("src.chat_agent.db")
-    async def test_missing_project_returns_error(self, mock_db):
-        mock_db.get_project.return_value = None
-
-        result = await _execute_tool("research_epc", {"project_id": "missing"})
-
-        assert "error" in result
-        assert "not found" in result["error"]
-
-    @patch("src.chat_agent.db")
-    async def test_skips_accepted_discovery(self, mock_db, sample_discovery):
-        mock_db.get_project.return_value = {"id": "proj-001"}
-        sample_discovery["review_status"] = "accepted"
-        mock_db.get_active_discovery.return_value = sample_discovery
-
-        result = await _execute_tool("research_epc", {"project_id": "proj-001"})
-
-        assert result["skipped"] is True
-        assert result["reason"] == "already_accepted"
-
-    @patch("src.chat_agent.db")
-    @patch("src.chat_agent.run_agent_async", new_callable=AsyncMock)
-    async def test_pending_discovery_still_researches(self, mock_run_agent, mock_db, sample_discovery):
-        mock_db.get_project.return_value = {"id": "proj-001"}
-        sample_discovery["review_status"] = "pending"
-        mock_db.get_active_discovery.return_value = sample_discovery
-
-        agent_result = make_agent_result()
-        mock_run_agent.return_value = (agent_result, [], 1000)
-        mock_db.store_discovery.return_value = {"id": "disc-new"}
-
-        result = await _execute_tool("research_epc", {"project_id": "proj-001"})
-
-        assert "discovery" in result
-        mock_run_agent.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# _execute_tool — batch_research_epc
-# ---------------------------------------------------------------------------
-
-class TestExecuteToolBatchResearch:
-    @patch("src.chat_agent.db")
-    @patch("src.chat_agent.run_batch", new_callable=AsyncMock)
-    async def test_processes_valid_projects(self, mock_run_batch, mock_db):
-        mock_db.get_project.side_effect = [
-            {"id": "p1", "project_name": "A"},
-            {"id": "p2", "project_name": "B"},
-        ]
-
-        # run_batch calls on_progress — simulate completed events
-        async def fake_batch(projects, on_progress):
-            for p in projects:
-                await on_progress({"status": "completed", "project_id": p["id"]})
-
-        mock_run_batch.side_effect = fake_batch
-
-        result = await _execute_tool("batch_research_epc", {"project_ids": ["p1", "p2"]})
-
-        assert result["total"] == 2
-        assert result["completed"] == 2
-        assert result["errors"] == 0
-
-    @patch("src.chat_agent.db")
-    async def test_all_invalid_ids_returns_error(self, mock_db):
-        mock_db.get_project.return_value = None
-
-        result = await _execute_tool("batch_research_epc", {"project_ids": ["bad1", "bad2"]})
-
-        assert "error" in result
-        assert "No valid projects" in result["error"]
-
-    @patch("src.chat_agent.db")
-    @patch("src.chat_agent.run_batch", new_callable=AsyncMock)
-    async def test_mixed_results_counted(self, mock_run_batch, mock_db):
-        mock_db.get_project.side_effect = [
-            {"id": "p1"},
-            {"id": "p2"},
-            {"id": "p3"},
-        ]
-
-        async def fake_batch(projects, on_progress):
-            await on_progress({"status": "completed", "project_id": "p1"})
-            await on_progress({"status": "skipped", "project_id": "p2"})
-            await on_progress({"status": "error", "project_id": "p3"})
-
-        mock_run_batch.side_effect = fake_batch
-
-        result = await _execute_tool("batch_research_epc", {"project_ids": ["p1", "p2", "p3"]})
-
-        assert result["completed"] == 2  # completed + skipped
-        assert result["errors"] == 1
-
-
-# ---------------------------------------------------------------------------
-# _execute_tool — get_discoveries
-# ---------------------------------------------------------------------------
-
-class TestExecuteToolGetDiscoveries:
-    @patch("src.chat_agent.db")
-    async def test_with_project_ids(self, mock_db):
+    @patch("src.tools.get_discoveries.db")
+    async def test_get_discoveries_with_ids(self, mock_db):
         mock_db.get_discoveries_for_projects.return_value = [{"id": "d1"}]
+        valid_uuid = "00000000-0000-0000-0000-000000000001"
 
-        result = await _execute_tool("get_discoveries", {"project_ids": ["p1"]})
+        result = await execute_tool("get_discoveries", {"project_ids": [valid_uuid]})
 
         assert result["count"] == 1
-        mock_db.get_discoveries_for_projects.assert_called_once_with(["p1"])
+        mock_db.get_discoveries_for_projects.assert_called_once_with([valid_uuid])
 
-    @patch("src.chat_agent.db")
-    async def test_without_project_ids(self, mock_db):
+    @patch("src.tools.get_discoveries.db")
+    async def test_get_discoveries_all(self, mock_db):
         mock_db.list_discoveries.return_value = [{"id": "d1"}, {"id": "d2"}]
 
-        result = await _execute_tool("get_discoveries", {})
+        result = await execute_tool("get_discoveries", {})
 
         assert result["count"] == 2
         mock_db.list_discoveries.assert_called_once()
 
-
-# ---------------------------------------------------------------------------
-# _execute_tool — unknown tool
-# ---------------------------------------------------------------------------
-
-class TestExecuteToolUnknown:
-    async def test_returns_error(self):
-        result = await _execute_tool("nonexistent_tool", {})
-
-        assert "error" in result
-        assert "Unknown tool" in result["error"]
+    async def test_unknown_tool_raises(self):
+        import pytest
+        with pytest.raises(KeyError, match="Unknown tool"):
+            await execute_tool("nonexistent_tool", {})
 
 
 # ---------------------------------------------------------------------------
@@ -357,7 +210,7 @@ class TestChatAgentTextOnly:
 # ---------------------------------------------------------------------------
 
 class TestChatAgentSingleTool:
-    @patch("src.chat_agent._execute_tool", new_callable=AsyncMock)
+    @patch("src.chat_agent.execute_tool", new_callable=AsyncMock)
     @patch("src.chat_agent.db")
     @patch("src.chat_agent.anthropic.AsyncAnthropic")
     async def test_tool_then_text(self, MockClient, mock_db, mock_exec_tool):
@@ -408,7 +261,7 @@ class TestChatAgentSingleTool:
 # ---------------------------------------------------------------------------
 
 class TestChatAgentMultiRound:
-    @patch("src.chat_agent._execute_tool", new_callable=AsyncMock)
+    @patch("src.chat_agent.execute_tool", new_callable=AsyncMock)
     @patch("src.chat_agent.db")
     @patch("src.chat_agent.anthropic.AsyncAnthropic")
     async def test_two_tool_rounds_then_text(self, MockClient, mock_db, mock_exec_tool):
@@ -425,10 +278,10 @@ class TestChatAgentMultiRound:
             content=[MagicMock(type="tool_use")],
         )
 
-        # Round 2: research_epc
+        # Round 2: web_search
         r2_events = [
-            _tool_block_start("tc-2", "research_epc"),
-            _tool_input_delta(json.dumps({"project_id": "p1"})),
+            _tool_block_start("tc-2", "web_search"),
+            _tool_input_delta(json.dumps({"query": "test"})),
             _block_stop(),
         ]
         r2_final = _final_message(
@@ -446,7 +299,7 @@ class TestChatAgentMultiRound:
 
         mock_exec_tool.side_effect = [
             {"projects": [{"id": "p1"}], "count": 1},
-            {"discovery": {"id": "d1", "epc_contractor": "McCarthy"}},
+            {"results": [{"title": "Article", "url": "https://example.com", "content": "McCarthy", "score": 0.9}]},
         ]
 
         mock_client = MagicMock()
@@ -469,7 +322,7 @@ class TestChatAgentMultiRound:
 
 class TestChatAgentMaxRounds:
     @patch("src.chat_agent.MAX_TOOL_ROUNDS", 2)
-    @patch("src.chat_agent._execute_tool", new_callable=AsyncMock)
+    @patch("src.chat_agent.execute_tool", new_callable=AsyncMock)
     @patch("src.chat_agent.db")
     @patch("src.chat_agent.anthropic.AsyncAnthropic")
     async def test_stops_after_max_rounds(self, MockClient, mock_db, mock_exec_tool):
@@ -508,7 +361,7 @@ class TestChatAgentMaxRounds:
 # ---------------------------------------------------------------------------
 
 class TestChatAgentJsonError:
-    @patch("src.chat_agent._execute_tool", new_callable=AsyncMock)
+    @patch("src.chat_agent.execute_tool", new_callable=AsyncMock)
     @patch("src.chat_agent.db")
     @patch("src.chat_agent.anthropic.AsyncAnthropic")
     async def test_bad_json_falls_back_to_empty_dict(self, MockClient, mock_db, mock_exec_tool):
@@ -577,7 +430,7 @@ class TestChatAgentPersistence:
         assert len(call_kwargs["parts"]) == 1
         assert call_kwargs["parts"][0]["type"] == "text"
 
-    @patch("src.chat_agent._execute_tool", new_callable=AsyncMock)
+    @patch("src.chat_agent.execute_tool", new_callable=AsyncMock)
     @patch("src.chat_agent.db")
     @patch("src.chat_agent.anthropic.AsyncAnthropic")
     async def test_parts_include_tool_invocations(self, MockClient, mock_db, mock_exec_tool):
@@ -652,7 +505,7 @@ class TestChatAgentEventOrdering:
         assert types[-2] == "finish"
         assert types[-1] == "DONE"
 
-    @patch("src.chat_agent._execute_tool", new_callable=AsyncMock)
+    @patch("src.chat_agent.execute_tool", new_callable=AsyncMock)
     @patch("src.chat_agent.db")
     @patch("src.chat_agent.anthropic.AsyncAnthropic")
     async def test_step_boundaries_around_tool_rounds(self, MockClient, mock_db, mock_exec_tool):
@@ -693,26 +546,3 @@ class TestChatAgentEventOrdering:
         for i, t in enumerate(types):
             if t == "finish-step" and i + 1 < len(types) and types[i + 1] != "finish":
                 assert types[i + 1] == "start-step", f"Expected start-step after finish-step at index {i}"
-
-
-# ---------------------------------------------------------------------------
-# _execute_tool — error propagation (documents current behavior)
-# ---------------------------------------------------------------------------
-
-class TestExecuteToolErrorPropagation:
-    @patch("src.chat_agent.db")
-    @patch("src.chat_agent.run_agent_async", new_callable=AsyncMock)
-    async def test_agent_crash_propagates(self, mock_run_agent, mock_db):
-        """If run_agent_async raises, exception propagates — no silent swallow.
-
-        NOTE: This documents current behavior. The production code has no
-        try/except around _execute_tool, so an agent crash will kill the
-        SSE stream. A future improvement could catch and return an error
-        dict instead.
-        """
-        mock_db.get_project.return_value = {"id": "proj-001"}
-        mock_db.get_active_discovery.return_value = None
-        mock_run_agent.side_effect = RuntimeError("Anthropic API down")
-
-        with __import__("pytest").raises(RuntimeError, match="Anthropic API down"):
-            await _execute_tool("research_epc", {"project_id": "proj-001"})

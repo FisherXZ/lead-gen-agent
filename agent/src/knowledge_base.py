@@ -127,6 +127,8 @@ def build_knowledge_context(project: dict) -> str | None:
     """Build knowledge context string for the agent before research.
 
     Returns a markdown string with what we already know, or None if nothing.
+    Includes developer loyalty stats, negative knowledge from failed searches,
+    and enriched state EPC stats with project counts and MW totals.
     """
     developer_name = project.get("developer")
     project_id = project.get("id")
@@ -134,7 +136,7 @@ def build_knowledge_context(project: dict) -> str | None:
 
     sections: list[str] = []
 
-    # 1. Developer profile and engagements
+    # 1. Developer profile and engagements with loyalty stats
     if developer_name:
         dev_entity = resolve_entity(developer_name)
         if dev_entity:
@@ -147,20 +149,41 @@ def build_knowledge_context(project: dict) -> str | None:
             if profile:
                 sections.append(f"### Developer: {dev_entity['name']}\n{profile}")
 
-            # Known engagements
+            # Known engagements — grouped by EPC with loyalty stats
             engagements = get_developer_engagements(dev_entity["id"])
             if engagements:
-                lines = ["Known EPC relationships:"]
+                total = len(engagements)
+                # Group by EPC name
+                by_epc: dict[str, list[dict]] = {}
                 for eng in engagements:
                     epc_name = eng.get("epc", {}).get("name", "Unknown EPC") if isinstance(eng.get("epc"), dict) else "Unknown EPC"
-                    proj = eng.get("project", {}) if isinstance(eng.get("project"), dict) else {}
-                    proj_name = proj.get("project_name", "Unknown project")
-                    mw = proj.get("mw_capacity", "?")
-                    eng_state = eng.get("state", "?")
-                    lines.append(f"- **{epc_name}**: {eng['confidence']} for {proj_name} ({mw}MW, {eng_state})")
+                    by_epc.setdefault(epc_name, []).append(eng)
+
+                num_epcs = len(by_epc)
+                lines = [f"Known EPC relationships ({total} engagements across {num_epcs} EPCs):"]
+
+                strongest_epc = None
+                strongest_pct = 0
+                strongest_states = ""
+
+                for epc_name, engs in sorted(by_epc.items(), key=lambda x: -len(x[1])):
+                    count = len(engs)
+                    pct = round(100 * count / total) if total else 0
+                    states = sorted({e.get("state", "?") for e in engs})
+                    state_str = ", ".join(states)
+                    lines.append(f"- {epc_name}: {count} of {total} projects ({pct}%) — {state_str}")
+
+                    if pct > strongest_pct:
+                        strongest_pct = pct
+                        strongest_epc = epc_name
+                        strongest_states = state_str
+
+                if strongest_epc and strongest_pct > 50:
+                    lines.append(f"\nStrongest signal: This developer has a repeated relationship with {strongest_epc} in {strongest_states}.")
+
                 sections.append("\n".join(lines))
 
-    # 2. Prior research on this project
+    # 2. Prior research on this project — surface tried searches for negative knowledge
     if project_id:
         attempts = get_project_research_attempts(project_id)
         if attempts:
@@ -169,27 +192,50 @@ def build_knowledge_context(project: dict) -> str | None:
                 date = att["created_at"][:10] if att.get("created_at") else "?"
                 outcome = att["outcome"]
                 searches = att.get("searches_performed", [])
-                search_str = ", ".join(f'"{s}"' for s in searches[:5]) if searches else "no searches logged"
+                num_searches = len(searches) if searches else 0
                 epc_str = f" Found: {att['epc_found']}." if att.get("epc_found") else ""
-                lines.append(f"- {date}: {outcome}.{epc_str} Tried: {search_str}")
+                lines.append(f"- {date}: {outcome} after {num_searches} searches.{epc_str}")
+                if searches and outcome in ("not_found", "inconclusive"):
+                    lines.append("  Searches already tried (do NOT repeat):")
+                    for s in searches[:8]:
+                        lines.append(f'  - "{s}"')
+                    lines.append("  Try different angles: developer website, EPC portfolio pages, regulatory filings.")
+                neg_evidence = att.get("negative_evidence", [])
+                if neg_evidence:
+                    lines.append("  Negative evidence from prior research:")
+                    for ne in neg_evidence[:5]:
+                        query = ne.get("search_query", "?")
+                        found = ne.get("what_was_found", "nothing")
+                        lines.append(f'  - Searched "{query}" — result: {found}')
             sections.append("\n".join(lines))
 
-    # 3. EPCs active in this state
+    # 3. EPCs active in this state — aggregated with project count, MW, recency
     if state:
         state_epcs = get_epcs_in_state(state)
         if state_epcs:
-            # Deduplicate by EPC name
-            seen: set[str] = set()
-            lines = [f"### EPCs Active in {state}"]
+            total_engagements = len(state_epcs)
+            # Group by EPC for aggregate stats
+            by_epc: dict[str, list[dict]] = {}
             for eng in state_epcs:
                 epc_name = eng.get("epc", {}).get("name", "Unknown") if isinstance(eng.get("epc"), dict) else "Unknown"
-                if epc_name in seen:
-                    continue
-                seen.add(epc_name)
-                proj = eng.get("project", {}) if isinstance(eng.get("project"), dict) else {}
-                proj_name = proj.get("project_name", "?")
-                mw = proj.get("mw_capacity", "?")
-                lines.append(f"- **{epc_name}**: {eng['confidence']} for {proj_name} ({mw}MW)")
+                by_epc.setdefault(epc_name, []).append(eng)
+
+            lines = [f"### EPCs Active in {state} (from {total_engagements} known engagements)"]
+            for epc_name, engs in sorted(by_epc.items(), key=lambda x: -len(x[1])):
+                num_projects = len(engs)
+                total_mw = sum(
+                    (eng.get("project", {}) if isinstance(eng.get("project"), dict) else {}).get("mw_capacity", 0) or 0
+                    for eng in engs
+                )
+                # Format MW: use GW if >= 1000
+                mw_str = f"{total_mw / 1000:.1f}GW" if total_mw >= 1000 else f"{total_mw}MW"
+                # Most recent date
+                dates = [e.get("created_at", "")[:7] for e in engs if e.get("created_at")]
+                most_recent = max(dates) if dates else "?"
+                # Best confidence
+                conf_rank = {"confirmed": 3, "likely": 2, "possible": 1}
+                best_conf = max((e.get("confidence", "possible") for e in engs), key=lambda c: conf_rank.get(c, 0))
+                lines.append(f"- **{epc_name}**: {num_projects} projects, {mw_str} total, most recent {most_recent} ({best_conf})")
             sections.append("\n".join(lines))
 
     if not sections:
@@ -209,11 +255,12 @@ def process_discovery_into_kb(
 ) -> None:
     """Write agent research results into the knowledge base.
 
-    Always logs a research_attempt. If EPC found, creates entities + engagement.
+    Called at discovery time. Logs a research_attempt and marks the
+    developer profile as stale. Does NOT create engagements — that
+    happens in promote_discovery_to_kb() on acceptance.
     """
     client = get_client()
     developer_name = project.get("developer")
-    state = project.get("state")
 
     # 1. Resolve developer entity (create if needed)
     dev_entity = None
@@ -225,6 +272,7 @@ def process_discovery_into_kb(
 
     # 2. Always insert research_attempt
     outcome = _classify_outcome(result)
+    negative_evidence_data = [ne.model_dump() for ne in result.negative_evidence] if result.negative_evidence else []
     attempt_data = {
         "project_id": project_id,
         "developer_entity_id": dev_entity["id"] if dev_entity else None,
@@ -234,6 +282,7 @@ def process_discovery_into_kb(
         "searches_performed": result.searches_performed,
         "reasoning": result.reasoning,
         "related_findings": result.related_leads,
+        "negative_evidence": negative_evidence_data,
         "tokens_used": 0,  # filled by caller if needed
     }
     try:
@@ -241,7 +290,38 @@ def process_discovery_into_kb(
     except Exception as e:
         logger.error("Failed to insert research_attempt: %s", e)
 
-    # 3. If EPC found, create engagement
+    # 3. Mark developer profile as stale
+    if dev_entity:
+        try:
+            client.table("entities").update(
+                {"profile_rebuilt_at": None}
+            ).eq("id", dev_entity["id"]).execute()
+        except Exception as e:
+            logger.warning("Failed to mark profile stale: %s", e)
+
+
+def promote_discovery_to_kb(
+    project_id: str,
+    result: AgentResult,
+    project: dict,
+) -> None:
+    """Promote an accepted discovery into the knowledge base.
+
+    Called ONLY when a discovery is accepted. Creates the EPC engagement
+    and processes related leads.
+    """
+    client = get_client()
+    developer_name = project.get("developer")
+    state = project.get("state")
+
+    dev_entity = None
+    if developer_name:
+        try:
+            dev_entity = resolve_or_create_entity(developer_name, "developer")
+        except Exception as e:
+            logger.warning("Failed to resolve developer entity %s: %s", developer_name, e)
+
+    # Create EPC engagement
     if result.epc_contractor and result.confidence != "unknown" and result.epc_contractor != "Unknown":
         try:
             epc_entity = resolve_or_create_entity(result.epc_contractor, "epc")
@@ -258,14 +338,77 @@ def process_discovery_into_kb(
         except Exception as e:
             logger.error("Failed to create EPC engagement: %s", e)
 
-    # 4. Process related_leads into additional engagements
+    # Process related_leads into additional engagements
     for lead in result.related_leads:
         try:
             _process_related_lead(client, lead, state)
         except Exception as e:
             logger.warning("Failed to process related lead: %s", e)
 
-    # 5. Mark developer profile as stale
+    # Mark developer profile as stale (engagements changed)
+    if dev_entity:
+        try:
+            client.table("entities").update(
+                {"profile_rebuilt_at": None}
+            ).eq("id", dev_entity["id"]).execute()
+        except Exception as e:
+            logger.warning("Failed to mark profile stale: %s", e)
+
+
+def process_rejection_into_kb(
+    discovery: dict,
+    reason: str | None = None,
+) -> None:
+    """Record a rejection in the knowledge base.
+
+    Creates a research_attempt with outcome 'rejected_by_reviewer',
+    deletes any matching epc_engagement, and marks the developer
+    profile as stale.
+    """
+    client = get_client()
+    project_id = discovery.get("project_id")
+    epc_contractor = discovery.get("epc_contractor")
+
+    # Find developer entity for this project
+    dev_entity = None
+    if project_id:
+        project = client.table("projects").select("developer").eq("id", project_id).limit(1).execute()
+        if project.data and project.data[0].get("developer"):
+            dev_entity = resolve_entity(project.data[0]["developer"])
+
+    # Insert research_attempt with rejected outcome
+    attempt_data = {
+        "project_id": project_id,
+        "developer_entity_id": dev_entity["id"] if dev_entity else None,
+        "outcome": "rejected_by_reviewer",
+        "epc_found": epc_contractor if epc_contractor and epc_contractor != "Unknown" else None,
+        "confidence": discovery.get("confidence", "unknown"),
+        "searches_performed": discovery.get("searches_performed", []),
+        "reasoning": reason or "Rejected by reviewer",
+        "related_findings": [],
+        "tokens_used": 0,
+    }
+    try:
+        client.table("research_attempts").insert(attempt_data).execute()
+    except Exception as e:
+        logger.error("Failed to insert rejection research_attempt: %s", e)
+
+    # Delete matching epc_engagement if it exists
+    if dev_entity and epc_contractor and epc_contractor != "Unknown":
+        epc_entity = resolve_entity(epc_contractor)
+        if epc_entity:
+            try:
+                client.table("epc_engagements").delete().eq(
+                    "developer_entity_id", dev_entity["id"]
+                ).eq(
+                    "epc_entity_id", epc_entity["id"]
+                ).eq(
+                    "project_id", project_id
+                ).execute()
+            except Exception as e:
+                logger.warning("Failed to delete epc_engagement on rejection: %s", e)
+
+    # Mark developer profile as stale
     if dev_entity:
         try:
             client.table("entities").update(
