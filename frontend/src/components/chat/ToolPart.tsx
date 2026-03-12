@@ -10,6 +10,7 @@ import PdfCard from "./parts/PdfCard";
 import ProgressNotificationCard from "./parts/ProgressNotificationCard";
 import DiscoveryApprovalCard from "./parts/DiscoveryApprovalCard";
 import CollapsibleToolCard from "./CollapsibleToolCard";
+import { EpcSource } from "@/lib/types";
 import ToolIcon from "./ToolIcon";
 
 interface ToolInvocation {
@@ -177,6 +178,7 @@ const EXPAND_WHEN_DONE = new Set([
   "get_discoveries",
   "request_guidance",
   "request_discovery_review",
+  "approve_discovery",
   "export_csv",
 ]);
 
@@ -241,7 +243,29 @@ function renderToolBody(
       return <ProgressNotificationCard data={data as { stage?: string; message?: string; detail?: string }} />;
 
     case "request_discovery_review":
-      return <DiscoveryApprovalCard data={data as { discovery_id?: string; epc_contractor?: string; confidence?: string; source_summary?: string[]; assessment?: string; awaiting_review?: boolean; error?: string }} />;
+      return <DiscoveryApprovalCard data={data as { discovery_id?: string; epc_contractor?: string; confidence?: string; sources?: EpcSource[]; source_summary?: string[]; assessment?: string; awaiting_review?: boolean; status?: string; message?: string; error?: string }} />;
+
+    case "approve_discovery": {
+      const status = data.status as string;
+      const epc = data.epc_contractor as string;
+      if (status === "accepted") {
+        return (
+          <div className="px-3 py-2">
+            <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+              Confirmed: {epc}
+            </span>
+          </div>
+        );
+      }
+      if (status === "rejected") {
+        return (
+          <div className="px-3 py-2 text-sm text-slate-500">
+            Rejected{data.reason ? `: ${data.reason}` : ""}
+          </div>
+        );
+      }
+      return null;
+    }
 
     case "fetch_page": {
       if (data.content_type === "pdf") {

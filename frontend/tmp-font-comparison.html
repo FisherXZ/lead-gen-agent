@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Typography Pairing Comparison</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Instrument+Serif:ital@0;1&family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --surface-primary: #1C1A17;
+      --surface-raised: #252320;
+      --surface-overlay: #2E2C28;
+      --border-subtle: rgba(255, 248, 235, 0.08);
+      --border-default: rgba(255, 248, 235, 0.12);
+      --text-primary: #FFF8EB;
+      --text-secondary: rgba(255, 248, 235, 0.6);
+      --text-tertiary: rgba(255, 248, 235, 0.38);
+      --accent-amber: #E8A230;
+      --accent-amber-muted: rgba(232, 162, 48, 0.15);
+      --status-green: #5CB77A;
+      --status-red: #D4614E;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+    }
+
+    body {
+      background: var(--surface-primary);
+      color: var(--text-primary);
+      font-family: 'Geist', system-ui, sans-serif;
+      font-weight: 400;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Layout */
+    .page { max-width: 1200px; margin: 0 auto; padding: 80px 40px; }
+    .page-header { margin-bottom: 80px; }
+    .page-title {
+      font-family: 'Geist', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+      margin-bottom: 16px;
+    }
+    .page-heading {
+      font-size: 40px;
+      font-weight: 300;
+      line-height: 1.15;
+      letter-spacing: -0.015em;
+      color: var(--text-primary);
+      max-width: 600px;
+    }
+    .page-heading em {
+      font-style: italic;
+      color: var(--accent-amber);
+      font-family: 'Instrument Serif', serif;
+      font-weight: 400;
+    }
+
+    /* Specimen sections */
+    .specimen { margin-bottom: 100px; }
+    .specimen-label {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent-amber);
+      background: var(--accent-amber-muted);
+      padding: 6px 14px;
+      border-radius: 100px;
+      margin-bottom: 40px;
+    }
+
+    .specimen-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+    }
+
+    /* Type showcase */
+    .type-showcase { margin-bottom: 48px; }
+    .type-hero {
+      font-size: 64px;
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+      margin-bottom: 12px;
+    }
+    .type-subhead {
+      font-size: 28px;
+      line-height: 1.25;
+      letter-spacing: -0.01em;
+      margin-bottom: 24px;
+      color: var(--text-secondary);
+    }
+    .type-body {
+      font-family: 'Geist', sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+      color: var(--text-secondary);
+      max-width: 520px;
+    }
+
+    /* Mini component demos */
+    .demo-card {
+      background: var(--surface-raised);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 28px;
+    }
+    .demo-card-overline {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+      margin-bottom: 8px;
+    }
+    .demo-card-title {
+      font-size: 22px;
+      line-height: 1.2;
+      letter-spacing: -0.01em;
+      margin-bottom: 6px;
+    }
+    .demo-card-desc {
+      font-family: 'Geist', sans-serif;
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+
+    /* Status row */
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border-subtle);
+    }
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'Geist', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+    }
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+    }
+    .status-dot.green { background: var(--status-green); }
+    .status-dot.amber { background: var(--accent-amber); }
+    .status-dot.red { background: var(--status-red); }
+    .status-badge .label { color: var(--text-secondary); }
+
+    /* Table demo */
+    .demo-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .demo-table th {
+      font-family: 'Geist', sans-serif;
+      font-weight: 500;
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+      text-align: left;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border-default);
+    }
+    .demo-table td {
+      font-family: 'Geist', sans-serif;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+    }
+    .demo-table tr:last-child td { border-bottom: none; }
+    .demo-table .project-name { color: var(--text-primary); font-weight: 500; }
+
+    /* Button demos */
+    .demo-buttons {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+    }
+    .btn {
+      font-family: 'Geist', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      padding: 10px 20px;
+      border-radius: var(--radius-sm);
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      letter-spacing: 0.01em;
+    }
+    .btn-primary {
+      background: var(--text-primary);
+      color: var(--surface-primary);
+    }
+    .btn-primary:hover { opacity: 0.85; }
+    .btn-secondary {
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1px solid var(--border-default);
+    }
+    .btn-secondary:hover {
+      border-color: rgba(255, 248, 235, 0.25);
+      color: var(--text-primary);
+    }
+    .btn-accent {
+      background: var(--accent-amber-muted);
+      color: var(--accent-amber);
+      border: 1px solid rgba(232, 162, 48, 0.2);
+    }
+    .btn-accent:hover { background: rgba(232, 162, 48, 0.22); }
+
+    /* Divider */
+    .divider {
+      height: 1px;
+      background: var(--border-subtle);
+      margin: 80px 0;
+    }
+
+    /* Verdict section */
+    .verdict-section { margin-top: 100px; }
+    .verdict-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      margin-top: 40px;
+    }
+    .verdict-card {
+      background: var(--surface-raised);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 32px 28px;
+      transition: border-color 0.2s ease;
+    }
+    .verdict-card:hover { border-color: var(--border-default); }
+    .verdict-card h3 {
+      font-size: 18px;
+      margin-bottom: 4px;
+    }
+    .verdict-card .font-name {
+      font-size: 12px;
+      color: var(--text-tertiary);
+      margin-bottom: 16px;
+    }
+    .verdict-card p {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+    .verdict-card.recommended {
+      border-color: rgba(232, 162, 48, 0.3);
+      background: linear-gradient(to bottom, rgba(232, 162, 48, 0.04), transparent);
+    }
+    .rec-badge {
+      display: inline-block;
+      font-family: 'Geist', sans-serif;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent-amber);
+      margin-bottom: 12px;
+    }
+
+    /* Font family assignments */
+    .serif-instrument { font-family: 'Instrument Serif', serif; }
+    .serif-dm { font-family: 'DM Serif Display', serif; }
+    .serif-lora { font-family: 'Lora', serif; }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <!-- Header -->
+    <header class="page-header">
+      <p class="page-title">Design System / Typography</p>
+      <h1 class="page-heading">
+        Three serif pairings with Geist.<br />
+        Choose the <em>editorial voice</em> for our product.
+      </h1>
+    </header>
+
+    <!-- ========== OPTION A: Instrument Serif ========== -->
+    <section class="specimen">
+      <span class="specimen-label">Option A</span>
+
+      <div class="type-showcase">
+        <h2 class="type-hero serif-instrument">Instrument Serif</h2>
+        <p class="type-subhead serif-instrument" style="font-style: italic;">
+          Warm, contemporary, quietly confident
+        </p>
+        <p class="type-body">
+          Geist handles the interface. Instrument Serif steps in for moments of emphasis — page titles, data callouts, section headers. The contrast is subtle, not dramatic. It reads like a well-edited publication, not a fashion magazine.
+        </p>
+      </div>
+
+      <div class="specimen-grid">
+        <div class="demo-card">
+          <p class="demo-card-overline">EPC Discovery</p>
+          <h3 class="demo-card-title serif-instrument">Blattner Energy</h3>
+          <p class="demo-card-desc">
+            Confirmed EPC contractor for the 340 MW Sunrise Solar project in ERCOT. Discovered via interconnection filing cross-reference.
+          </p>
+          <div class="status-row">
+            <div class="status-badge">
+              <span class="status-dot green"></span>
+              <span class="label">Confirmed</span>
+            </div>
+            <div class="status-badge">
+              <span class="status-dot amber"></span>
+              <span class="label">3 sources</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="demo-card">
+          <table class="demo-table">
+            <thead>
+              <tr>
+                <th>Project</th>
+                <th>Capacity</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="project-name">Sunrise Solar</td>
+                <td>340 MW</td>
+                <td><span class="status-badge"><span class="status-dot green"></span> <span class="label">Active</span></span></td>
+              </tr>
+              <tr>
+                <td class="project-name">Red Mesa Wind</td>
+                <td>220 MW</td>
+                <td><span class="status-badge"><span class="status-dot amber"></span> <span class="label">Pending</span></span></td>
+              </tr>
+              <tr>
+                <td class="project-name">Caprock Energy</td>
+                <td>180 MW</td>
+                <td><span class="status-badge"><span class="status-dot red"></span> <span class="label">Withdrawn</span></span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="demo-buttons">
+        <button class="btn btn-primary">Run Discovery</button>
+        <button class="btn btn-accent">Review Queue</button>
+        <button class="btn btn-secondary">Export</button>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ========== OPTION B: DM Serif Display ========== -->
+    <section class="specimen">
+      <span class="specimen-label">Option B</span>
+
+      <div class="type-showcase">
+        <h2 class="type-hero serif-dm">DM Serif Display</h2>
+        <p class="type-subhead serif-dm" style="font-style: italic;">
+          Bold, authoritative, masthead energy
+        </p>
+        <p class="type-body">
+          Heavier than Instrument — this pairing puts the serif front and center. It commands attention. Works well if we want headings to feel more like a newspaper headline than an editorial whisper. Stronger personality, less subtlety.
+        </p>
+      </div>
+
+      <div class="specimen-grid">
+        <div class="demo-card">
+          <p class="demo-card-overline">EPC Discovery</p>
+          <h3 class="demo-card-title serif-dm">Blattner Energy</h3>
+          <p class="demo-card-desc">
+            Confirmed EPC contractor for the 340 MW Sunrise Solar project in ERCOT. Discovered via interconnection filing cross-reference.
+          </p>
+          <div class="status-row">
+            <div class="status-badge">
+              <span class="status-dot green"></span>
+              <span class="label">Confirmed</span>
+            </div>
+            <div class="status-badge">
+              <span class="status-dot amber"></span>
+              <span class="label">3 sources</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="demo-card">
+          <table class="demo-table">
+            <thead>
+              <tr>
+                <th>Project</th>
+                <th>Capacity</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="project-name">Sunrise Solar</td>
+                <td>340 MW</td>
+                <td><span class="status-badge"><span class="status-dot green"></span> <span class="label">Active</span></span></td>
+              </tr>
+              <tr>
+                <td class="project-name">Red Mesa Wind</td>
+                <td>220 MW</td>
+                <td><span class="status-badge"><span class="status-dot amber"></span> <span class="label">Pending</span></span></td>
+              </tr>
+              <tr>
+                <td class="project-name">Caprock Energy</td>
+                <td>180 MW</td>
+                <td><span class="status-badge"><span class="status-dot red"></span> <span class="label">Withdrawn</span></span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="demo-buttons">
+        <button class="btn btn-primary">Run Discovery</button>
+        <button class="btn btn-accent">Review Queue</button>
+        <button class="btn btn-secondary">Export</button>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ========== OPTION C: Lora ========== -->
+    <section class="specimen">
+      <span class="specimen-label">Option C</span>
+
+      <div class="type-showcase">
+        <h2 class="type-hero serif-lora">Lora</h2>
+        <p class="type-subhead serif-lora" style="font-style: italic;">
+          Approachable, versatile, quietly elegant
+        </p>
+        <p class="type-body">
+          The most understated option. Lora doesn't call attention to itself — it just makes text feel considered. The serif presence is lighter, almost a texture. Best if we want typography that supports the content without becoming a character itself.
+        </p>
+      </div>
+
+      <div class="specimen-grid">
+        <div class="demo-card">
+          <p class="demo-card-overline">EPC Discovery</p>
+          <h3 class="demo-card-title serif-lora">Blattner Energy</h3>
+          <p class="demo-card-desc">
+            Confirmed EPC contractor for the 340 MW Sunrise Solar project in ERCOT. Discovered via interconnection filing cross-reference.
+          </p>
+          <div class="status-row">
+            <div class="status-badge">
+              <span class="status-dot green"></span>
+              <span class="label">Confirmed</span>
+            </div>
+            <div class="status-badge">
+              <span class="status-dot amber"></span>
+              <span class="label">3 sources</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="demo-card">
+          <table class="demo-table">
+            <thead>
+              <tr>
+                <th>Project</th>
+                <th>Capacity</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="project-name">Sunrise Solar</td>
+                <td>340 MW</td>
+                <td><span class="status-badge"><span class="status-dot green"></span> <span class="label">Active</span></span></td>
+              </tr>
+              <tr>
+                <td class="project-name">Red Mesa Wind</td>
+                <td>220 MW</td>
+                <td><span class="status-badge"><span class="status-dot amber"></span> <span class="label">Pending</span></span></td>
+              </tr>
+              <tr>
+                <td class="project-name">Caprock Energy</td>
+                <td>180 MW</td>
+                <td><span class="status-badge"><span class="status-dot red"></span> <span class="label">Withdrawn</span></span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="demo-buttons">
+        <button class="btn btn-primary">Run Discovery</button>
+        <button class="btn btn-accent">Review Queue</button>
+        <button class="btn btn-secondary">Export</button>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <!-- ========== Verdict ========== -->
+    <section class="verdict-section">
+      <p class="page-title">Side by Side</p>
+      <h2 class="page-heading" style="font-family: 'Geist', sans-serif;">
+        Which voice fits the product?
+      </h2>
+
+      <div class="verdict-grid">
+        <div class="verdict-card recommended">
+          <span class="rec-badge">Recommended</span>
+          <h3 class="serif-instrument">Instrument Serif</h3>
+          <p class="font-name">+ Geist Sans</p>
+          <p>Warm and refined without being heavy. The italic is beautiful for emphasis moments. Closest to Harvey's editorial restraint — speaks quietly but with authority.</p>
+        </div>
+
+        <div class="verdict-card">
+          <h3 class="serif-dm">DM Serif Display</h3>
+          <p class="font-name">+ Geist Sans</p>
+          <p>Bolder presence. Commands the page. Works if we want headings to really anchor sections — but can feel heavy in a data-dense interface with many cards.</p>
+        </div>
+
+        <div class="verdict-card">
+          <h3 class="serif-lora">Lora</h3>
+          <p class="font-name">+ Geist Sans</p>
+          <p>Most subtle option. Almost disappears into the UI. Great versatility (works at body size too) but less distinctive — won't give us that editorial "moment."</p>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</body>
+</html>

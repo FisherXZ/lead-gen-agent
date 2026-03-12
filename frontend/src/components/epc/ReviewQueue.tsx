@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import ConfidenceBadge from "@/components/epc/ConfidenceBadge";
-import SourceCard from "@/components/epc/SourceCard";
+import ReasoningCard from "@/components/epc/ReasoningCard";
 import { PendingDiscoveryWithProject } from "@/lib/types";
 
 const AGENT_API_URL =
@@ -236,33 +236,10 @@ export default function ReviewQueue({ initialDiscoveries }: ReviewQueueProps) {
                   {isExpanded && (
                     <tr className="border-b border-slate-100">
                       <td colSpan={8} className="bg-slate-50 px-8 py-5">
-                        <div className="flex flex-col gap-4 max-w-3xl">
-                          {/* Reasoning */}
-                          {d.reasoning && (
-                            <div>
-                              <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                                Reasoning
-                              </p>
-                              <p className="text-sm leading-relaxed text-slate-600">
-                                {d.reasoning}
-                              </p>
-                            </div>
-                          )}
-
-                          {/* Sources */}
-                          {d.sources?.length > 0 && (
-                            <div>
-                              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                                Sources ({d.sources.length})
-                              </p>
-                              <div className="grid gap-2 sm:grid-cols-2">
-                                {d.sources.map((source, i) => (
-                                  <SourceCard key={i} source={source} />
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
+                        <ReasoningCard
+                          reasoning={d.reasoning}
+                          sources={d.sources || []}
+                        />
                       </td>
                     </tr>
                   )}

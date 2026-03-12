@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import ConfidenceBadge from "@/components/epc/ConfidenceBadge";
-import SourceCard from "@/components/epc/SourceCard";
+import ReasoningCard from "@/components/epc/ReasoningCard";
 import { EpcSource } from "@/lib/types";
 
 interface Discovery {
@@ -94,19 +94,10 @@ export default function EpcResultCard({ data }: EpcResultCardProps) {
         )}
       </div>
 
-      {discovery.reasoning && (
-        <p className="mb-3 text-sm leading-relaxed text-slate-600">
-          {discovery.reasoning}
-        </p>
-      )}
-
-      {discovery.sources.length > 0 && (
-        <div className="mb-3 space-y-2">
-          {discovery.sources.map((source, i) => (
-            <SourceCard key={i} source={source} />
-          ))}
-        </div>
-      )}
+      <ReasoningCard
+        reasoning={discovery.reasoning}
+        sources={discovery.sources}
+      />
 
       {status === "pending" && (
         <div className="flex gap-2">

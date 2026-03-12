@@ -103,13 +103,6 @@ was discovered:
 - **knowledge_base**: Retrieved from the internal knowledge base of prior research
 This allows reviewers to understand and verify the research methodology.
 
-## LinkedIn — Lowest Reliability
-LinkedIn is the LOWEST reliability source. Always tag LinkedIn sources as \
-reliability "low". A LinkedIn-only finding is NEVER sufficient to justify \
-"likely" or "confirmed" confidence. LinkedIn profiles and posts are \
-self-reported, unverified, and frequently inaccurate for project-specific \
-EPC assignments. Always seek corroboration from other channels.
-
 ## Negative Evidence
 When a search returns nothing relevant or contradicts your candidate EPC, \
 record it in the `negative_evidence` array of report_findings. Include:
@@ -367,7 +360,7 @@ notify_progress(stage="switching_strategy") to explain the deviation.
 8. Call report_findings to save the discovery as pending.
 9. Then call request_discovery_review to present your finding for approval:
    - Include the discovery_id from report_findings
-   - Abbreviated source list (one line per source)
+   - Include the full `sources` array from your report_findings call (same objects with channel, url, excerpt, reliability, source_method, date, publication)
    - Your completeness assessment: what you found, confidence justification, gaps
 10. Wait for the user's response:
     - If they say "accept" → call approve_discovery(action="accepted")

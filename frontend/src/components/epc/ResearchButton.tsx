@@ -1,8 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import ConfidenceBadge from "./ConfidenceBadge";
+import ResearchPlanCard from "./ResearchPlanCard";
+import {
+  saveResearchState,
+  getResearchState,
+  clearResearchState,
+} from "@/lib/research-state";
 
 const AGENT_API_URL =
   process.env.NEXT_PUBLIC_AGENT_API_URL || "http://localhost:8000";
@@ -86,6 +92,23 @@ export default function ResearchButton({
   const [errorMessage, setErrorMessage] = useState("");
   const router = useRouter();
 
+  // Restore persisted research state on mount
+  useEffect(() => {
+    const saved = getResearchState(projectId);
+    if (!saved) return;
+    if (saved.status === "plan_ready") {
+      setPlan(saved.plan);
+      setStatus("plan_ready");
+    } else if (saved.status === "researching") {
+      // Can't resume HTTP request — downgrade to plan_ready for re-approval
+      setPlan(saved.plan);
+      setStatus("plan_ready");
+      saveResearchState(projectId, { status: "plan_ready", plan: saved.plan });
+    }
+    // "planning" is stale — ignore
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Step 1: Get a research plan
   async function handlePlan() {
     setStatus("planning");
@@ -103,11 +126,14 @@ export default function ResearchButton({
         return;
       }
       const data = await res.json();
-      setPlan(data.plan || "No plan generated.");
+      const planText = data.plan || "No plan generated.";
+      setPlan(planText);
       setStatus("plan_ready");
+      saveResearchState(projectId, { status: "plan_ready", plan: planText });
     } catch {
       setErrorMessage("Network error. Check your connection and try again.");
       setStatus("error");
+      clearResearchState(projectId);
     }
   }
 
@@ -115,6 +141,7 @@ export default function ResearchButton({
   async function handleExecute() {
     setStatus("researching");
     setErrorMessage("");
+    saveResearchState(projectId, { status: "researching", plan });
     try {
       const res = await fetch(`${AGENT_API_URL}/api/discover`, {
         method: "POST",
@@ -130,10 +157,12 @@ export default function ResearchButton({
       const data = await res.json();
       setResult(data);
       setStatus("done");
+      clearResearchState(projectId);
       router.refresh();
     } catch {
       setErrorMessage("Network error. Check your connection and try again.");
       setStatus("error");
+      clearResearchState(projectId);
     }
   }
 
@@ -159,6 +188,7 @@ export default function ResearchButton({
     setPlan("");
     setResult(null);
     setErrorMessage("");
+    clearResearchState(projectId);
   }
 
   // --- Renders ---
@@ -188,28 +218,12 @@ export default function ResearchButton({
 
   if (status === "plan_ready") {
     return (
-      <div className="max-w-md space-y-3">
-        <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-slate-500">
-            Research Plan
-          </p>
-          <p className="whitespace-pre-wrap text-sm text-slate-700">{plan}</p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={handleExecute}
-            className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800"
-          >
-            Start Research
-          </button>
-          <button
-            onClick={handleReset}
-            className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
+      <ResearchPlanCard
+        plan={plan}
+        isResearching={false}
+        onApprove={handleExecute}
+        onCancel={handleReset}
+      />
     );
   }
 
@@ -262,7 +276,7 @@ export default function ResearchButton({
           {result.id && (
             <button
               onClick={handleReviewInChat}
-              className="rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100"
+              className="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100"
             >
               Review in Chat
             </button>

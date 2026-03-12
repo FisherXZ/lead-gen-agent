@@ -2,7 +2,7 @@
 
 import { Project, EpcDiscovery } from "@/lib/types";
 import ConfidenceBadge from "./ConfidenceBadge";
-import SourceCard from "./SourceCard";
+import ReasoningCard from "./ReasoningCard";
 
 interface ResearchPanelProps {
   project: Project | null;
@@ -63,31 +63,10 @@ export default function ResearchPanel({
               </div>
             </div>
 
-            {/* Reasoning */}
-            {discovery.reasoning && (
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
-                  Reasoning
-                </p>
-                <p className="mt-1 text-sm leading-relaxed text-slate-600">
-                  {discovery.reasoning}
-                </p>
-              </div>
-            )}
-
-            {/* Sources */}
-            {discovery.sources.length > 0 && (
-              <div>
-                <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">
-                  Sources ({discovery.sources.length})
-                </p>
-                <div className="flex flex-col gap-3">
-                  {discovery.sources.map((source, i) => (
-                    <SourceCard key={i} source={source} />
-                  ))}
-                </div>
-              </div>
-            )}
+            <ReasoningCard
+              reasoning={discovery.reasoning}
+              sources={discovery.sources}
+            />
 
             {/* Review actions */}
             <div className="border-t border-slate-200 pt-4">

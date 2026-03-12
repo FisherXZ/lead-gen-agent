@@ -9,7 +9,7 @@ interface ConfidenceBadgeProps {
 
 const BADGE_STYLES: Record<string, string> = {
   confirmed: "bg-emerald-100 text-emerald-700",
-  likely: "bg-blue-100 text-blue-700",
+  likely: "bg-orange-100 text-orange-700",
   possible: "bg-amber-100 text-amber-700",
   unknown: "bg-slate-100 text-slate-600",
 };

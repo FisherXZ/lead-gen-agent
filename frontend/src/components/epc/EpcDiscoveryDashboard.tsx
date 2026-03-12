@@ -1,10 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Project, EpcDiscovery, ConstructionStatus } from "@/lib/types";
 import ConfidenceBadge from "./ConfidenceBadge";
+import ResearchPlanCard from "./ResearchPlanCard";
+import {
+  saveResearchState,
+  getResearchState,
+  clearResearchState,
+} from "@/lib/research-state";
 
 interface EpcDiscoveryDashboardProps {
   projects: Project[];
@@ -86,7 +92,7 @@ function ScoreBadge({ score }: { score: number }) {
 function ConstructionPill({ status }: { status: ConstructionStatus }) {
   const cls: Record<string, string> = {
     pre_construction: "bg-amber-50 text-amber-700",
-    under_construction: "bg-blue-50 text-blue-700",
+    under_construction: "bg-orange-50 text-orange-700",
     completed: "bg-emerald-50 text-emerald-700",
     cancelled: "bg-red-50 text-red-600",
     unknown: "bg-slate-100 text-slate-500",
@@ -503,6 +509,28 @@ function ProjectRow({
   } | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
 
+  // Restore persisted research state on mount
+  useEffect(() => {
+    const saved = getResearchState(project.id);
+    if (!saved) return;
+    if (saved.status === "plan_ready") {
+      setPlan(saved.plan);
+      setResearchStatus("plan_ready");
+      if (!isExpanded) onToggleExpand(); // auto-expand to show plan
+    } else if (saved.status === "researching") {
+      // Can't resume HTTP request — downgrade to plan_ready for re-approval
+      setPlan(saved.plan);
+      setResearchStatus("plan_ready");
+      saveResearchState(project.id, { status: "plan_ready", plan: saved.plan });
+      if (!isExpanded) onToggleExpand();
+    } else {
+      // "planning" is stale (request is gone)
+      clearResearchState(project.id);
+    }
+    // Only run on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const reviewBadge = discovery ? (
     <span
       className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${
@@ -535,17 +563,21 @@ function ProjectRow({
         return;
       }
       const data = await res.json();
-      setPlan(data.plan || "No plan generated.");
+      const planText = data.plan || "No plan generated.";
+      setPlan(planText);
       setResearchStatus("plan_ready");
+      saveResearchState(project.id, { status: "plan_ready", plan: planText });
     } catch {
       setErrorMessage("Network error. Check your connection.");
       setResearchStatus("error");
+      clearResearchState(project.id);
     }
   }
 
   async function handleExecute() {
     setResearchStatus("researching");
     setErrorMessage("");
+    saveResearchState(project.id, { status: "researching", plan });
     try {
       const res = await fetch(`${AGENT_API_URL}/api/discover`, {
         method: "POST",
@@ -560,6 +592,7 @@ function ProjectRow({
       const data = await res.json();
       setResult(data);
       setResearchStatus("done");
+      clearResearchState(project.id);
       if (data.id) {
         onDiscoveryCreated(data);
       }
@@ -567,6 +600,7 @@ function ProjectRow({
     } catch {
       setErrorMessage("Network error. Check your connection.");
       setResearchStatus("error");
+      clearResearchState(project.id);
     }
   }
 
@@ -575,6 +609,7 @@ function ProjectRow({
     setPlan("");
     setResult(null);
     setErrorMessage("");
+    clearResearchState(project.id);
     if (isExpanded) onToggleExpand();
   }
 
@@ -723,39 +758,13 @@ function ProjectRow({
       {/* Expanded plan approval card */}
       {isExpanded && (researchStatus === "plan_ready" || researchStatus === "researching") && (
         <tr className="border-b border-slate-200">
-          <td colSpan={columnCount} className="bg-slate-50 px-6 py-4">
-            <div className="max-w-2xl">
-              <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-slate-500">
-                Research Plan
-              </p>
-              <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
-                {plan}
-              </p>
-              <div className="mt-3 flex items-center gap-2">
-                {researchStatus === "plan_ready" && (
-                  <>
-                    <button
-                      onClick={handleExecute}
-                      className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-slate-800"
-                    >
-                      Approve & Run
-                    </button>
-                    <button
-                      onClick={handleCancel}
-                      className="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:bg-white"
-                    >
-                      Cancel
-                    </button>
-                  </>
-                )}
-                {researchStatus === "researching" && (
-                  <span className="inline-flex items-center gap-1.5 text-xs text-slate-400">
-                    <Spinner />
-                    Running research...
-                  </span>
-                )}
-              </div>
-            </div>
+          <td colSpan={columnCount} className="px-6 py-4">
+            <ResearchPlanCard
+              plan={plan}
+              isResearching={researchStatus === "researching"}
+              onApprove={handleExecute}
+              onCancel={handleCancel}
+            />
           </td>
         </tr>
       )}

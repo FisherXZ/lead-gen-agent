@@ -34,17 +34,33 @@ DEFINITION = {
                 "enum": ["confirmed", "likely", "possible", "unknown"],
                 "description": "Confidence level of the finding.",
             },
+            "sources": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "channel": {"type": "string"},
+                        "url": {"type": ["string", "null"]},
+                        "excerpt": {"type": "string"},
+                        "reliability": {"type": "string", "enum": ["high", "medium", "low"]},
+                        "source_method": {"type": ["string", "null"]},
+                        "date": {"type": ["string", "null"]},
+                        "publication": {"type": ["string", "null"]},
+                    },
+                },
+                "description": "Full source objects from report_findings — passed through for the review card to render with clickable URLs and reliability indicators.",
+            },
             "source_summary": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Abbreviated source list — one line per source (e.g. 'Solar Power World — McCarthy selected for 200MW project').",
+                "description": "Optional abbreviated source list — one line per source. Used as fallback if sources not provided.",
             },
             "assessment": {
                 "type": "string",
                 "description": "Your completeness assessment: what you found, confidence justification, and any gaps.",
             },
         },
-        "required": ["epc_contractor", "confidence", "source_summary", "assessment"],
+        "required": ["epc_contractor", "confidence", "assessment"],
     },
 }
 

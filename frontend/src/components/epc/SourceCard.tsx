@@ -121,7 +121,7 @@ export default function SourceCard({ source }: SourceCardProps) {
           href={link.href}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-2 inline-block text-xs font-medium text-blue-600 hover:text-blue-800"
+          className="mt-2 inline-block text-xs font-medium text-amber-600 hover:text-amber-800"
         >
           {link.label}
         </a>
