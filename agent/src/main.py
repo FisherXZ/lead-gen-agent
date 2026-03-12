@@ -30,23 +30,19 @@ from .agent_jobs import (
 from .batch import run_batch
 from .batch_progress import get_batch
 from .knowledge_base import build_knowledge_context, promote_discovery_to_kb, process_rejection_into_kb
-from .research import run_research
+from .research import run_research, run_research_plan
 from .chat_agent import run_chat_agent
 from .knowledge_base import get_entity_with_profile, list_entities, rebuild_profile_if_stale
-from .models import AgentResult, BatchDiscoverRequest, ChatRequest, DiscoverRequest, EpcSource, ReviewRequest
+from .models import AgentResult, BatchDiscoverRequest, ChatRequest, DiscoverPlanRequest, DiscoverRequest, EpcSource, ReviewRequest
 from .sse import StreamWriter
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="EPC Discovery Agent")
 
-_default_origins = ["http://localhost:3000", "http://localhost:3001"]
-_extra = os.environ.get("CORS_ORIGINS", "")  # comma-separated extra origins
-_origins = _default_origins + [o.strip() for o in _extra.split(",") if o.strip()]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_origins,
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["x-conversation-id", "x-vercel-ai-ui-message-stream", "x-job-id"],
@@ -58,9 +54,42 @@ def health():
     return {"status": "ok"}
 
 
+@app.post("/api/discover/plan")
+async def discover_plan(req: DiscoverPlanRequest):
+    """Generate a research plan for a project (without executing research).
+
+    Returns the plan text for user review. The user can approve it and
+    pass it to POST /api/discover with the plan parameter.
+    """
+    project = db.get_project(req.project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    try:
+        knowledge_context = build_knowledge_context(project)
+        plan_text, agent_log, total_tokens = await run_research_plan(
+            project, knowledge_context
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=503, detail=f"Missing configuration: {exc}")
+    except Exception:
+        tb = traceback.format_exc()
+        raise HTTPException(status_code=500, detail=f"Planning error: {tb[:500]}")
+
+    return {
+        "project_id": req.project_id,
+        "plan": plan_text,
+        "tokens_used": total_tokens,
+        "agent_log": agent_log,
+    }
+
+
 @app.post("/api/discover")
 async def discover(req: DiscoverRequest):
-    """Run EPC discovery for a project."""
+    """Run EPC discovery for a project.
+
+    Optionally accepts an approved plan from /api/discover/plan.
+    """
     project = db.get_project(req.project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -77,7 +106,7 @@ async def discover(req: DiscoverRequest):
     try:
         knowledge_context = build_knowledge_context(project)
         result, agent_log, total_tokens = await run_research(
-            project, knowledge_context
+            project, knowledge_context, approved_plan=req.plan
         )
     except KeyError as exc:
         raise HTTPException(
@@ -115,7 +144,82 @@ async def discover(req: DiscoverRequest):
         discovery["error_category"] = result.error.category
         discovery["error_message"] = result.error.message
 
+    # Signal that this discovery can be reviewed in chat
+    discovery["handoff_available"] = True
+
     return discovery
+
+
+@app.post("/api/discover/handoff")
+async def discover_handoff(discovery_id: str = None, project_id: str = None):
+    """Create a new chat conversation pre-loaded with research context.
+
+    Provide either discovery_id or project_id. Returns the conversation_id
+    for the frontend to navigate to.
+    """
+    # Look up the discovery
+    if discovery_id:
+        client = db.get_client()
+        resp = client.table("epc_discoveries").select("*").eq("id", discovery_id).execute()
+        if not resp.data:
+            raise HTTPException(status_code=404, detail="Discovery not found")
+        discovery = resp.data[0]
+        project_id = discovery["project_id"]
+    elif project_id:
+        discovery_data = db.get_active_discovery(project_id)
+        if not discovery_data:
+            raise HTTPException(status_code=404, detail="No active discovery for project")
+        discovery = discovery_data
+    else:
+        raise HTTPException(status_code=400, detail="Provide discovery_id or project_id")
+
+    project = db.get_project(project_id)
+    project_name = project.get("project_name", "Unknown") if project else "Unknown"
+
+    # Build the research context summary
+    epc = discovery.get("epc_contractor", "Unknown")
+    confidence = discovery.get("confidence", "unknown")
+    reasoning = discovery.get("reasoning", "")
+    sources = discovery.get("sources", [])
+    searches = discovery.get("searches_performed", [])
+
+    source_lines = []
+    for s in sources[:10]:
+        line = f"- {s.get('publication') or s.get('channel', 'Source')}"
+        if s.get("excerpt"):
+            line += f": {s['excerpt'][:100]}"
+        if s.get("url"):
+            line += f" ({s['url']})"
+        source_lines.append(line)
+
+    context_msg = f"""Here is the research context for **{project_name}**:
+
+**EPC Contractor:** {epc}
+**Confidence:** {confidence}
+
+**Reasoning:**
+{reasoning}
+
+**Sources ({len(sources)}):**
+{chr(10).join(source_lines) if source_lines else "No sources found."}
+
+**Searches Performed ({len(searches)}):**
+{chr(10).join(f"- {s}" for s in searches[:15]) if searches else "None recorded."}
+
+Discovery ID: `{discovery.get("id", "unknown")}`
+
+You can ask me questions about this research, request more investigation, or approve/reject the finding."""
+
+    # Create conversation and pre-populate
+    conv = db.create_conversation(title=f"Review: {epc} for {project_name}")
+    db.save_message(conv["id"], "assistant", context_msg)
+
+    return {
+        "conversation_id": conv["id"],
+        "project_name": project_name,
+        "epc_contractor": epc,
+        "confidence": confidence,
+    }
 
 
 @app.post("/api/discover/batch")
