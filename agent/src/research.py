@@ -20,6 +20,7 @@ import anthropic
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from .compaction import compact_messages, estimate_context_size
+from .completeness import CHECKPOINTS, evaluate_completeness
 from .models import AgentResult, ResearchError
 from .parsing import parse_report_findings
 from .prompts import PLANNING_SYSTEM_PROMPT, RESEARCH_SYSTEM_PROMPT, build_user_message
@@ -89,13 +90,25 @@ async def run_research(
     recent_tool_outputs: list[dict] = []
 
     for iteration in range(MAX_ITERATIONS):
-        # TODO: Add structural reflect step every 5 iterations.
-        # Instead of relying solely on the prompt to tell the agent when to stop,
-        # inject a system message at iteration 5, 10, 15 asking:
-        # "Have your last 3 searches surfaced any new EPC-specific information?
-        #  If not, call report_findings now with confidence 'unknown'."
-        # This is the industry-standard "sufficiency check" pattern used by
-        # LangGraph and Tavily deep research. See: plans/roadmap/ for details.
+        # Completeness checkpoint (Harvey AI pattern): at iterations 6, 12, 18
+        # evaluate what the agent has done and inject guidance into the last
+        # tool result.  Gentle → Firm → Mandatory escalation.
+        if iteration in CHECKPOINTS and len(messages) > 1:
+            check = evaluate_completeness(iteration, agent_log, recent_tool_outputs)
+            agent_log.append({"completeness_check": check})
+            logger.info(
+                "Completeness check at iteration %d: %s (%s)",
+                iteration, check["recommendation"], check["level"],
+            )
+            if check["message"]:
+                # Inject into last tool_result message (append-only — preserves KV cache)
+                last_msg = messages[-1]
+                if (
+                    isinstance(last_msg.get("content"), list)
+                    and last_msg["content"]
+                ):
+                    last_msg["content"][-1]["content"] += check["message"]
+
         try:
             response = await _call_api(
                 client,

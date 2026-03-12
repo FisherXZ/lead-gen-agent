@@ -7,6 +7,11 @@ from pydantic import BaseModel
 
 class DiscoverRequest(BaseModel):
     project_id: str
+    plan: str | None = None  # Approved research plan from /api/discover/plan
+
+
+class DiscoverPlanRequest(BaseModel):
+    project_id: str
 
 
 class BatchDiscoverRequest(BaseModel):

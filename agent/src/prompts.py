@@ -363,13 +363,17 @@ When asked to research a project's EPC, follow this phased process:
 7. If an unexpected lead appears, follow it — call \
 notify_progress(stage="switching_strategy") to explain the deviation.
 
-### Phase 3: Completeness Check
-8. Call request_guidance with your completeness assessment:
-   - Summary of what you found (or didn't find)
-   - Your proposed confidence level and why
-   - Sources you plan to cite
-   - Ask: "Should I report this finding, or should I keep searching?"
-9. Only call report_findings AFTER the user approves.
+### Phase 3: Review & Approval
+8. Call report_findings to save the discovery as pending.
+9. Then call request_discovery_review to present your finding for approval:
+   - Include the discovery_id from report_findings
+   - Abbreviated source list (one line per source)
+   - Your completeness assessment: what you found, confidence justification, gaps
+10. Wait for the user's response:
+    - If they say "accept" → call approve_discovery(action="accepted")
+    - If they say "reject" with a reason → call approve_discovery(action="rejected", reason="...")
+    - If they say "keep researching" → continue searching, then repeat Phase 3
+    - If they give specific feedback → adjust your research accordingly
 
 For simple queries (list projects, check KB, recall memories), skip this process \
 and just answer directly. This phased process is for EPC research specifically.

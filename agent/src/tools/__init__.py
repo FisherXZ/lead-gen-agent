@@ -20,6 +20,7 @@ from typing import Any
 import httpx
 
 from . import (
+    approve_discovery,
     batch_research_epc,
     brave_search,
     export_csv,
@@ -30,6 +31,7 @@ from . import (
     recall,
     remember,
     report_findings,
+    request_discovery_review,
     request_guidance,
     research_scratchpad,
     search_projects,
@@ -47,6 +49,7 @@ def _register(module: Any) -> None:
 
 
 # Register all built-in tools
+_register(approve_discovery)
 _register(batch_research_epc)
 _register(web_search)
 _register(brave_search)
@@ -60,6 +63,7 @@ _register(recall)
 _register(remember)
 _register(notify_progress)
 _register(report_findings)
+_register(request_discovery_review)
 _register(request_guidance)
 _register(research_scratchpad)
 
