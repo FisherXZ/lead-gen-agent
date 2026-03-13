@@ -4,18 +4,21 @@ import { useEffect, useState } from "react";
 import ReviewQueue from "@/components/epc/ReviewQueue";
 import { PendingDiscoveryWithProject } from "@/lib/types";
 import { agentFetch } from "@/lib/agent-fetch";
+import { useAuth } from "@/lib/auth";
 
 export default function ReviewPage() {
+  const { user, loading: authLoading } = useAuth();
   const [discoveries, setDiscoveries] = useState<PendingDiscoveryWithProject[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading || !user) return;
     agentFetch("/api/discoveries/pending")
       .then((res) => (res.ok ? res.json() : []))
       .then(setDiscoveries)
       .catch(() => setDiscoveries([]))
       .finally(() => setLoading(false));
-  }, []);
+  }, [authLoading, user]);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
