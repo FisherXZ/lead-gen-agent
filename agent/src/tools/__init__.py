@@ -25,6 +25,7 @@ from . import (
     brave_search,
     export_csv,
     fetch_page,
+    fetch_sec_filing,
     get_discoveries,
     notify_progress,
     query_kb,
@@ -34,8 +35,13 @@ from . import (
     request_discovery_review,
     request_guidance,
     research_scratchpad,
+    search_enr,
+    search_osha,
     search_projects,
     search_projects_with_epc,
+    search_sec_edgar,
+    search_spw,
+    search_wiki_solar,
     web_search,
 )
 
@@ -55,6 +61,7 @@ _register(web_search)
 _register(brave_search)
 _register(export_csv)
 _register(fetch_page)
+_register(fetch_sec_filing)
 _register(search_projects)
 _register(search_projects_with_epc)
 _register(get_discoveries)
@@ -66,6 +73,12 @@ _register(report_findings)
 _register(request_discovery_review)
 _register(request_guidance)
 _register(research_scratchpad)
+# Structured data source tools (Phase 1)
+_register(search_sec_edgar)
+_register(search_osha)
+_register(search_enr)
+_register(search_wiki_solar)
+_register(search_spw)
 
 
 def get_all_tools() -> list[dict]:

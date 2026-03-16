@@ -464,6 +464,80 @@ def rebuild_entity_profile(entity_id: str, _user_id: str = Depends(require_auth)
 
 
 # ---------------------------------------------------------------------------
+# Reverse sweep endpoint
+# ---------------------------------------------------------------------------
+
+# Guard: prevent duplicate sweeps
+_sweep_running = False
+
+
+@app.post("/api/reverse-sweep")
+async def reverse_sweep(request: Request, _user_id: str = Depends(require_auth)):
+    """Run a reverse-lookup EPC sweep across all seeded EPCs.
+
+    Searches SEC EDGAR, OSHA, and EPC portfolio pages for each known EPC,
+    then matches results against the project queue. Creates pending discoveries
+    for matches. Streams progress via SSE.
+    """
+    global _sweep_running
+    if _sweep_running:
+        raise HTTPException(status_code=409, detail="A reverse sweep is already running")
+
+    api_key = request.headers.get("x-anthropic-api-key")
+
+    async def event_stream():
+        global _sweep_running
+        _sweep_running = True
+
+        queue: asyncio.Queue[dict | None] = asyncio.Queue()
+
+        async def on_progress(update):
+            await queue.put({
+                "epc_name": update.epc_name,
+                "status": update.status,
+                "candidates_found": update.candidates_found,
+                "matches_found": update.matches_found,
+                "message": update.message,
+            })
+
+        async def run():
+            from .reverse_sweep import run_reverse_sweep
+            try:
+                result = await run_reverse_sweep(on_progress=on_progress, api_key=api_key)
+                await queue.put({
+                    "status": "done",
+                    "epcs_processed": result.epcs_processed,
+                    "total_candidates": result.total_candidates,
+                    "total_matches": result.total_matches,
+                    "discoveries_created": result.discoveries_created,
+                    "errors": result.errors[:10],
+                })
+            except Exception as exc:
+                logger.exception("Reverse sweep failed")
+                await queue.put({
+                    "status": "error",
+                    "message": str(exc)[:500],
+                })
+            finally:
+                await queue.put(None)
+
+        task = asyncio.create_task(run())
+
+        try:
+            while True:
+                update = await queue.get()
+                if update is None:
+                    break
+                yield f"data: {json.dumps(update)}\n\n"
+        finally:
+            _sweep_running = False
+            if not task.done():
+                task.cancel()
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+# ---------------------------------------------------------------------------
 # Batch progress SSE endpoint
 # ---------------------------------------------------------------------------
 

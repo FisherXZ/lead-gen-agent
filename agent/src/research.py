@@ -35,11 +35,15 @@ HARD_STOP_ITERATION = 22
 RESEARCH_TOOLS = [
     "web_search", "web_search_broad", "fetch_page", "query_knowledge_base",
     "notify_progress", "research_scratchpad", "report_findings",
+    # Structured data source tools
+    "search_sec_edgar", "fetch_sec_filing", "search_osha",
+    "search_enr", "search_wiki_solar", "search_spw",
 ]
 
-# Planning phase: KB + quick web search + notify, no scratchpad or broad search
+# Planning phase: KB + quick web/structured search + notify, no scratchpad or broad search
 PLANNING_TOOLS = [
     "web_search", "fetch_page", "query_knowledge_base",
+    "search_sec_edgar", "search_wiki_solar", "search_spw",
     "notify_progress", "report_findings",
 ]
 MAX_PLANNING_ITERATIONS = 5

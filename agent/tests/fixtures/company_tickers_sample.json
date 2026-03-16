@@ -1,0 +1,10 @@
+{
+  "0": {"cik_str": 1274494, "ticker": "FSLR", "title": "FIRST SOLAR, INC"},
+  "1": {"cik_str": 3153, "ticker": "SMXT", "title": "SOLARMAX TECHNOLOGY, INC"},
+  "2": {"cik_str": 318154, "ticker": "NEE", "title": "NEXTERA ENERGY INC"},
+  "3": {"cik_str": 753308, "ticker": "AES", "title": "AES CORP"},
+  "4": {"cik_str": 100826, "ticker": "UNP", "title": "UNION PACIFIC CORP"},
+  "5": {"cik_str": 1652044, "ticker": "CSIQ", "title": "CANADIAN SOLAR INC"},
+  "6": {"cik_str": 1408356, "ticker": "ENPH", "title": "ENPHASE ENERGY INC"},
+  "7": {"cik_str": 1590418, "ticker": "ARRY", "title": "ARRAY TECHNOLOGIES INC"}
+}

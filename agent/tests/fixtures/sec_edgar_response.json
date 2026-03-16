@@ -1,0 +1,44 @@
+{
+  "cik": "3153",
+  "entityType": "operating",
+  "sic": "3674",
+  "sicDescription": "Semiconductors & Related Devices",
+  "name": "SolarMax Technology, Inc",
+  "tickers": ["SMXT"],
+  "exchanges": ["NASDAQ"],
+  "filings": {
+    "recent": {
+      "accessionNumber": [
+        "0001564590-25-012345",
+        "0001564590-25-067890",
+        "0001564590-25-011111",
+        "0001564590-25-022222"
+      ],
+      "filingDate": [
+        "2025-08-05",
+        "2025-06-15",
+        "2025-02-28",
+        "2025-01-10"
+      ],
+      "form": [
+        "8-K",
+        "8-K",
+        "10-K",
+        "10-Q"
+      ],
+      "primaryDocument": [
+        "smxt-20250805.htm",
+        "smxt-20250615.htm",
+        "smxt-20250228.htm",
+        "smxt-20250110.htm"
+      ],
+      "primaryDocDescription": [
+        "Current Report - Material Event",
+        "Current Report - Material Event",
+        "Annual Report",
+        "Quarterly Report"
+      ]
+    },
+    "files": []
+  }
+}
