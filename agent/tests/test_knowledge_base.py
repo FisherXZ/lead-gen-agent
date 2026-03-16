@@ -430,3 +430,188 @@ def test_build_context_enriched_state_epcs(mock_resolve, mock_attempts, mock_epc
     assert "2026-02" in context
     assert "McCarthy" in context
     assert "800MW" in context
+
+
+# ---------------------------------------------------------------------------
+# promote_discovery_to_kb
+# ---------------------------------------------------------------------------
+
+@patch("src.knowledge_base.resolve_or_create_entity")
+@patch("src.knowledge_base.get_client")
+def test_promote_discovery_creates_engagement(mock_get_client, mock_resolve):
+    """Accepting a discovery creates an EPC engagement in the KB."""
+    from src.knowledge_base import promote_discovery_to_kb
+
+    dev = _make_entity(name="SunDev LLC", id="ent-dev")
+    epc = _make_entity(name="McCarthy Building", id="ent-epc", entity_type=["epc"])
+    mock_resolve.side_effect = [dev, epc]
+
+    table = MagicMock()
+    table.insert.return_value.execute.return_value = _mock_response([{}])
+    table.update.return_value.eq.return_value.execute.return_value = _mock_response([{}])
+    mock_get_client.return_value.table.return_value = table
+
+    result = make_agent_result(confidence="likely")
+    project = {"id": "proj-001", "developer": "SunDev LLC", "state": "TX"}
+
+    promote_discovery_to_kb("proj-001", result, project)
+
+    # Should insert engagement + mark profile stale
+    assert table.insert.call_count == 1
+    insert_args = table.insert.call_args[0][0]
+    assert insert_args["developer_entity_id"] == "ent-dev"
+    assert insert_args["epc_entity_id"] == "ent-epc"
+
+
+@patch("src.knowledge_base.resolve_or_create_entity")
+@patch("src.knowledge_base.get_client")
+def test_promote_discovery_skips_unknown_epc(mock_get_client, mock_resolve):
+    """Unknown EPC or unknown confidence skips engagement creation."""
+    from src.knowledge_base import promote_discovery_to_kb
+
+    dev = _make_entity(name="SunDev LLC", id="ent-dev")
+    mock_resolve.return_value = dev
+
+    table = MagicMock()
+    mock_get_client.return_value.table.return_value = table
+
+    result = make_agent_result(epc_contractor="Unknown", confidence="unknown", sources=[])
+    project = {"id": "proj-001", "developer": "SunDev LLC", "state": "TX"}
+
+    promote_discovery_to_kb("proj-001", result, project)
+
+    # No engagement insert should happen
+    table.insert.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# process_rejection_into_kb
+# ---------------------------------------------------------------------------
+
+@patch("src.knowledge_base.resolve_entity")
+@patch("src.knowledge_base.get_client")
+def test_process_rejection(mock_get_client, mock_resolve):
+    """Rejecting a discovery inserts a rejection research_attempt."""
+    from src.knowledge_base import process_rejection_into_kb
+
+    dev = _make_entity(name="SunDev LLC", id="ent-dev")
+    mock_resolve.return_value = dev
+
+    table = MagicMock()
+    # project lookup
+    table.select.return_value.eq.return_value.limit.return_value.execute.return_value = (
+        _mock_response([{"developer": "SunDev LLC"}])
+    )
+    table.insert.return_value.execute.return_value = _mock_response([{}])
+    table.delete.return_value.eq.return_value.eq.return_value.eq.return_value.execute.return_value = (
+        _mock_response([])
+    )
+    table.update.return_value.eq.return_value.execute.return_value = _mock_response([{}])
+    mock_get_client.return_value.table.return_value = table
+
+    discovery = {
+        "project_id": "proj-001",
+        "epc_contractor": "McCarthy Building",
+        "confidence": "likely",
+        "searches_performed": ["test search"],
+    }
+
+    process_rejection_into_kb(discovery, reason="Wrong EPC")
+
+    # Should insert research_attempt with rejected outcome
+    insert_args = table.insert.call_args[0][0]
+    assert insert_args["outcome"] == "rejected_by_reviewer"
+    assert insert_args["reasoning"] == "Wrong EPC"
+
+
+# ---------------------------------------------------------------------------
+# _upsert_engagement — fallback
+# ---------------------------------------------------------------------------
+
+@patch("src.knowledge_base.get_client")
+def test_upsert_engagement_duplicate_upgrades_confidence(mock_get_client):
+    """Duplicate engagement insert triggers fallback that upgrades confidence."""
+    from src.knowledge_base import _upsert_engagement
+
+    client = MagicMock()
+
+    # Make insert raise (duplicate)
+    client.table.return_value.insert.return_value.execute.side_effect = Exception("duplicate")
+
+    # Fallback select returns existing with lower confidence
+    client.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value = (
+        _mock_response([{"id": "eng-001", "confidence": "possible"}])
+    )
+    client.table.return_value.update.return_value.eq.return_value.execute.return_value = (
+        _mock_response([{}])
+    )
+
+    _upsert_engagement(
+        client=client,
+        developer_entity_id="ent-dev",
+        epc_entity_id="ent-epc",
+        project_id="proj-001",
+        confidence="likely",
+        sources=[],
+        state="TX",
+    )
+
+    # Should have called update to upgrade confidence
+    client.table.return_value.update.assert_called_once()
+    update_args = client.table.return_value.update.call_args[0][0]
+    assert update_args["confidence"] == "likely"
+
+
+def test_upsert_engagement_fallback_error_raises():
+    """If the fallback select/update also fails, the error is re-raised."""
+    from src.knowledge_base import _upsert_engagement
+
+    client = MagicMock()
+
+    # Insert raises
+    client.table.return_value.insert.return_value.execute.side_effect = Exception("duplicate")
+    # Fallback select also raises
+    client.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.limit.return_value.execute.side_effect = (
+        Exception("connection lost")
+    )
+
+    with pytest.raises(Exception, match="connection lost"):
+        _upsert_engagement(
+            client=client,
+            developer_entity_id="ent-dev",
+            epc_entity_id="ent-epc",
+            project_id="proj-001",
+            confidence="likely",
+            sources=[],
+            state="TX",
+        )
+
+
+# ---------------------------------------------------------------------------
+# _process_related_lead — skip logging
+# ---------------------------------------------------------------------------
+
+def test_process_related_lead_skips_missing_fields():
+    """Related lead with missing EPC is skipped with debug log."""
+    from src.knowledge_base import _process_related_lead
+
+    client = MagicMock()
+    lead = {"developer": "SunDev LLC"}  # no epc
+
+    # Should not raise
+    _process_related_lead(client, lead, state="TX")
+
+    # No DB calls should happen
+    client.table.assert_not_called()
+
+
+def test_process_related_lead_skips_missing_developer():
+    """Related lead with missing developer is skipped with debug log."""
+    from src.knowledge_base import _process_related_lead
+
+    client = MagicMock()
+    lead = {"epc_contractor": "McCarthy Building"}  # no developer
+
+    _process_related_lead(client, lead, state="TX")
+
+    client.table.assert_not_called()

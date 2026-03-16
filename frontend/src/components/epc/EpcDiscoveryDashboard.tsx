@@ -778,7 +778,7 @@ function ProjectRow({
           )}
           {researchStatus === "done" && result && (
             <span className="inline-flex items-center gap-2">
-              <ConfidenceBadge confidence={result.confidence} />
+              <ConfidenceBadge confidence={result.confidence ?? "unknown"} />
               <Link
                 href={`/projects/${project.id}`}
                 className="inline-flex items-center rounded-full border border-border-default bg-surface-overlay px-3 py-1 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"

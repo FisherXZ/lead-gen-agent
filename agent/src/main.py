@@ -35,7 +35,7 @@ from .knowledge_base import build_knowledge_context, promote_discovery_to_kb, pr
 from .research import run_research, run_research_plan
 from .chat_agent import run_chat_agent
 from .knowledge_base import get_entity_with_profile, list_entities, rebuild_profile_if_stale
-from .models import AgentResult, BatchDiscoverRequest, ChatRequest, DiscoverPlanRequest, DiscoverRequest, EpcSource, ReviewRequest
+from .models import AgentResult, BatchDiscoverRequest, ChatRequest, DiscoverPlanRequest, DiscoverRequest, EpcSource, NegativeEvidence, ReviewRequest
 from .sse import StreamWriter
 
 logger = logging.getLogger(__name__)
@@ -374,6 +374,8 @@ def review_discovery(discovery_id: str, req: ReviewRequest, _user_id: str = Depe
         if project:
             try:
                 sources = [EpcSource(**s) for s in (discovery.get("sources") or [])]
+                neg_raw = discovery.get("negative_evidence") or []
+                neg_evidence = [NegativeEvidence(**n) for n in neg_raw] if neg_raw else []
                 result = AgentResult(
                     epc_contractor=discovery.get("epc_contractor"),
                     confidence=discovery.get("confidence", "unknown"),
@@ -381,11 +383,11 @@ def review_discovery(discovery_id: str, req: ReviewRequest, _user_id: str = Depe
                     reasoning=_parse_reasoning(discovery.get("reasoning", "")),
                     related_leads=discovery.get("related_leads", []),
                     searches_performed=discovery.get("searches_performed", []),
+                    negative_evidence=neg_evidence,
                 )
                 promote_discovery_to_kb(discovery["project_id"], result, project)
             except Exception:
-                import logging
-                logging.getLogger(__name__).warning(
+                logger.error(
                     "KB promotion failed for discovery %s", discovery_id, exc_info=True
                 )
     else:
@@ -398,8 +400,7 @@ def review_discovery(discovery_id: str, req: ReviewRequest, _user_id: str = Depe
         try:
             process_rejection_into_kb(discovery, req.reason)
         except Exception:
-            import logging
-            logging.getLogger(__name__).warning(
+            logger.error(
                 "KB rejection processing failed for discovery %s", discovery_id, exc_info=True
             )
 

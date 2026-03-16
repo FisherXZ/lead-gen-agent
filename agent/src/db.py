@@ -131,7 +131,7 @@ def store_discovery(
             process_discovery_into_kb(project_id, result, project)
         except Exception:
             import logging
-            logging.getLogger(__name__).warning(
+            logging.getLogger(__name__).error(
                 "KB write-back failed for project %s", project_id, exc_info=True
             )
 

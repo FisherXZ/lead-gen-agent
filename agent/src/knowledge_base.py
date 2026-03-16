@@ -449,24 +449,28 @@ def _upsert_engagement(
         }).execute()
     except Exception:
         # Likely duplicate — update existing
-        resp = (
-            client.table("epc_engagements")
-            .select("id, confidence")
-            .eq("developer_entity_id", developer_entity_id)
-            .eq("epc_entity_id", epc_entity_id)
-            .eq("project_id", project_id)
-            .limit(1)
-            .execute()
-        )
-        if resp.data:
-            existing = resp.data[0]
-            # Only upgrade confidence, never downgrade
-            rank = {"confirmed": 3, "likely": 2, "possible": 1}
-            if rank.get(confidence, 0) > rank.get(existing["confidence"], 0):
-                client.table("epc_engagements").update({
-                    "confidence": confidence,
-                    "sources": sources,
-                }).eq("id", existing["id"]).execute()
+        try:
+            resp = (
+                client.table("epc_engagements")
+                .select("id, confidence")
+                .eq("developer_entity_id", developer_entity_id)
+                .eq("epc_entity_id", epc_entity_id)
+                .eq("project_id", project_id)
+                .limit(1)
+                .execute()
+            )
+            if resp.data:
+                existing = resp.data[0]
+                # Only upgrade confidence, never downgrade
+                rank = {"confirmed": 3, "likely": 2, "possible": 1}
+                if rank.get(confidence, 0) > rank.get(existing["confidence"], 0):
+                    client.table("epc_engagements").update({
+                        "confidence": confidence,
+                        "sources": sources,
+                    }).eq("id", existing["id"]).execute()
+        except Exception as e:
+            logger.error("Engagement upsert fallback failed: %s", e, exc_info=True)
+            raise
 
 
 def _process_related_lead(client, lead: dict, state: str | None) -> None:
@@ -476,6 +480,10 @@ def _process_related_lead(client, lead: dict, state: str | None) -> None:
     confidence = lead.get("confidence", "possible")
 
     if not dev_name or not epc_name:
+        logger.debug(
+            "Skipping related lead — missing %s",
+            "developer" if not dev_name else "epc_contractor",
+        )
         return
 
     # Validate confidence value
