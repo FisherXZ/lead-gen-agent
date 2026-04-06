@@ -186,61 +186,45 @@ def _summarize_messages(messages: list[dict]) -> str:
 
     Extracts: scope counts, tool names, recent user requests, pending-work text,
     key file paths, current work, and a per-message timeline.
+    Single pass over messages — all fields accumulated together.
     """
-    user_count = sum(1 for m in messages if m.get("role") == "user")
-    assistant_count = sum(1 for m in messages if m.get("role") == "assistant")
-
-    # Collect tool names from tool_use blocks
+    user_count = 0
+    assistant_count = 0
     tool_names: set[str] = set()
+    all_text_parts: list[str] = []
+    user_texts: list[str] = []    # all non-summary user messages
+    keyword_texts: list[str] = []  # all messages matching pending-work keywords
+    current_work: str | None = None
+    timeline: list[str] = []
+
     for m in messages:
+        role = m.get("role", "unknown")
+        if role == "user":
+            user_count += 1
+        elif role == "assistant":
+            assistant_count += 1
+
+        # Tool names
         content = m.get("content", [])
         if isinstance(content, list):
             for block in content:
                 if isinstance(block, dict) and block.get("type") == "tool_use":
                     tool_names.add(block.get("name", "unknown"))
 
-    # Last 3 user text messages (skip existing summary messages)
-    recent_user: list[str] = []
-    for m in reversed(messages):
-        if len(recent_user) >= 3:
-            break
-        if m.get("role") != "user":
-            continue
+        all_text_parts.append(_extract_all_text(m))
+        timeline.append(f"  - {role}: {_summarize_message_content(m)}")
+
         text = _extract_first_text(m)
         if text and not text.startswith(CONTINUATION_PREAMBLE):
-            recent_user.append(_truncate(text, 160))
-    recent_user.reverse()
-
-    # Messages whose text contains pending-work keywords
-    pending_work: list[str] = []
-    for m in reversed(messages):
-        if len(pending_work) >= 3:
-            break
-        text = _extract_first_text(m)
-        if text:
-            lowered = text.lower()
-            if any(kw in lowered for kw in _PENDING_KEYWORDS):
-                pending_work.append(_truncate(text, 160))
-    pending_work.reverse()
-
-    # Key files across all message content
-    all_text = " ".join(_extract_all_text(m) for m in messages)
-    key_files = _extract_file_candidates(all_text)
-
-    # Current work: most recent non-empty text block
-    current_work: str | None = None
-    for m in reversed(messages):
-        text = _extract_first_text(m)
-        if text and not text.startswith(CONTINUATION_PREAMBLE):
+            if role == "user":
+                user_texts.append(_truncate(text, 160))
+            if any(kw in text.lower() for kw in _PENDING_KEYWORDS):
+                keyword_texts.append(_truncate(text, 160))
             current_work = _truncate(text, 200)
-            break
 
-    # Key timeline: one line per message
-    timeline: list[str] = []
-    for m in messages:
-        role = m.get("role", "unknown")
-        content_str = _summarize_message_content(m)
-        timeline.append(f"  - {role}: {content_str}")
+    recent_user = user_texts[-3:]
+    pending_work = keyword_texts[-3:]
+    key_files = _extract_file_candidates(" ".join(all_text_parts))
 
     # Build XML block
     lines: list[str] = [
@@ -274,40 +258,42 @@ def _summarize_messages(messages: list[dict]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _extract_highlights(summary: str) -> list[str]:
-    """Return all non-timeline bullet lines from a summary string."""
+def _parse_summary_sections(summary: str) -> tuple[list[str], list[str]]:
+    """Split a formatted summary into (highlights, timeline) in a single pass.
+
+    Returns a 2-tuple: (non-timeline bullet lines, timeline lines).
+    Calls _format_summary once so callers don't have to.
+    """
     formatted = _format_summary(summary)
-    lines: list[str] = []
+    highlights: list[str] = []
+    timeline: list[str] = []
     in_timeline = False
     for line in formatted.splitlines():
         stripped = line.rstrip()
-        if not stripped or stripped in ("Summary:", "Conversation summary:"):
-            continue
         if stripped == "- Key timeline:":
             in_timeline = True
             continue
         if in_timeline:
-            continue
-        lines.append(stripped)
-    return lines
+            if not stripped:
+                break
+            timeline.append(stripped)
+        else:
+            if not stripped or stripped in ("Summary:", "Conversation summary:"):
+                continue
+            highlights.append(stripped)
+    return highlights, timeline
+
+
+def _extract_highlights(summary: str) -> list[str]:
+    """Return all non-timeline bullet lines from a summary string."""
+    highlights, _ = _parse_summary_sections(summary)
+    return highlights
 
 
 def _extract_timeline(summary: str) -> list[str]:
     """Return the timeline lines from a summary string."""
-    formatted = _format_summary(summary)
-    lines: list[str] = []
-    in_timeline = False
-    for line in formatted.splitlines():
-        stripped = line.rstrip()
-        if stripped == "- Key timeline:":
-            in_timeline = True
-            continue
-        if not in_timeline:
-            continue
-        if not stripped:
-            break
-        lines.append(stripped)
-    return lines
+    _, timeline = _parse_summary_sections(summary)
+    return timeline
 
 
 def _merge_summaries(existing: str, new_summary: str) -> str:
@@ -318,9 +304,8 @@ def _merge_summaries(existing: str, new_summary: str) -> str:
     - "Newly compacted context" (highlights from new_summary)
     - "Key timeline" (timeline from new_summary only)
     """
-    prev_highlights = _extract_highlights(existing)
-    new_highlights = _extract_highlights(new_summary)
-    new_timeline = _extract_timeline(new_summary)
+    prev_highlights, _ = _parse_summary_sections(existing)
+    new_highlights, new_timeline = _parse_summary_sections(new_summary)
 
     lines: list[str] = ["<summary>", "Conversation summary:"]
     if prev_highlights:
