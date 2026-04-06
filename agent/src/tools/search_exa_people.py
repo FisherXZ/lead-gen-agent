@@ -92,6 +92,7 @@ async def execute(tool_input: dict) -> dict:
     body = {
         "query": query,
         "type": "auto",
+        "category": "people",
         "numResults": max_results,
         "contents": {"text": {"maxCharacters": 500}},
     }
