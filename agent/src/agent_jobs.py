@@ -47,11 +47,12 @@ class AgentJob:
     def append_event(self, event: str) -> None:
         """Add an SSE event string and notify all waiting subscribers.
 
-        Events that would push the total beyond MAX_EVENT_BYTES are dropped
-        from the replay log but still trigger notification so live readers
-        are not blocked.
+        Uses code-point count (byte-accurate for ASCII SSE content) to track
+        total size. Events that would push the total beyond MAX_EVENT_BYTES are
+        dropped from the replay log but still trigger notification so live
+        readers are not blocked.
         """
-        event_bytes = len(event.encode())
+        event_bytes = len(event)
         if self._total_bytes + event_bytes <= MAX_EVENT_BYTES:
             self.events.append(event)
             self._total_bytes += event_bytes

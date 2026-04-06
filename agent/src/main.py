@@ -929,7 +929,6 @@ async def chat(req: ChatRequest, request: Request, _user_id: str = Depends(requi
         conversation_id = conv["id"]
 
     # If client sends Last-Event-ID, reconnect to existing job at that cursor
-    reconnect_job = None
     last_event_id = request.headers.get("last-event-id")
     if last_event_id is not None:
         try:
@@ -937,20 +936,20 @@ async def chat(req: ChatRequest, request: Request, _user_id: str = Depends(requi
         except ValueError:
             logger.debug("Invalid Last-Event-ID %r, defaulting to cursor=0", last_event_id)
             cursor = 0
-        reconnect_job = get_active_job_for_conversation(conversation_id)
-        if reconnect_job:
+        leid_job = get_active_job_for_conversation(conversation_id)
+        if leid_job:
             return StreamingResponse(
-                _stream_from_job(reconnect_job, cursor=cursor),
+                _stream_from_job(leid_job, cursor=cursor),
                 media_type="text/event-stream",
                 headers={
                     "x-vercel-ai-ui-message-stream": "v1",
                     "x-conversation-id": conversation_id,
-                    "x-job-id": reconnect_job.job_id,
+                    "x-job-id": leid_job.job_id,
                 },
             )
 
-    # If agent is already running for this conversation, reconnect
-    existing_job = reconnect_job or get_active_job_for_conversation(conversation_id)
+    # If agent is already running for this conversation, reconnect from start
+    existing_job = get_active_job_for_conversation(conversation_id)
     if existing_job:
         return StreamingResponse(
             _stream_from_job(existing_job, cursor=0),

@@ -77,6 +77,13 @@ export default function ChatInterface({ initialContext }: ChatInterfaceProps) {
   // Tracks how many auto-retries have been attempted for the current job
   const retryCountRef = useRef(0);
 
+  // Resets all job-tracking state when switching conversations or stopping
+  const resetJobState = useCallback((clearJobId = true) => {
+    if (clearJobId) jobIdRef.current = null;
+    cursorRef.current = 0;
+    retryCountRef.current = 0;
+  }, []);
+
   // Stable transport — body uses a resolver function so it reads the ref each time
   const transport = useMemo(
     () =>
@@ -99,8 +106,7 @@ export default function ChatInterface({ initialContext }: ChatInterfaceProps) {
           const jid = res.headers.get("x-job-id");
           if (jid) {
             jobIdRef.current = jid;
-            cursorRef.current = 0;
-            retryCountRef.current = 0;
+            resetJobState(false); // reset cursor + retries, keep new job ID
           }
 
           // Wrap body to track the last SSE id: field seen (for reconnection cursor)
@@ -145,21 +151,21 @@ export default function ChatInterface({ initialContext }: ChatInterfaceProps) {
   useEffect(() => {
     const prev = prevStatusRef.current;
     prevStatusRef.current = status;
-    if (
-      (prev === "streaming" || prev === "submitted") &&
-      status === "error" &&
-      jobIdRef.current !== null &&
-      cursorRef.current > 0 &&
-      retryCountRef.current < 3
-    ) {
-      retryCountRef.current += 1;
-      const jobId = jobIdRef.current;
-      const cursor = cursorRef.current;
-      reconnectToJob(jobId, cursor);
-    }
-    // Reset retry count on successful completion
-    if (prev === "streaming" && status !== "error") {
-      retryCountRef.current = 0;
+    if (prev === "streaming" || prev === "submitted") {
+      if (
+        status === "error" &&
+        jobIdRef.current !== null &&
+        cursorRef.current > 0 &&
+        retryCountRef.current < 3
+      ) {
+        retryCountRef.current += 1;
+        const jobId = jobIdRef.current;
+        const cursor = cursorRef.current;
+        reconnectToJob(jobId, cursor);
+      } else if (status !== "error") {
+        // Stream completed successfully — reset retry counter
+        retryCountRef.current = 0;
+      }
     }
   }, [status, reconnectToJob]);
 
@@ -234,9 +240,7 @@ export default function ChatInterface({ initialContext }: ChatInterfaceProps) {
     reconnectAbortRef.current?.abort();
     setReconnecting(false);
     // Clear stale job ID from previous conversation
-    jobIdRef.current = null;
-    cursorRef.current = 0;
-    retryCountRef.current = 0;
+    resetJobState();
 
     try {
       const res = await agentFetch(
@@ -419,9 +423,7 @@ export default function ChatInterface({ initialContext }: ChatInterfaceProps) {
     setMessages([]);
     setConversationId(null);
     conversationIdRef.current = null;
-    jobIdRef.current = null;
-    cursorRef.current = 0;
-    retryCountRef.current = 0;
+    resetJobState();
     setSidebarOpen(false);
   }
 
@@ -449,9 +451,7 @@ export default function ChatInterface({ initialContext }: ChatInterfaceProps) {
       } catch {
         // Best effort
       }
-      jobIdRef.current = null;
-      cursorRef.current = 0;
-      retryCountRef.current = 0;
+      resetJobState();
     } else if (cid) {
       // Fallback: user hit stop before response headers arrived (no job ID yet)
       try {
@@ -462,8 +462,7 @@ export default function ChatInterface({ initialContext }: ChatInterfaceProps) {
       } catch {
         // Best effort
       }
-      cursorRef.current = 0;
-      retryCountRef.current = 0;
+      resetJobState(false);
     }
   }
 
