@@ -43,6 +43,7 @@ from . import (
     request_guidance,
     research_scratchpad,
     save_contact,
+    scrape_epc_website,
     search_enr,
     search_exa_people,
     search_linkedin,
@@ -96,6 +97,7 @@ _register(search_spw)
 _register(search_exa_people)
 _register(search_linkedin)
 _register(lookup_hubspot_contacts)
+_register(scrape_epc_website)
 # Contact enrichment tools
 _register(enrich_contact_email)
 _register(enrich_contact_phone)
