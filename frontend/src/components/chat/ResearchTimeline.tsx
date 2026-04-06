@@ -94,7 +94,7 @@ export default function ResearchTimeline({ stages }: ResearchTimelineProps) {
             <div className={`flex-1 min-w-0 ${isLast ? "pb-0" : "pb-4"}`}>
               {/* Stage header */}
               <div className="flex items-center gap-2 h-5">
-                <span className="text-[13px] font-medium text-text-secondary">
+                <span className="text-[11px] font-medium tracking-[0.08em] uppercase text-text-tertiary">
                   {formatStageName(stage.name)}
                 </span>
                 {stage.children.length > 0 && stage.status === "complete" && (
