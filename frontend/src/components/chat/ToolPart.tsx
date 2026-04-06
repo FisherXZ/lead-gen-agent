@@ -14,7 +14,6 @@ import PagePreview from "./parts/PagePreview";
 import DiscoveryApprovalCard from "./parts/DiscoveryApprovalCard";
 import CollapsibleToolCard from "./CollapsibleToolCard";
 import { EpcSource } from "@/lib/types";
-import ToolIcon from "./ToolIcon";
 
 interface ToolInvocation {
   toolCallId: string;
@@ -378,7 +377,6 @@ export default function ToolPart({ toolInvocation }: ToolPartProps) {
 
   return (
     <CollapsibleToolCard
-      icon={<ToolIcon toolName={toolName} />}
       label={label}
       status={status}
       defaultExpanded={expanded}

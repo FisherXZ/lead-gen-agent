@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from "react";
 
 interface CollapsibleToolCardProps {
-  icon: React.ReactNode;
   label: string;
   status: "running" | "done" | "error";
   defaultExpanded: boolean;
@@ -15,8 +14,8 @@ interface CollapsibleToolCardProps {
 function StatusIndicator({ status }: { status: "running" | "done" | "error" }) {
   if (status === "running") {
     return (
-      <span className="inline-flex shrink-0">
-        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-border-default border-t-text-secondary" />
+      <span className="flex items-center justify-center h-3.5 w-3.5 shrink-0">
+        <span className="h-1.5 w-1.5 rounded-full bg-accent-amber animate-timeline-pulse" />
       </span>
     );
   }
@@ -77,7 +76,6 @@ function Chevron({ expanded }: { expanded: boolean }) {
 }
 
 export default function CollapsibleToolCard({
-  icon,
   label,
   status,
   defaultExpanded,
@@ -104,34 +102,33 @@ export default function CollapsibleToolCard({
   };
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border-subtle bg-surface-raised">
-      {/* Header — muted, compact, subordinate to main text */}
+    <div>
+      {/* Header row — compact, no card chrome */}
       <div
         onClick={handleClick}
         className={`flex items-center gap-2 px-3 py-1.5 ${
-          hasChildren ? "cursor-pointer select-none hover:bg-surface-overlay" : ""
+          hasChildren ? "cursor-pointer select-none" : ""
         }`}
       >
-        <span className="text-text-tertiary">{icon}</span>
-        <span className="min-w-0 flex-1 truncate text-[13px] text-text-secondary">
+        <StatusIndicator status={status} />
+        <span className={`min-w-0 flex-1 truncate text-[13px] text-text-secondary ${hasChildren ? "hover:text-text-secondary" : ""}`}>
           {label}
         </span>
         {summary && (
           <span className="shrink-0 text-[11px] text-text-tertiary">{summary}</span>
         )}
         {headerAction}
-        <StatusIndicator status={status} />
         {hasChildren && <Chevron expanded={expanded} />}
       </div>
 
-      {/* Collapsible body */}
+      {/* Collapsible body — no border, no card chrome */}
       {hasChildren && (
         <div
           className="grid transition-[grid-template-rows] duration-200 ease-out"
           style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
         >
           <div className="overflow-hidden">
-            <div className="border-t border-border-subtle">{children}</div>
+            <div>{children}</div>
           </div>
         </div>
       )}
