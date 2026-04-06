@@ -33,7 +33,7 @@ export default async function BriefingPage() {
 
   if (projectsResult.error) {
     return (
-      <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+      <main className="mx-auto max-w-2xl px-4 py-10 sm:px-6 lg:px-8">
         <p className="text-status-red">
           Failed to load projects: {projectsResult.error.message}
         </p>
@@ -140,11 +140,14 @@ export default async function BriefingPage() {
   };
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold font-serif text-text-primary">
+    <main className="mx-auto max-w-2xl px-4 pt-12 pb-16 sm:px-6">
+      <div className="mb-10">
+        <h1 className="text-3xl font-serif text-[--text-primary] tracking-tight">
           Briefing
         </h1>
+        <p className="mt-1 text-sm text-[--text-tertiary]">
+          Your prioritized leads, discoveries, and project updates.
+        </p>
       </div>
       <BriefingFeed events={events} stats={stats} />
     </main>
