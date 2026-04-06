@@ -227,13 +227,24 @@ def create_contact(contact: dict, company_hs_id: str, token: str) -> str:
     return contact_id
 
 
+_ASSOCIATION_TYPE_IDS: dict[tuple[str, str], int] = {
+    ("deals", "companies"): 342,
+    ("contacts", "companies"): 280,
+    ("contacts", "deals"): 3,
+}
+
+
 def _associate(from_type: str, from_id: str, to_type: str, to_id: str, token: str) -> None:
     """Create an association between two HubSpot objects."""
+    type_id = _ASSOCIATION_TYPE_IDS.get((from_type, to_type))
+    if type_id is None:
+        logger.error("No association type ID mapped for %s→%s; skipping", from_type, to_type)
+        return
     with httpx.Client(timeout=_TIMEOUT) as client:
         resp = client.put(
             f"{HUBSPOT_API}/crm/v4/objects/{from_type}/{from_id}/associations/{to_type}/{to_id}",
             headers=_hs_headers(token),
-            json=[{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 0}],
+            json=[{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": type_id}],
         )
         # 200 or 201 both fine; log but don't fail on association errors
         if resp.status_code >= 400:

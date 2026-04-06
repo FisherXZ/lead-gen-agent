@@ -32,7 +32,8 @@ const AuthContext = createContext<AuthContextValue>({
 function extractRole(accessToken: string | null): UserRole {
   if (!accessToken) return null;
   try {
-    const payload = JSON.parse(atob(accessToken.split(".")[1]));
+    const base64 = accessToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const payload = JSON.parse(atob(base64));
     return payload.user_role === "admin" ? "admin" : "member";
   } catch {
     return null;

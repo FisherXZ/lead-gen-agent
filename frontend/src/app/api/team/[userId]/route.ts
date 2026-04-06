@@ -17,18 +17,26 @@ export const PATCH = withAdminParams<{ userId: string }>(
 
     const service = createServiceClient();
 
-    // Prevent demoting yourself if you're the last admin
-    if (newRole === "member" && userId === adminUser.id) {
-      const { data: admins } = await service
+    // Prevent demoting the last admin (covers any admin, not just self)
+    if (newRole === "member") {
+      const { data: targetRole } = await service
         .from("user_roles")
-        .select("user_id")
-        .eq("role", "admin");
+        .select("role")
+        .eq("user_id", userId)
+        .single();
 
-      if ((admins || []).length <= 1) {
-        return NextResponse.json(
-          { error: "Cannot demote the last admin" },
-          { status: 400 }
-        );
+      if (targetRole?.role === "admin") {
+        const { data: admins } = await service
+          .from("user_roles")
+          .select("user_id")
+          .eq("role", "admin");
+
+        if ((admins || []).length <= 1) {
+          return NextResponse.json(
+            { error: "Cannot demote the last admin" },
+            { status: 400 }
+          );
+        }
       }
     }
 
@@ -65,6 +73,27 @@ export const DELETE = withAdminParams<{ userId: string }>(
     }
 
     const service = createServiceClient();
+
+    // Prevent deleting the last admin
+    const { data: targetRole } = await service
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .single();
+
+    if (targetRole?.role === "admin") {
+      const { data: admins } = await service
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "admin");
+
+      if ((admins || []).length <= 1) {
+        return NextResponse.json(
+          { error: "Cannot remove the last admin" },
+          { status: 400 }
+        );
+      }
+    }
 
     // Get user's email to remove from allowlist
     const {
