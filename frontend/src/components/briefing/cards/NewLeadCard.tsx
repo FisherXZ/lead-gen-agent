@@ -75,9 +75,13 @@ export function NewLeadCard({ event, onExpand, onDismiss }: NewLeadCardProps) {
         </div>
       </div>
 
-      <p className="text-sm text-[--text-secondary] mb-4 leading-relaxed italic">
-        &ldquo;{event.outreach_context}&rdquo;
-      </p>
+      {event.outreach_context && (
+        <div className="mb-4 border-l-2 border-[--border-default] pl-4">
+          <p className="text-sm text-[--text-secondary] leading-relaxed">
+            {event.outreach_context}
+          </p>
+        </div>
+      )}
 
       {event.contacts.length > 0 && (
         <div className="mb-4 space-y-2">
