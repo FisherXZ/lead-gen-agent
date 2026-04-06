@@ -16,6 +16,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 import uuid
 from collections.abc import AsyncGenerator
 
@@ -40,7 +41,7 @@ _logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-async def _handle_report_findings(tool_input: dict) -> dict:
+async def _handle_report_findings(tool_input: dict, total_tokens: int = 0) -> dict:
     """When the chat agent calls report_findings, store the discovery.
 
     The tool_input must include a _project_id injected by the agent's
@@ -56,7 +57,7 @@ async def _handle_report_findings(tool_input: dict) -> dict:
         project = db.get_project(project_id)
         if project:
             discovery = db.store_discovery(
-                project_id, result, agent_log=[], total_tokens=0, project=project
+                project_id, result, agent_log=[], total_tokens=total_tokens, project=project
             )
             return {
                 "status": "recorded",
@@ -166,7 +167,23 @@ async def run_chat_agent(
 
     had_tool_rounds = False  # Track if prior rounds used tools
 
+    total_usage = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+    }
+    iteration = 0
+
     for _round in range(MAX_TOOL_ROUNDS):
+        iteration += 1
+        asyncio.create_task(asyncio.to_thread(
+            db.log_chat_event,
+            conversation_id,
+            iteration,
+            "turn_started",
+            {"turn_number": iteration, "model": MODEL},
+        ))
         # Stream the response
         tool_calls: list[dict] = []
         current_tool_input = ""
@@ -242,18 +259,66 @@ async def run_chat_agent(
             # Get the final message for stop_reason
             response = await stream.get_final_message()
 
+        # Accumulate token usage across all loop iterations
+        if response.usage:
+            u = response.usage
+            total_usage["input_tokens"]       += getattr(u, "input_tokens", 0)
+            total_usage["output_tokens"]      += getattr(u, "output_tokens", 0)
+            total_usage["cache_read_tokens"]  += getattr(u, "cache_read_input_tokens", 0)
+            total_usage["cache_write_tokens"] += getattr(u, "cache_creation_input_tokens", 0)
+
+        asyncio.create_task(asyncio.to_thread(
+            db.log_chat_event,
+            conversation_id,
+            iteration,
+            "turn_completed",
+            {
+                "turn_number":        iteration,
+                "input_tokens":       getattr(response.usage, "input_tokens", 0) if response.usage else 0,
+                "output_tokens":      getattr(response.usage, "output_tokens", 0) if response.usage else 0,
+                "cache_read_tokens":  getattr(response.usage, "cache_read_input_tokens", 0) if response.usage else 0,
+                "cache_write_tokens": getattr(response.usage, "cache_creation_input_tokens", 0) if response.usage else 0,
+                "stop_reason":        response.stop_reason,
+            },
+        ))
+
         # Execute any tool calls
         if response.stop_reason == "tool_use" and tool_calls:
             had_tool_rounds = True
             tool_results = []
             for tc in tool_calls:
+                # Emit tool_called event before execution
+                serializable_input = {
+                    k: v
+                    for k, v in tc["input"].items()
+                    if not callable(v) and not isinstance(v, asyncio.Event)
+                }
+                asyncio.create_task(asyncio.to_thread(
+                    db.log_chat_event,
+                    conversation_id,
+                    iteration,
+                    "tool_called",
+                    {
+                        "tool_name":    tc["name"],
+                        "tool_call_id": tc["id"],
+                        "input":        serializable_input,
+                    },
+                ))
+
+                _t0 = time.monotonic()
+                is_error = False
+
                 # Special-case report_findings to store discoveries in DB
                 if tc["name"] == "report_findings":
-                    output = await _handle_report_findings(tc["input"])
+                    output = await _handle_report_findings(
+                        tc["input"],
+                        total_tokens=total_usage["input_tokens"] + total_usage["output_tokens"],
+                    )
                 elif tc["name"] == "remember":
                     remember_count += 1
                     if remember_count > 5:
                         output = {"error": "Rate limit: max 5 memories per conversation turn."}
+                        is_error = True
                     else:
                         tc["input"]["_conversation_id"] = conversation_id
                         output = await execute_tool(tc["name"], tc["input"])
@@ -302,6 +367,7 @@ async def run_chat_agent(
                         output = await execute_tool(tc["name"], tc["input"])
                     except Exception as exc:
                         output = {"error": f"{type(exc).__name__}: {exc}"}
+                        is_error = True
                     finally:
                         # If cancelled, build partial results from batch state
                         if batch_state.cancelled:
@@ -336,6 +402,26 @@ async def run_chat_agent(
                         output = await execute_tool(tc["name"], tc["input"])
                     except Exception as exc:
                         output = {"error": f"{type(exc).__name__}: {exc}"}
+                        is_error = True
+
+                if isinstance(output, dict) and "error" in output:
+                    is_error = True
+
+                _duration_ms = int((time.monotonic() - _t0) * 1000)
+
+                # Emit tool_completed event after execution
+                asyncio.create_task(asyncio.to_thread(
+                    db.log_chat_event,
+                    conversation_id,
+                    iteration,
+                    "tool_completed",
+                    {
+                        "tool_name":    tc["name"],
+                        "tool_call_id": tc["id"],
+                        "duration_ms":  _duration_ms,
+                        "is_error":     is_error,
+                    },
+                ))
 
                 yield stream_writer.tool_output_available(tc["id"], output)
 
@@ -377,16 +463,32 @@ async def run_chat_agent(
             continue
 
         # No more tool calls — we're done
+        asyncio.create_task(asyncio.to_thread(
+            db.log_chat_event,
+            conversation_id,
+            iteration,
+            "agent_finished",
+            {
+                "total_input_tokens":  total_usage["input_tokens"],
+                "total_output_tokens": total_usage["output_tokens"],
+                "iterations":          iteration,
+            },
+        ))
         break
 
     yield stream_writer.finish_step()
     yield stream_writer.finish()
     yield stream_writer.done()
 
-    # Persist the assistant message
+    # Persist the assistant message with token summary
     db.save_message(
         conversation_id=conversation_id,
         role="assistant",
         content=full_text,
         parts=all_parts,
+        input_tokens=total_usage["input_tokens"] or None,
+        output_tokens=total_usage["output_tokens"] or None,
+        cache_read_tokens=total_usage["cache_read_tokens"] or None,
+        cache_write_tokens=total_usage["cache_write_tokens"] or None,
+        iterations=iteration,
     )

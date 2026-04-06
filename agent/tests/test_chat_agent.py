@@ -566,3 +566,138 @@ class TestChatAgentEventOrdering:
                 assert types[i + 1] == "start-step", (
                     f"Expected start-step after finish-step at index {i}"
                 )
+
+
+# ---------------------------------------------------------------------------
+# Session persistence: event logging + token accumulation
+# ---------------------------------------------------------------------------
+
+
+class TestChatAgentEventLogging:
+    """Verify that log_chat_event is called at the right points."""
+
+    def _make_usage(self, input_tokens=100, output_tokens=50,
+                    cache_read=20, cache_write=5):
+        usage = MagicMock()
+        usage.input_tokens = input_tokens
+        usage.output_tokens = output_tokens
+        usage.cache_read_input_tokens = cache_read
+        usage.cache_creation_input_tokens = cache_write
+        return usage
+
+    @patch("src.chat_agent.db")
+    @patch("src.chat_agent.anthropic.AsyncAnthropic")
+    async def test_agent_finished_event_emitted_on_clean_exit(self, MockClient, mock_db):
+        """agent_finished event is written when the loop exits with no tool calls."""
+        mock_db.save_message.return_value = {"id": "msg-1"}
+
+        usage = self._make_usage()
+        final_msg = _final_message(stop_reason="end_turn")
+        final_msg.usage = usage
+
+        mock_client = MagicMock()
+        mock_client.messages.stream.return_value = _mock_stream(
+            [_text_block_start(), _text_delta("Hello"), _block_stop()],
+            final_msg,
+        )
+        MockClient.return_value = mock_client
+
+        logged_events = []
+
+        async def fake_to_thread(fn, *args, **kwargs):
+            if fn is mock_db.log_chat_event:
+                logged_events.append(args)  # (conv_id, turn_num, event_type, data)
+            return fn(*args, **kwargs) if callable(fn) else None
+
+        import asyncio as _asyncio
+        with patch("src.chat_agent.asyncio.to_thread", side_effect=fake_to_thread):
+            await _run_chat()
+            await _asyncio.sleep(0)  # drain pending create_task coroutines
+
+        event_types = [e[2] for e in logged_events]
+        assert "turn_started" in event_types
+        assert "turn_completed" in event_types
+        assert "agent_finished" in event_types
+        assert "agent_failed" not in event_types
+
+    @patch("src.chat_agent.execute_tool", new_callable=AsyncMock)
+    @patch("src.chat_agent.db")
+    @patch("src.chat_agent.anthropic.AsyncAnthropic")
+    async def test_tool_events_emitted_for_tool_call(self, MockClient, mock_db, mock_exec_tool):
+        """tool_called and tool_completed events fire around each tool execution."""
+        mock_db.save_message.return_value = {"id": "msg-1"}
+        mock_exec_tool.return_value = {"status": "ok"}
+
+        usage = self._make_usage()
+
+        # Round 1: tool call
+        tool_final = _final_message(stop_reason="tool_use")
+        tool_final.usage = usage
+        tool_final.content = [MagicMock(type="tool_use", id="tc-1", name="remember",
+                                        input={})]
+
+        # Round 2: text reply
+        end_final = _final_message(stop_reason="end_turn")
+        end_final.usage = usage
+        end_final.content = []
+
+        mock_client = MagicMock()
+        mock_client.messages.stream.side_effect = [
+            _mock_stream(
+                [_tool_block_start("tc-1", "remember"),
+                 _tool_input_delta('{"key":"x","value":"y"}'),
+                 _block_stop()],
+                tool_final,
+            ),
+            _mock_stream(
+                [_text_block_start(), _text_delta("Done"), _block_stop()],
+                end_final,
+            ),
+        ]
+        MockClient.return_value = mock_client
+
+        logged_events = []
+
+        async def fake_to_thread(fn, *args, **kwargs):
+            if fn is mock_db.log_chat_event:
+                logged_events.append(args)
+            return None
+
+        import asyncio as _asyncio
+        with patch("src.chat_agent.asyncio.to_thread", side_effect=fake_to_thread):
+            await _run_chat()
+            await _asyncio.sleep(0)  # drain pending create_task coroutines
+
+        event_types = [e[2] for e in logged_events]
+        assert "tool_called" in event_types
+        assert "tool_completed" in event_types
+
+    @patch("src.chat_agent.db")
+    @patch("src.chat_agent.anthropic.AsyncAnthropic")
+    async def test_save_message_called_with_token_counts(self, MockClient, mock_db):
+        """save_message() receives accumulated token counts at end of turn."""
+        mock_db.save_message.return_value = {"id": "msg-1"}
+
+        usage = self._make_usage(input_tokens=300, output_tokens=80,
+                                 cache_read=100, cache_write=0)
+        final_msg = _final_message(stop_reason="end_turn")
+        final_msg.usage = usage
+
+        mock_client = MagicMock()
+        mock_client.messages.stream.return_value = _mock_stream(
+            [_text_block_start(), _text_delta("Hi"), _block_stop()],
+            final_msg,
+        )
+        MockClient.return_value = mock_client
+
+        async def fake_to_thread(fn, *args, **kwargs):
+            return None  # swallow event writes
+
+        with patch("src.chat_agent.asyncio.to_thread", side_effect=fake_to_thread):
+            await _run_chat()
+
+        call_kwargs = mock_db.save_message.call_args.kwargs
+        assert call_kwargs.get("input_tokens") == 300
+        assert call_kwargs.get("output_tokens") == 80
+        assert call_kwargs.get("cache_read_tokens") == 100
+        assert call_kwargs.get("iterations") == 1
