@@ -245,6 +245,7 @@ class AgentRuntime:
         client = self._client
 
         current_tool_input = ""
+        current_text_open = False
 
         async with client.messages.stream(
             model=self.model,
@@ -259,8 +260,10 @@ class AgentRuntime:
 
                 if event.type == "content_block_start":
                     if event.content_block.type == "text":
+                        current_text_open = True
                         on_event({"type": "text_start"})
                     elif event.content_block.type == "tool_use":
+                        current_text_open = False
                         current_tool_input = ""
                         on_event(
                             {
@@ -277,6 +280,9 @@ class AgentRuntime:
                         current_tool_input += event.delta.partial_json
 
                 elif event.type == "content_block_stop":
+                    if current_text_open:
+                        on_event({"type": "text_end"})
+                        current_text_open = False
                     if current_tool_input:
                         try:
                             parsed = json.loads(current_tool_input)
