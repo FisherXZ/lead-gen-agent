@@ -8,27 +8,31 @@ interface StatBarProps {
 
 export function StatBar({ stats }: StatBarProps) {
   return (
-    <div className="flex items-center gap-3 text-sm font-sans text-[--text-secondary]">
-      <span>
-        <strong className="text-[--text-primary] font-medium">
+    <div className="flex items-baseline gap-6 pb-6 border-b border-[--border-subtle]">
+      <div>
+        <span className="text-2xl font-serif text-[--text-primary]">
           {stats.new_leads_this_week}
-        </strong>{" "}
-        new leads this week
-      </span>
-      <span className="text-[--border-default]">·</span>
-      <span>
-        <strong className="text-[--accent-amber] font-medium">
+        </span>
+        <span className="ml-2 text-sm text-[--text-secondary]">
+          new leads this week
+        </span>
+      </div>
+      <div>
+        <span className="text-2xl font-serif text-[--accent-amber]">
           {stats.awaiting_review}
-        </strong>{" "}
-        awaiting review
-      </span>
-      <span className="text-[--border-default]">·</span>
-      <span>
-        <strong className="text-[--text-primary] font-medium">
+        </span>
+        <span className="ml-2 text-sm text-[--text-secondary]">
+          awaiting review
+        </span>
+      </div>
+      <div>
+        <span className="text-2xl font-serif text-[--text-primary]">
           {stats.total_epcs_discovered}
-        </strong>{" "}
-        EPCs discovered
-      </span>
+        </span>
+        <span className="ml-2 text-sm text-[--text-secondary]">
+          EPCs discovered
+        </span>
+      </div>
     </div>
   );
 }
