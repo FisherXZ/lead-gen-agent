@@ -111,6 +111,7 @@ class Compactor:
         self.preserve_recent = preserve_recent
         self.summary_model = summary_model
         self._api_key = api_key
+        self._client: anthropic.AsyncAnthropic | None = None
 
     async def maybe_compact(self, messages: list[dict]) -> list[dict]:
         """If context exceeds threshold, summarize older messages.
@@ -146,8 +147,10 @@ class Compactor:
             user_content = formatted
 
         try:
-            api_key = self._api_key or os.environ.get("ANTHROPIC_API_KEY", "")
-            client = anthropic.AsyncAnthropic(api_key=api_key)
+            if self._client is None:
+                api_key = self._api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+                self._client = anthropic.AsyncAnthropic(api_key=api_key)
+            client = self._client
             response = await client.messages.create(
                 model=self.summary_model,
                 max_tokens=1024,

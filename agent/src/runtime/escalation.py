@@ -17,12 +17,7 @@ from .types import Action
 _logger = logging.getLogger(__name__)
 
 # Patterns that suggest new, relevant information was found
-_SIGNAL_PATTERNS = [
-    re.compile(r"(?i)\b(epc|contractor|construction|engineering|procurement)\b"),
-    re.compile(r"(?i)\b(solar|photovoltaic|pv|renewable|energy)\b"),
-    re.compile(r"(?i)\b(mw|megawatt|capacity|project)\b"),
-    re.compile(r"(?i)\b(contract|award|agreement|engage|hire|select)\b"),
-]
+_MAX_SEEN_SIGNALS = 500
 
 
 def _extract_signals(text: str) -> set[str]:
@@ -155,6 +150,12 @@ class EscalationPolicy:
             if new_signals:
                 new_signal_count += 1
                 self._seen_signals.update(new_signals)
+                # Cap to prevent unbounded growth
+                if len(self._seen_signals) > _MAX_SEEN_SIGNALS:
+                    # Keep only the most recent half
+                    excess = len(self._seen_signals) - _MAX_SEEN_SIGNALS // 2
+                    for _ in range(excess):
+                        self._seen_signals.pop()
 
         # Stagnating if fewer than 25% of recent results had new signals
         return new_signal_count / len(recent_results) < 0.25

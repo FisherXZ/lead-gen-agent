@@ -48,6 +48,7 @@ class AgentRuntime:
         self.conversation_id = conversation_id
         self.session_id = session_id
         self.user_id = user_id
+        self._client: anthropic.AsyncAnthropic | None = None
 
     async def run_turn(
         self,
@@ -187,7 +188,9 @@ class AgentRuntime:
 
     async def _call_api(self, messages: list[dict]):
         """Call the Anthropic API. Separated for testability."""
-        client = anthropic.AsyncAnthropic(api_key=self._api_key)
+        if self._client is None:
+            self._client = anthropic.AsyncAnthropic(api_key=self._api_key)
+        client = self._client
 
         # Apply prompt caching
         cached_system = [{
