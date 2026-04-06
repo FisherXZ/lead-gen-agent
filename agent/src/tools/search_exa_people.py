@@ -21,6 +21,7 @@ EXA_API_URL = "https://api.exa.ai/search"
 # In-memory cache: (query, max_results) -> (timestamp, results)
 _cache: dict[tuple[str, int], tuple[float, list[dict]]] = {}
 _CACHE_TTL = 14400  # 4 hours
+_MAX_CACHE_SIZE = 200
 
 DEFINITION = {
     "name": "search_exa_people",
@@ -61,7 +62,13 @@ class Input(BaseModel):
 async def execute(tool_input: dict) -> dict:
     """Run an Exa people search with in-memory caching."""
     inp = Input(**tool_input)
-    query = inp.query
+    query = inp.query.strip()
+    if not query:
+        return {
+            "status": "error",
+            "error": "Query must not be blank",
+            "error_category": "validation_error",
+        }
     max_results = inp.max_results
 
     api_key = os.environ.get("EXA_API_KEY")
@@ -114,7 +121,7 @@ async def execute(tool_input: dict) -> dict:
             "error_category": "search_tool_error",
             "source": "exa",
         }
-    except Exception as exc:
+    except (httpx.RequestError, ValueError) as exc:
         return {
             "status": "error",
             "error": f"Exa search failed: {exc}",
@@ -133,6 +140,12 @@ async def execute(tool_input: dict) -> dict:
     ]
 
     _cache[cache_key] = (now, results)
+
+    if len(_cache) > _MAX_CACHE_SIZE:
+        # Evict oldest half by timestamp
+        sorted_keys = sorted(_cache, key=lambda k: _cache[k][0])
+        for k in sorted_keys[: len(sorted_keys) // 2]:
+            del _cache[k]
 
     return {
         "status": "success",

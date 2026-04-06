@@ -252,3 +252,56 @@ def test_tool_registered():
     from src.tools import get_tool_names
 
     assert "search_exa_people" in get_tool_names()
+
+
+# ---------------------------------------------------------------------------
+# Blank query rejection
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_blank_query_returns_validation_error():
+    """Whitespace-only query is rejected with validation_error category."""
+    from src.tools.search_exa_people import execute
+
+    result = await execute({"query": "   "})
+
+    assert result["status"] == "error"
+    assert result["error_category"] == "validation_error"
+    assert "blank" in result["error"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Cache size bounded to _MAX_CACHE_SIZE
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+@patch.dict(os.environ, {"EXA_API_KEY": "test-exa-key"})
+async def test_cache_does_not_exceed_max_size():
+    """Cache evicts oldest entries when it exceeds _MAX_CACHE_SIZE."""
+    from src.tools.search_exa_people import execute, _cache, _MAX_CACHE_SIZE
+
+    _cache.clear()
+
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock()
+    mock_response.json.return_value = {"results": []}
+
+    mock_client = AsyncMock()
+    mock_client.post.return_value = mock_response
+
+    # Use a counter to give each call a unique, increasing monotonic time
+    call_counter = [0]
+
+    def monotonic_side_effect():
+        call_counter[0] += 1
+        return float(call_counter[0])
+
+    with patch("src.tools.search_exa_people.httpx.AsyncClient") as mock_cls, \
+         patch("src.tools.search_exa_people.time.monotonic", side_effect=monotonic_side_effect):
+        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        for i in range(_MAX_CACHE_SIZE + 50):
+            await execute({"query": f"unique query number {i}"})
+
+    assert len(_cache) <= _MAX_CACHE_SIZE

@@ -224,9 +224,6 @@ class TestContactSaveHookPostTool:
         from src.hooks.contact_save import ContactSaveHook
         hook = ContactSaveHook()
         result = {"status": "error", "message": "something broke"}
-        with patch("src.hooks.contact_save.ContactSaveHook.post_tool") as _:
-            # Just confirm no DB call happens — call directly
-            pass
         returned = await hook.post_tool("save_contact", {"entity_id": "x"}, result, {})
         assert returned is result
 

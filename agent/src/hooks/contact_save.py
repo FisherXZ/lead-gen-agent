@@ -5,6 +5,10 @@ Will be wired into the AgentRuntime hook system once the runtime revamp lands.
 
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class ContactSaveHook:
     """Post-tool hook for save_contact."""
@@ -30,6 +34,6 @@ class ContactSaveHook:
                     "contact_discovery_status": "in_progress"
                 }).eq("id", entity_id).execute()
             except Exception:
-                pass  # Non-fatal — don't break save_contact because of status update
+                logger.warning("Failed to update entity contact_discovery_status", exc_info=True)
 
         return result
