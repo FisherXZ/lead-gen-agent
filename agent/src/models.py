@@ -55,7 +55,9 @@ class NegativeEvidence(BaseModel):
 
 
 class ResearchError(BaseModel):
-    category: str  # "api_key_missing", "anthropic_error", "search_tool_error", "max_iterations", "no_report", "db_error", "unknown"
+    # "api_key_missing" | "anthropic_error" | "search_tool_error"
+    # | "max_iterations" | "no_report" | "db_error" | "unknown"
+    category: str
     message: str  # human-readable description
     detail: str | None = None
 
@@ -130,37 +132,46 @@ class ChatMessage(BaseModel):
                     continue
 
                 if media_type in _IMAGE_TYPES:
-                    blocks.append({
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": media_type,
-                            "data": b64_data,
-                        },
-                    })
+                    blocks.append(
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": media_type,
+                                "data": b64_data,
+                            },
+                        }
+                    )
                 elif media_type in _DOCUMENT_TYPES:
-                    blocks.append({
-                        "type": "document",
-                        "source": {
-                            "type": "base64",
-                            "media_type": media_type,
-                            "data": b64_data,
-                        },
-                    })
+                    blocks.append(
+                        {
+                            "type": "document",
+                            "source": {
+                                "type": "base64",
+                                "media_type": media_type,
+                                "data": b64_data,
+                            },
+                        }
+                    )
                 elif media_type in _TEXT_FILE_TYPES:
                     import base64
+
                     try:
                         text_content = base64.b64decode(b64_data).decode("utf-8")
                         label = p.filename or "file"
-                        blocks.append({
-                            "type": "text",
-                            "text": f"[File: {label}]\n{text_content}",
-                        })
+                        blocks.append(
+                            {
+                                "type": "text",
+                                "text": f"[File: {label}]\n{text_content}",
+                            }
+                        )
                     except Exception:
-                        blocks.append({
-                            "type": "text",
-                            "text": f"[Could not decode file: {p.filename}]",
-                        })
+                        blocks.append(
+                            {
+                                "type": "text",
+                                "text": f"[Could not decode file: {p.filename}]",
+                            }
+                        )
 
         return blocks if blocks else ""
 

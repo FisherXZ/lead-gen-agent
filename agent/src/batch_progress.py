@@ -13,7 +13,7 @@ import time
 from dataclasses import dataclass, field
 
 # Active batches: batch_id -> BatchState
-_batches: dict[str, "BatchState"] = {}
+_batches: dict[str, BatchState] = {}
 
 # Conversation -> active batch_id mapping (for cancel-by-conversation)
 _conversation_batches: dict[str, str] = {}
@@ -49,7 +49,9 @@ class BatchState:
 
     @property
     def completed(self) -> int:
-        return sum(1 for p in self.projects if p.status in ("completed", "skipped", "error", "cancelled"))
+        return sum(
+            1 for p in self.projects if p.status in ("completed", "skipped", "error", "cancelled")
+        )
 
     @property
     def errors(self) -> int:
@@ -66,13 +68,15 @@ class BatchState:
         try:
             await asyncio.wait_for(event.wait(), timeout=timeout)
             return True
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return False
         finally:
             self._waiters.remove(event)
 
 
-def create_batch(batch_id: str, projects: list[dict], conversation_id: str | None = None) -> BatchState:
+def create_batch(
+    batch_id: str, projects: list[dict], conversation_id: str | None = None
+) -> BatchState:
     """Register a new batch with its project list."""
     _cleanup_old()
     state = BatchState(
@@ -168,8 +172,7 @@ def _cleanup_old() -> None:
     """Remove batches that completed more than _CLEANUP_AFTER seconds ago."""
     now = time.time()
     to_remove = [
-        bid for bid, s in _batches.items()
-        if s.done and (now - s.created_at) > _CLEANUP_AFTER
+        bid for bid, s in _batches.items() if s.done and (now - s.created_at) > _CLEANUP_AFTER
     ]
     for bid in to_remove:
         del _batches[bid]

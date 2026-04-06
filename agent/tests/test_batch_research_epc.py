@@ -2,20 +2,15 @@
 
 from __future__ import annotations
 
-import asyncio
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 
-import pytest
-
-from src.tools.batch_research_epc import DEFINITION, execute
 from src.chat_agent import _format_batch_progress
-
-from tests.conftest import make_agent_result
-
+from src.tools.batch_research_epc import DEFINITION, execute
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _fake_project(pid: str, name: str = "Solar Test") -> dict:
     return {
@@ -42,6 +37,7 @@ def _fake_discovery(pid: str) -> dict:
 # DEFINITION
 # ---------------------------------------------------------------------------
 
+
 class TestDefinition:
     def test_has_correct_name(self):
         assert DEFINITION["name"] == "batch_research_epc"
@@ -58,6 +54,7 @@ class TestDefinition:
 # ---------------------------------------------------------------------------
 # execute()
 # ---------------------------------------------------------------------------
+
 
 class TestExecute:
     @patch("src.batch.run_batch", new_callable=AsyncMock)
@@ -131,15 +128,19 @@ class TestExecute:
 
         async def fake_run_batch(projects, on_progress, concurrency=5):
             await on_progress({"project_id": "p1", "status": "started", "project_name": "Solar"})
-            await on_progress({"project_id": "p1", "status": "completed", "discovery": _fake_discovery("p1")})
+            await on_progress(
+                {"project_id": "p1", "status": "completed", "discovery": _fake_discovery("p1")}
+            )
             return [{"project_id": "p1", "status": "completed", "discovery": _fake_discovery("p1")}]
 
         mock_run_batch.side_effect = fake_run_batch
 
-        result = await execute({
-            "project_ids": ["p1"],
-            "_progress_callback": capture_progress,
-        })
+        await execute(
+            {
+                "project_ids": ["p1"],
+                "_progress_callback": capture_progress,
+            }
+        )
 
         assert len(progress_events) == 2
         assert progress_events[0]["status"] == "started"
@@ -180,17 +181,20 @@ class TestExecute:
 # _format_batch_progress
 # ---------------------------------------------------------------------------
 
+
 class TestFormatBatchProgress:
     def test_started(self):
         line = _format_batch_progress({"status": "started", "project_name": "Solar A"})
         assert "Researching Solar A" in line
 
     def test_completed(self):
-        line = _format_batch_progress({
-            "status": "completed",
-            "project_name": "Solar B",
-            "discovery": {"epc_contractor": "McCarthy", "confidence": "likely"},
-        })
+        line = _format_batch_progress(
+            {
+                "status": "completed",
+                "project_name": "Solar B",
+                "discovery": {"epc_contractor": "McCarthy", "confidence": "likely"},
+            }
+        )
         assert "Solar B" in line
         assert "McCarthy" in line
         assert "likely" in line

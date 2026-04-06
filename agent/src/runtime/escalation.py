@@ -106,26 +106,36 @@ class EscalationPolicy:
             if self.escalation_mode == "user":
                 return Action.escalate_to_user(
                     tried=tried,
-                    suggestion=f"{consecutive_errors} consecutive tool errors. Want me to continue or try a different approach?",
+                    suggestion=(
+                        f"{consecutive_errors} consecutive tool errors. "
+                        "Want me to continue or try a different approach?"
+                    ),
                 )
             else:
                 return Action.inject_guidance(
-                    f"{consecutive_errors} consecutive tool errors. Switch to a different tool or approach."
+                    f"{consecutive_errors} consecutive tool errors. "
+                    "Switch to a different tool or approach."
                 )
 
         # 3. Stagnation detection (only after minimum iterations)
         if iteration >= self.min_iterations_before_stagnation:
             recent_results = _get_recent_tool_results(messages, self.stagnation_window)
-            if len(recent_results) >= self.stagnation_window and self._is_stagnating(recent_results):
+            if len(recent_results) >= self.stagnation_window and self._is_stagnating(
+                recent_results
+            ):
                 tried = _summarize_tool_usage(tool_history)
                 if self.escalation_mode == "user":
                     return Action.escalate_to_user(
                         tried=tried,
-                        suggestion="Recent searches aren't producing new leads. Should I try a different angle?",
+                        suggestion=(
+                            "Recent searches aren't producing new leads. "
+                            "Should I try a different angle?"
+                        ),
                     )
                 else:
                     return Action.inject_guidance(
-                        "Recent searches returning diminishing results. Switch to an untried source category."
+                        "Recent searches returning diminishing results. "
+                        "Switch to an untried source category."
                     )
 
         # 4. All good

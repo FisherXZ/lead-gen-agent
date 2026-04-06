@@ -1,6 +1,6 @@
 """Tests for CSV skill — parse, summarize, export."""
 
-from src.skills.csv.processor import parse_csv, export_csv, summarize_csv
+from src.skills.csv.processor import export_csv, parse_csv, summarize_csv
 
 
 class TestParseCsv:
@@ -78,25 +78,31 @@ class TestExportCsv:
 class TestExportCsvTool:
     async def test_tool_registered(self):
         from src.tools import get_tool_names
+
         assert "export_csv" in get_tool_names()
 
     async def test_execute_basic(self):
         from src.tools.export_csv import execute
-        result = await execute({
-            "headers": ["project", "epc"],
-            "rows": [["Alpha Solar", "McCarthy"]],
-            "filename": "discoveries.csv",
-        })
+
+        result = await execute(
+            {
+                "headers": ["project", "epc"],
+                "rows": [["Alpha Solar", "McCarthy"]],
+                "filename": "discoveries.csv",
+            }
+        )
         assert result["content_type"] == "csv"
         assert result["row_count"] == 1
         assert "Alpha Solar" in result["csv_text"]
 
     async def test_execute_no_headers(self):
         from src.tools.export_csv import execute
+
         result = await execute({"headers": [], "rows": [["a"]]})
         assert "error" in result
 
     async def test_execute_no_rows(self):
         from src.tools.export_csv import execute
+
         result = await execute({"headers": ["a"], "rows": []})
         assert "error" in result

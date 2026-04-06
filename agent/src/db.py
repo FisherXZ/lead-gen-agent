@@ -7,11 +7,10 @@ import logging
 import os
 import re
 
-logger = logging.getLogger(__name__)
-
 import anthropic
-from supabase import create_client, Client
+from supabase import Client, create_client
 
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Anthropic API key helpers
@@ -71,22 +70,14 @@ def insert_discovery(data: dict) -> dict:
 
 def update_discovery(discovery_id: str, data: dict) -> dict:
     client = get_client()
-    resp = (
-        client.table("epc_discoveries")
-        .update(data)
-        .eq("id", discovery_id)
-        .execute()
-    )
+    resp = client.table("epc_discoveries").update(data).eq("id", discovery_id).execute()
     return resp.data[0]
 
 
 def update_project_epc(project_id: str, epc_company: str) -> dict:
     client = get_client()
     resp = (
-        client.table("projects")
-        .update({"epc_company": epc_company})
-        .eq("id", project_id)
-        .execute()
+        client.table("projects").update({"epc_company": epc_company}).eq("id", project_id).execute()
     )
     return resp.data[0]
 
@@ -117,7 +108,9 @@ def store_discovery(
         "epc_contractor": result.epc_contractor or "Unknown",
         "confidence": result.confidence,
         "sources": [s.model_dump() for s in result.sources],
-        "reasoning": json.dumps(result.reasoning) if isinstance(result.reasoning, dict) else result.reasoning,
+        "reasoning": json.dumps(result.reasoning)
+        if isinstance(result.reasoning, dict)
+        else result.reasoning,
         "related_leads": result.related_leads,
         "searches_performed": result.searches_performed,
         "review_status": "pending",
@@ -131,9 +124,11 @@ def store_discovery(
     if project:
         try:
             from .knowledge_base import process_discovery_into_kb
+
             process_discovery_into_kb(project_id, result, project)
         except Exception:
             import logging
+
             logging.getLogger(__name__).error(
                 "KB write-back failed for project %s", project_id, exc_info=True
             )
@@ -143,13 +138,7 @@ def store_discovery(
 
 def list_discoveries() -> list[dict]:
     client = get_client()
-    return (
-        client.table("epc_discoveries")
-        .select("*")
-        .order("created_at", desc=True)
-        .execute()
-        .data
-    )
+    return client.table("epc_discoveries").select("*").order("created_at", desc=True).execute().data
 
 
 def list_pending_discoveries() -> list[dict]:
@@ -172,6 +161,7 @@ def list_pending_discoveries() -> list[dict]:
 # ---------------------------------------------------------------------------
 # Project search
 # ---------------------------------------------------------------------------
+
 
 def search_projects(
     *,
@@ -224,9 +214,7 @@ def search_projects(
         query = query.gte("lead_score", min_lead_score)
     if search:
         query = query.or_(
-            f"project_name.ilike.%{search}%,"
-            f"developer.ilike.%{search}%,"
-            f"queue_id.ilike.%{search}%"
+            f"project_name.ilike.%{search}%,developer.ilike.%{search}%,queue_id.ilike.%{search}%"
         )
 
     order_col = "lead_score" if sort_by == "lead_score" else "mw_capacity"
@@ -267,7 +255,8 @@ def search_projects_with_epc(
             client.table("epc_discoveries")
             .select(
                 "id, epc_contractor, confidence, review_status, source_count, created_at, "
-                "project:project_id(id, project_name, developer, mw_capacity, state, expected_cod, fuel_type, epc_company, lead_score)"
+                "project:project_id(id, project_name, developer, mw_capacity, "
+                "state, expected_cod, fuel_type, epc_company, lead_score)"
             )
             .ilike("epc_contractor", f"%{epc_name}%")
             .neq("review_status", "rejected")
@@ -285,13 +274,18 @@ def search_projects_with_epc(
     else:
         # ---- Mode 1: Project-first ----
         query = client.table("projects").select(
-            "id, project_name, developer, mw_capacity, state, expected_cod, fuel_type, epc_company, lead_score, "
-            "latest_discovery:epc_discoveries(id, epc_contractor, confidence, review_status, source_count, created_at)"
+            "id, project_name, developer, mw_capacity, state, "
+            "expected_cod, fuel_type, epc_company, lead_score, "
+            "latest_discovery:epc_discoveries("
+            "id, epc_contractor, confidence, review_status, "
+            "source_count, created_at)"
         )
         if state:
             query = query.eq("state", state.upper())
         if cod_year is not None:
-            query = query.gte("expected_cod", f"{cod_year}-01-01").lte("expected_cod", f"{cod_year}-12-31")
+            query = query.gte("expected_cod", f"{cod_year}-01-01").lte(
+                "expected_cod", f"{cod_year}-12-31"
+            )
         if developer:
             query = query.ilike("developer", f"%{developer}%")
         if mw_min is not None:
@@ -308,7 +302,9 @@ def search_projects_with_epc(
     if state and epc_name:
         rows = [r for r in rows if r.get("state", "").upper() == state.upper()]
     if developer and epc_name:
-        rows = [r for r in rows if r.get("developer") and developer.lower() in r["developer"].lower()]
+        rows = [
+            r for r in rows if r.get("developer") and developer.lower() in r["developer"].lower()
+        ]
     if mw_min is not None and epc_name:
         rows = [r for r in rows if r.get("mw_capacity") is not None and r["mw_capacity"] >= mw_min]
     if cod_year is not None and epc_name:
@@ -318,7 +314,8 @@ def search_projects_with_epc(
     if confidence_min:
         min_rank = CONFIDENCE_RANK.get(confidence_min, 3)
         rows = [
-            r for r in rows
+            r
+            for r in rows
             if r.get("confidence") is None  # keep unresearched projects
             or CONFIDENCE_RANK.get(r["confidence"], 3) <= min_rank
         ]
@@ -339,19 +336,21 @@ def _normalize_project_first(data: list[dict]) -> list[dict]:
         if disc_list:
             disc_list.sort(key=lambda d: d.get("created_at", ""), reverse=True)
         disc = disc_list[0] if disc_list else {}
-        results.append({
-            "project_id": row["id"],
-            "project_name": row.get("project_name"),
-            "developer": row.get("developer"),
-            "mw_capacity": row.get("mw_capacity"),
-            "state": row.get("state"),
-            "expected_cod": row.get("expected_cod"),
-            "epc_contractor": disc.get("epc_contractor"),
-            "confidence": disc.get("confidence"),
-            "review_status": disc.get("review_status"),
-            "source_count": disc.get("source_count"),
-            "discovery_date": disc.get("created_at"),
-        })
+        results.append(
+            {
+                "project_id": row["id"],
+                "project_name": row.get("project_name"),
+                "developer": row.get("developer"),
+                "mw_capacity": row.get("mw_capacity"),
+                "state": row.get("state"),
+                "expected_cod": row.get("expected_cod"),
+                "epc_contractor": disc.get("epc_contractor"),
+                "confidence": disc.get("confidence"),
+                "review_status": disc.get("review_status"),
+                "source_count": disc.get("source_count"),
+                "discovery_date": disc.get("created_at"),
+            }
+        )
     return results
 
 
@@ -360,20 +359,22 @@ def _normalize_epc_first(data: list[dict]) -> list[dict]:
     results = []
     for row in data:
         proj = row.get("project") or {}
-        results.append({
-            "project_id": proj.get("id"),
-            "project_name": proj.get("project_name"),
-            "developer": proj.get("developer"),
-            "mw_capacity": proj.get("mw_capacity"),
-            "state": proj.get("state"),
-            "expected_cod": proj.get("expected_cod"),
-            "lead_score": proj.get("lead_score"),
-            "epc_contractor": row.get("epc_contractor"),
-            "confidence": row.get("confidence"),
-            "review_status": row.get("review_status"),
-            "source_count": row.get("source_count"),
-            "discovery_date": row.get("created_at"),
-        })
+        results.append(
+            {
+                "project_id": proj.get("id"),
+                "project_name": proj.get("project_name"),
+                "developer": proj.get("developer"),
+                "mw_capacity": proj.get("mw_capacity"),
+                "state": proj.get("state"),
+                "expected_cod": proj.get("expected_cod"),
+                "lead_score": proj.get("lead_score"),
+                "epc_contractor": row.get("epc_contractor"),
+                "confidence": row.get("confidence"),
+                "review_status": row.get("review_status"),
+                "source_count": row.get("source_count"),
+                "discovery_date": row.get("created_at"),
+            }
+        )
     return results
 
 
@@ -414,9 +415,9 @@ def store_contacts(entity_id: str, contacts: list[dict]) -> list[dict]:
             "outreach_context": c.get("outreach_context"),
         }
         try:
-            resp = client.table("contacts").upsert(
-                data, on_conflict="entity_id,full_name"
-            ).execute()
+            resp = (
+                client.table("contacts").upsert(data, on_conflict="entity_id,full_name").execute()
+            )
             if resp.data:
                 stored.append(resp.data[0])
         except Exception as exc:
@@ -465,13 +466,7 @@ def get_contacts_for_project(project_id: str) -> list[dict]:
         return []
 
     # Find entity
-    entity_resp = (
-        client.table("entities")
-        .select("id")
-        .ilike("name", epc_name)
-        .limit(1)
-        .execute()
-    )
+    entity_resp = client.table("entities").select("id").ilike("name", epc_name).limit(1).execute()
     if not entity_resp.data:
         return []
 
@@ -481,6 +476,7 @@ def get_contacts_for_project(project_id: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Agent memory
 # ---------------------------------------------------------------------------
+
 
 def save_memory(
     memory: str,
@@ -507,11 +503,7 @@ def save_memory(
 
     if memory_key:
         # Atomic upsert — no race condition between select + update
-        resp = (
-            client.table("agent_memory")
-            .upsert(data, on_conflict="memory_key,scope")
-            .execute()
-        )
+        resp = client.table("agent_memory").upsert(data, on_conflict="memory_key,scope").execute()
     else:
         resp = client.table("agent_memory").insert(data).execute()
 
@@ -528,7 +520,9 @@ def search_memories(
     Ordered by importance DESC, then created_at DESC.
     """
     client = get_client()
-    query = client.table("agent_memory").select("id, memory, scope, memory_key, importance, project_id, created_at")
+    query = client.table("agent_memory").select(
+        "id, memory, scope, memory_key, importance, project_id, created_at"
+    )
 
     if keyword:
         query = query.ilike("memory", f"%{keyword}%")
@@ -559,11 +553,7 @@ def upsert_scratch(session_id: str, key: str, value: dict) -> dict:
         "value": value,
         "updated_at": "now()",
     }
-    resp = (
-        client.table("research_scratch")
-        .upsert(data, on_conflict="session_id,key")
-        .execute()
-    )
+    resp = client.table("research_scratch").upsert(data, on_conflict="session_id,key").execute()
     return resp.data[0] if resp.data else {}
 
 
@@ -586,6 +576,7 @@ def read_scratch(session_id: str, key: str | None = None) -> list[dict]:
 # Chat conversations
 # ---------------------------------------------------------------------------
 
+
 def create_conversation(title: str | None = None, user_id: str | None = None) -> dict:
     client = get_client()
     data = {}
@@ -607,9 +598,17 @@ def save_message(
     client = get_client()
     # Validate ownership if user_id is provided
     if user_id:
-        conv = client.table("chat_conversations").select("user_id").eq("id", conversation_id).maybe_single().execute()
+        conv = (
+            client.table("chat_conversations")
+            .select("user_id")
+            .eq("id", conversation_id)
+            .maybe_single()
+            .execute()
+        )
         if not conv.data or conv.data.get("user_id") != user_id:
-            raise PermissionError(f"Conversation {conversation_id} does not belong to user {user_id}")
+            raise PermissionError(
+                f"Conversation {conversation_id} does not belong to user {user_id}"
+            )
     data = {
         "conversation_id": conversation_id,
         "role": role,
@@ -623,7 +622,13 @@ def save_message(
 def get_conversation_messages(conversation_id: str, user_id: str | None = None) -> list[dict]:
     client = get_client()
     if user_id:
-        conv = client.table("chat_conversations").select("user_id").eq("id", conversation_id).maybe_single().execute()
+        conv = (
+            client.table("chat_conversations")
+            .select("user_id")
+            .eq("id", conversation_id)
+            .maybe_single()
+            .execute()
+        )
         if not conv.data or conv.data.get("user_id") != user_id:
             return []
     return (
@@ -641,10 +646,4 @@ def list_conversations(limit: int = 20, user_id: str | None = None) -> list[dict
     query = client.table("chat_conversations").select("*")
     if user_id:
         query = query.eq("user_id", user_id)
-    return (
-        query
-        .order("updated_at", desc=True)
-        .limit(limit)
-        .execute()
-        .data
-    )
+    return query.order("updated_at", desc=True).limit(limit).execute().data

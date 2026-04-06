@@ -54,15 +54,24 @@ DEFINITION = {
         "properties": {
             "employer_name": {
                 "type": "string",
-                "description": "Company name to search for (e.g., 'SOLV Energy', 'Blattner Energy', 'McCarthy Building').",
+                "description": (
+                    "Company name to search for (e.g., 'SOLV Energy', "
+                    "'Blattner Energy', 'McCarthy Building')."
+                ),
             },
             "state": {
                 "type": "string",
-                "description": "Optional: two-letter state abbreviation to filter results (e.g., 'TX', 'CA').",
+                "description": (
+                    "Optional: two-letter state abbreviation to filter results (e.g., 'TX', 'CA')."
+                ),
             },
             "naics": {
                 "type": "string",
-                "description": "Optional: NAICS code to filter by industry. '237130' = power line construction, '238210' = electrical contractors.",
+                "description": (
+                    "Optional: NAICS code to filter by industry. "
+                    "'237130' = power line construction, "
+                    "'238210' = electrical contractors."
+                ),
             },
             "max_results": {
                 "type": "integer",
@@ -108,7 +117,9 @@ async def execute(tool_input: dict) -> dict:
     try:
         html = await _search_with_retry(form_data)
     except httpx.TimeoutException:
-        return {"error": f"OSHA search timed out after {_TIMEOUT}s. Gov sites can be slow — try again."}
+        return {
+            "error": f"OSHA search timed out after {_TIMEOUT}s. Gov sites can be slow — try again."
+        }
     except httpx.HTTPStatusError as e:
         return {"error": f"OSHA returned HTTP {e.response.status_code}."}
     except Exception as exc:
@@ -118,7 +129,9 @@ async def execute(tool_input: dict) -> dict:
 
     # Validate parsed results — detect if HTML structure changed
     if results is None:
-        return {"error": "OSHA HTML structure may have changed — could not parse results. Check logs."}
+        return {
+            "error": "OSHA HTML structure may have changed — could not parse results. Check logs."
+        }
 
     cache_set("search_osha", cache_params, results, ttl_hours=_CACHE_TTL_HOURS)
 
@@ -146,15 +159,15 @@ def _parse_osha_html(html: str, max_results: int) -> list[dict] | None:
     # Extract table rows using regex — more robust than full HTML parsing
     # for a gov site that doesn't change often
     row_pattern = re.compile(
-        r'<tr[^>]*>\s*'
+        r"<tr[^>]*>\s*"
         r'<td[^>]*><a[^>]*href="([^"]*)"[^>]*>([^<]+)</a></td>\s*'  # Est Name (link + text)
-        r'<td[^>]*>(\d+)</td>\s*'  # Inspection Number
-        r'<td[^>]*>([^<]*)</td>\s*'  # SIC
-        r'<td[^>]*>([^<]*)</td>\s*'  # NAICS
-        r'<td[^>]*>([^<]*)</td>\s*'  # City
-        r'<td[^>]*>([^<]*)</td>\s*'  # State
-        r'<td[^>]*>([^<]*)</td>\s*'  # Zip
-        r'<td[^>]*>([^<]*)</td>',    # Open Date
+        r"<td[^>]*>(\d+)</td>\s*"  # Inspection Number
+        r"<td[^>]*>([^<]*)</td>\s*"  # SIC
+        r"<td[^>]*>([^<]*)</td>\s*"  # NAICS
+        r"<td[^>]*>([^<]*)</td>\s*"  # City
+        r"<td[^>]*>([^<]*)</td>\s*"  # State
+        r"<td[^>]*>([^<]*)</td>\s*"  # Zip
+        r"<td[^>]*>([^<]*)</td>",  # Open Date
         re.IGNORECASE | re.DOTALL,
     )
 
@@ -165,19 +178,23 @@ def _parse_osha_html(html: str, max_results: int) -> list[dict] | None:
         address_parts = [p.strip() for p in [city, state, zipcode] if p.strip()]
         address = ", ".join(address_parts) if address_parts else ""
 
-        results.append({
-            "employer_name": name.strip(),
-            "inspection_number": insp_nr.strip(),
-            "sic_code": sic.strip(),
-            "naics_code": naics_code.strip(),
-            "address": address,
-            "city": city.strip(),
-            "state": state.strip(),
-            "zip": zipcode.strip(),
-            "inspection_date": open_date.strip(),
-            "detail_url": f"https://www.osha.gov{detail_url}" if detail_url.startswith("/") else detail_url,
-            "source_type": "osha_inspection",
-        })
+        results.append(
+            {
+                "employer_name": name.strip(),
+                "inspection_number": insp_nr.strip(),
+                "sic_code": sic.strip(),
+                "naics_code": naics_code.strip(),
+                "address": address,
+                "city": city.strip(),
+                "state": state.strip(),
+                "zip": zipcode.strip(),
+                "inspection_date": open_date.strip(),
+                "detail_url": f"https://www.osha.gov{detail_url}"
+                if detail_url.startswith("/")
+                else detail_url,
+                "source_type": "osha_inspection",
+            }
+        )
 
         if len(results) >= max_results:
             break
@@ -186,23 +203,27 @@ def _parse_osha_html(html: str, max_results: int) -> list[dict] | None:
     if not results and ("establishment" in html.lower() and "<table" in html.lower()):
         # Try to extract at least employer names from links
         simple_pattern = re.compile(
-            r'establishment\.inspection_detail\?id=(\d+)[^>]*>([^<]+)</a>',
+            r"establishment\.inspection_detail\?id=(\d+)[^>]*>([^<]+)</a>",
             re.IGNORECASE,
         )
         for match in simple_pattern.finditer(html):
             insp_id, name = match.groups()
-            results.append({
-                "employer_name": name.strip(),
-                "inspection_number": insp_id.strip(),
-                "detail_url": f"https://www.osha.gov/ords/imis/establishment.inspection_detail?id={insp_id}",
-                "source_type": "osha_inspection",
-            })
+            results.append(
+                {
+                    "employer_name": name.strip(),
+                    "inspection_number": insp_id.strip(),
+                    "detail_url": f"https://www.osha.gov/ords/imis/establishment.inspection_detail?id={insp_id}",
+                    "source_type": "osha_inspection",
+                }
+            )
             if len(results) >= max_results:
                 break
 
     # Validation: if HTML has <table> but we got zero results, structure may have changed
     if not results and "<table" in html and len(html) > 5000:
-        logger.warning("OSHA HTML has tables but parser found no results — structure may have changed")
+        logger.warning(
+            "OSHA HTML has tables but parser found no results — structure may have changed"
+        )
         return None
 
     return results
@@ -222,7 +243,9 @@ def _is_retryable(exc: BaseException) -> bool:
     wait=tenacity.wait_exponential(multiplier=2, min=3, max=15),
     reraise=True,
     before_sleep=lambda rs: logger.info(
-        "osha_search retry #%d: %s", rs.attempt_number, rs.outcome.exception(),
+        "osha_search retry #%d: %s",
+        rs.attempt_number,
+        rs.outcome.exception(),
     ),
 )
 async def _search_with_retry(form_data: dict) -> str:

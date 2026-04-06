@@ -10,14 +10,15 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import anthropic
 
 from .compactor import Compactor
 from .escalation import EscalationPolicy
-from .hooks import Hook, run_pre_hooks, run_post_hooks
-from .types import Action, HookAction, RunContext, TurnResult
+from .hooks import Hook, run_post_hooks, run_pre_hooks
+from .types import RunContext, TurnResult
 
 _logger = logging.getLogger(__name__)
 
@@ -50,6 +51,21 @@ class AgentRuntime:
         self.user_id = user_id
         self._client: anthropic.AsyncAnthropic | None = None
 
+        # Pre-compute cached system prompt and tools (immutable per runtime)
+        self._cached_system = [
+            {
+                "type": "text",
+                "text": self.system_prompt,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
+        self._cached_tools = list(self.tools)
+        if self._cached_tools:
+            self._cached_tools[-1] = {
+                **self._cached_tools[-1],
+                "cache_control": {"type": "ephemeral"},
+            }
+
     async def run_turn(
         self,
         messages: list[dict],
@@ -60,6 +76,13 @@ class AgentRuntime:
         The loop continues until the model stops calling tools, the escalation
         policy intervenes, or max iterations is reached.
         """
+        # Reset stateful hooks at turn start
+        for hook in self.hooks:
+            if hasattr(hook, "reset"):
+                hook.reset()
+        if hasattr(self.escalation, "_seen_signals"):
+            self.escalation._seen_signals.clear()
+
         # Compact context if needed
         messages = await self.compactor.maybe_compact(messages)
 
@@ -70,8 +93,8 @@ class AgentRuntime:
         while True:
             iteration += 1
 
-            # Call Claude
-            response = await self._call_api(messages)
+            # Call Claude (with streaming events)
+            response = await self._call_api(messages, on_event=on_event)
 
             # Track usage
             if response.usage:
@@ -81,31 +104,36 @@ class AgentRuntime:
             # If no tool calls, we're done
             if response.stop_reason == "end_turn":
                 # Append assistant message
-                messages.append({
-                    "role": "assistant",
-                    "content": self._extract_content_blocks(response),
-                })
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": self._extract_content_blocks(response),
+                    }
+                )
                 break
 
             # Extract tool calls
             tool_uses = [
-                block for block in response.content
-                if getattr(block, "type", None) == "tool_use"
+                block for block in response.content if getattr(block, "type", None) == "tool_use"
             ]
 
             if not tool_uses:
                 # No tool calls despite stop_reason != end_turn — treat as done
-                messages.append({
-                    "role": "assistant",
-                    "content": self._extract_content_blocks(response),
-                })
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": self._extract_content_blocks(response),
+                    }
+                )
                 break
 
             # Append assistant message with tool_use blocks
-            messages.append({
-                "role": "assistant",
-                "content": response.content,
-            })
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": response.content,
+                }
+            )
 
             # Execute each tool call
             context = RunContext(
@@ -127,8 +155,10 @@ class AgentRuntime:
                 hook_action = await run_pre_hooks(self.hooks, tool_name, tool_input, context)
 
                 if hook_action.kind == "deny":
+                    effective_input = tool_input
                     result = {"error": hook_action.reason, "_denied_by_hook": True}
                 elif hook_action.kind == "escalate":
+                    effective_input = tool_input
                     on_event({"type": "escalation", "message": hook_action.message})
                     result = {"_escalated": True, "message": hook_action.message}
                 else:
@@ -136,18 +166,30 @@ class AgentRuntime:
                     effective_input = hook_action.modified_input or tool_input
                     result = await self._execute_tool(tool_name, effective_input)
 
-                # Post-hooks
-                result = await run_post_hooks(self.hooks, tool_name, tool_input, result, context)
+                # Post-hooks (use effective_input so hooks see enriched input from pre-hooks)
+                result = await run_post_hooks(
+                    self.hooks, tool_name, effective_input, result, context
+                )
 
                 tool_history.append(tool_name)
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": tool_id,
-                    "content": json.dumps(result, default=str),
-                })
+                tool_results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tool_id,
+                        "content": json.dumps(result, default=str),
+                    }
+                )
 
                 # Emit event
-                on_event({"type": "tool_result", "tool_name": tool_name, "result": result})
+                on_event(
+                    {
+                        "type": "tool_result",
+                        "tool_name": tool_name,
+                        "tool_id": tool_id,
+                        "input": effective_input,
+                        "result": result,
+                    }
+                )
 
             # Append tool results as user message
             messages.append({"role": "user", "content": tool_results})
@@ -159,20 +201,22 @@ class AgentRuntime:
                 on_event({"type": "hard_stop", "reason": action.reason})
                 break
             elif action.kind == "escalate_to_user":
-                on_event({
-                    "type": "escalation",
-                    "tried": action.tried,
-                    "suggestion": action.suggestion,
-                })
+                on_event(
+                    {
+                        "type": "escalation",
+                        "tried": action.tried,
+                        "suggestion": action.suggestion,
+                    }
+                )
                 break
             elif action.kind == "inject_guidance":
-                # Inject guidance as a separate user message (not a synthetic
-                # tool_result, which would violate the API contract requiring
-                # every tool_result to reference a real tool_use_id).
-                messages.append({
-                    "role": "user",
-                    "content": f"[Runtime guidance]: {action.message}",
-                })
+                # Inject as a plain user message (not a synthetic tool_result)
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": f"[System guidance: {action.message}]",
+                    }
+                )
 
             # Compact again if context grew
             messages = await self.compactor.maybe_compact(messages)
@@ -183,34 +227,69 @@ class AgentRuntime:
             iterations=iteration,
         )
 
-    async def _call_api(self, messages: list[dict]):
-        """Call the Anthropic API. Separated for testability."""
+    async def _call_api(self, messages: list[dict], on_event=None):
+        """Call the Anthropic API with streaming. Emits SSE events via on_event.
+
+        Separated for testability — tests can mock this to return a MockResponse.
+        """
         if self._client is None:
             self._client = anthropic.AsyncAnthropic(api_key=self._api_key)
         client = self._client
 
-        # Apply prompt caching
-        cached_system = [{
-            "type": "text",
-            "text": self.system_prompt,
-            "cache_control": {"type": "ephemeral"},
-        }]
+        current_tool_input = ""
 
-        cached_tools = list(self.tools)
-        if cached_tools:
-            cached_tools[-1] = {**cached_tools[-1], "cache_control": {"type": "ephemeral"}}
-
-        return await client.messages.create(
+        async with client.messages.stream(
             model=self.model,
             max_tokens=4096,
-            system=cached_system,
-            tools=cached_tools if cached_tools else anthropic.NOT_GIVEN,
+            system=self._cached_system,
+            tools=self._cached_tools if self._cached_tools else anthropic.NOT_GIVEN,
             messages=messages,
-        )
+        ) as stream:
+            async for event in stream:
+                if on_event is None:
+                    continue
+
+                if event.type == "content_block_start":
+                    if event.content_block.type == "text":
+                        on_event({"type": "text_start"})
+                    elif event.content_block.type == "tool_use":
+                        current_tool_input = ""
+                        on_event(
+                            {
+                                "type": "tool_input_start",
+                                "tool_name": event.content_block.name,
+                                "tool_id": event.content_block.id,
+                            }
+                        )
+
+                elif event.type == "content_block_delta":
+                    if event.delta.type == "text_delta":
+                        on_event({"type": "text_delta", "text": event.delta.text})
+                    elif event.delta.type == "input_json_delta":
+                        current_tool_input += event.delta.partial_json
+
+                elif event.type == "content_block_stop":
+                    if current_tool_input:
+                        try:
+                            parsed = json.loads(current_tool_input)
+                        except json.JSONDecodeError:
+                            parsed = {}
+                        on_event(
+                            {
+                                "type": "tool_input_available",
+                                "input": parsed,
+                            }
+                        )
+                        current_tool_input = ""
+
+            response = await stream.get_final_message()
+
+        return response
 
     async def _execute_tool(self, name: str, tool_input: dict) -> dict:
         """Dispatch to the tool registry. Separated for testability."""
         from ..tools import execute_tool
+
         return await execute_tool(name, tool_input)
 
     def _extract_content_blocks(self, response) -> list[dict]:
@@ -220,10 +299,12 @@ class AgentRuntime:
             if getattr(block, "type", None) == "text":
                 blocks.append({"type": "text", "text": block.text})
             elif getattr(block, "type", None) == "tool_use":
-                blocks.append({
-                    "type": "tool_use",
-                    "id": block.id,
-                    "name": block.name,
-                    "input": block.input,
-                })
+                blocks.append(
+                    {
+                        "type": "tool_use",
+                        "id": block.id,
+                        "name": block.name,
+                        "input": block.input,
+                    }
+                )
         return blocks

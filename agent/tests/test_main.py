@@ -3,18 +3,18 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from httpx import AsyncClient, ASGITransport
+from httpx import ASGITransport, AsyncClient
 
 from src.main import app
-from src.models import AgentResult, EpcSource
-
+from src.models import AgentResult
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def sample_project():
@@ -56,6 +56,7 @@ async def client():
 # GET /health
 # ---------------------------------------------------------------------------
 
+
 class TestHealth:
     async def test_health(self, client):
         resp = await client.get("/health")
@@ -67,13 +68,24 @@ class TestHealth:
 # POST /api/discover
 # ---------------------------------------------------------------------------
 
+
 class TestDiscover:
     @patch("src.main.db.store_discovery")
     @patch("src.main.run_research", new_callable=AsyncMock)
     @patch("src.main.build_knowledge_context")
     @patch("src.main.db.get_active_discovery")
     @patch("src.main.db.get_project")
-    async def test_success(self, mock_get_proj, mock_get_active, mock_kb, mock_research, mock_store, client, sample_project, sample_discovery):
+    async def test_success(
+        self,
+        mock_get_proj,
+        mock_get_active,
+        mock_kb,
+        mock_research,
+        mock_store,
+        client,
+        sample_project,
+        sample_discovery,
+    ):
         mock_get_proj.return_value = sample_project
         mock_get_active.return_value = None
         mock_kb.return_value = None
@@ -99,7 +111,9 @@ class TestDiscover:
 
     @patch("src.main.db.get_active_discovery")
     @patch("src.main.db.get_project")
-    async def test_409_already_accepted(self, mock_get_proj, mock_get_active, client, sample_project):
+    async def test_409_already_accepted(
+        self, mock_get_proj, mock_get_active, client, sample_project
+    ):
         mock_get_proj.return_value = sample_project
         mock_get_active.return_value = {"id": "disc-old", "review_status": "accepted"}
 
@@ -110,7 +124,9 @@ class TestDiscover:
     @patch("src.main.build_knowledge_context")
     @patch("src.main.db.get_active_discovery")
     @patch("src.main.db.get_project")
-    async def test_500_agent_error(self, mock_get_proj, mock_get_active, mock_kb, mock_research, client, sample_project):
+    async def test_500_agent_error(
+        self, mock_get_proj, mock_get_active, mock_kb, mock_research, client, sample_project
+    ):
         mock_get_proj.return_value = sample_project
         mock_get_active.return_value = None
         mock_kb.return_value = None
@@ -129,6 +145,7 @@ class TestDiscover:
 # POST /api/discover/batch — SSE streaming
 # ---------------------------------------------------------------------------
 
+
 class TestDiscoverBatch:
     async def test_400_empty_ids(self, client):
         resp = await client.post("/api/discover/batch", json={"project_ids": []})
@@ -142,12 +159,18 @@ class TestDiscoverBatch:
 
     @patch("src.main.run_batch")
     @patch("src.main.db.get_project")
-    async def test_streams_sse_events(self, mock_get_proj, mock_run_batch, client, sample_project, sample_discovery):
+    async def test_streams_sse_events(
+        self, mock_get_proj, mock_run_batch, client, sample_project, sample_discovery
+    ):
         mock_get_proj.return_value = sample_project
 
         async def fake_batch(projects, on_progress, **kwargs):
-            await on_progress({"project_id": "proj-001", "status": "started", "project_name": "Sunrise Solar"})
-            await on_progress({"project_id": "proj-001", "status": "completed", "discovery": sample_discovery})
+            await on_progress(
+                {"project_id": "proj-001", "status": "started", "project_name": "Sunrise Solar"}
+            )
+            await on_progress(
+                {"project_id": "proj-001", "status": "completed", "discovery": sample_discovery}
+            )
             return [{"project_id": "proj-001", "status": "completed"}]
 
         mock_run_batch.side_effect = fake_batch
@@ -179,7 +202,9 @@ class TestDiscoverBatch:
         mock_get_proj.return_value = sample_project
 
         async def fake_batch(projects, on_progress, **kwargs):
-            await on_progress({"project_id": "proj-001", "status": "skipped", "reason": "already_accepted"})
+            await on_progress(
+                {"project_id": "proj-001", "status": "skipped", "reason": "already_accepted"}
+            )
             return [{"project_id": "proj-001", "status": "skipped"}]
 
         mock_run_batch.side_effect = fake_batch
@@ -219,7 +244,9 @@ class TestDiscoverBatch:
 
     @patch("src.main.run_batch")
     @patch("src.main.db.get_project")
-    async def test_sse_multiple_projects_progress_counter(self, mock_get_proj, mock_run_batch, client):
+    async def test_sse_multiple_projects_progress_counter(
+        self, mock_get_proj, mock_run_batch, client
+    ):
         """Verify completed counter increments correctly across multiple projects."""
         projects_db = {
             "proj-a": {"id": "proj-a", "queue_id": "QA", "project_name": "Alpha"},
@@ -230,17 +257,23 @@ class TestDiscoverBatch:
 
         async def fake_batch(projects, on_progress, **kwargs):
             for p in projects:
-                await on_progress({"project_id": p["id"], "status": "started", "project_name": p["project_name"]})
-                await on_progress({
-                    "project_id": p["id"],
-                    "status": "completed",
-                    "discovery": {"id": f"disc-{p['id']}", "epc_contractor": "X"},
-                })
+                await on_progress(
+                    {"project_id": p["id"], "status": "started", "project_name": p["project_name"]}
+                )
+                await on_progress(
+                    {
+                        "project_id": p["id"],
+                        "status": "completed",
+                        "discovery": {"id": f"disc-{p['id']}", "epc_contractor": "X"},
+                    }
+                )
             return []
 
         mock_run_batch.side_effect = fake_batch
 
-        resp = await client.post("/api/discover/batch", json={"project_ids": ["proj-a", "proj-b", "proj-c"]})
+        resp = await client.post(
+            "/api/discover/batch", json={"project_ids": ["proj-a", "proj-b", "proj-c"]}
+        )
 
         events = []
         for line in resp.text.strip().split("\n"):
@@ -266,11 +299,14 @@ class TestDiscoverBatch:
 # PATCH /api/discover/{id}/review
 # ---------------------------------------------------------------------------
 
+
 class TestReviewDiscovery:
     @patch("src.main.db.update_project_epc")
     @patch("src.main.db.update_discovery")
     @patch("src.main.db.get_client")
-    async def test_accept(self, mock_client_fn, mock_update, mock_update_epc, client, sample_discovery):
+    async def test_accept(
+        self, mock_client_fn, mock_update, mock_update_epc, client, sample_discovery
+    ):
         mock_client = MagicMock()
         mock_client_fn.return_value = mock_client
         chain = mock_client.table.return_value.select.return_value.eq.return_value
@@ -288,7 +324,9 @@ class TestReviewDiscovery:
     @patch("src.main.db.update_project_epc")
     @patch("src.main.db.update_discovery")
     @patch("src.main.db.get_client")
-    async def test_reject(self, mock_client_fn, mock_update, mock_update_epc, client, sample_discovery):
+    async def test_reject(
+        self, mock_client_fn, mock_update, mock_update_epc, client, sample_discovery
+    ):
         mock_client = MagicMock()
         mock_client_fn.return_value = mock_client
         chain = mock_client.table.return_value.select.return_value.eq.return_value
@@ -317,7 +355,9 @@ class TestReviewDiscovery:
             mock_client = MagicMock()
             mock_client_fn.return_value = mock_client
             chain = mock_client.table.return_value.select.return_value.eq.return_value
-            chain.execute.return_value = MagicMock(data=[{"id": "disc-001", "review_status": "pending"}])
+            chain.execute.return_value = MagicMock(
+                data=[{"id": "disc-001", "review_status": "pending"}]
+            )
 
             resp = await client.patch("/api/discover/disc-001/review", json={"action": "invalid"})
             assert resp.status_code == 400
@@ -326,6 +366,7 @@ class TestReviewDiscovery:
 # ---------------------------------------------------------------------------
 # GET /api/discoveries
 # ---------------------------------------------------------------------------
+
 
 class TestListDiscoveries:
     @patch("src.main.db.list_discoveries")

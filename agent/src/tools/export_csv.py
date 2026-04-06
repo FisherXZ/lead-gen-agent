@@ -32,7 +32,9 @@ DEFINITION = {
                     "type": "array",
                     "items": {"type": "string"},
                 },
-                "description": "Data rows. Each row is a list of string values matching the headers.",
+                "description": (
+                    "Data rows. Each row is a list of string values matching the headers."
+                ),
             },
             "filename": {
                 "type": "string",

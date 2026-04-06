@@ -9,12 +9,10 @@ from src.chat_agent import run_chat_agent
 from src.sse import StreamWriter
 from src.tools import execute_tool
 
-from tests.conftest import make_agent_result
-
-
 # ---------------------------------------------------------------------------
 # Helpers for mocking the Anthropic streaming API
 # ---------------------------------------------------------------------------
+
 
 def _make_event(event_type: str, **kwargs):
     """Build a mock streaming event."""
@@ -120,6 +118,7 @@ async def _run_chat(messages=None, conversation_id="conv-test"):
 # Tool dispatch via shared registry
 # ---------------------------------------------------------------------------
 
+
 class TestToolRegistryDispatch:
     @patch("src.tools.search_projects.db")
     async def test_search_projects_returns_count(self, mock_db):
@@ -163,6 +162,7 @@ class TestToolRegistryDispatch:
 
     async def test_unknown_tool_raises(self):
         import pytest
+
         with pytest.raises(KeyError, match="Unknown tool"):
             await execute_tool("nonexistent_tool", {})
 
@@ -170,6 +170,7 @@ class TestToolRegistryDispatch:
 # ---------------------------------------------------------------------------
 # run_chat_agent — text-only response (no tool calls)
 # ---------------------------------------------------------------------------
+
 
 class TestChatAgentTextOnly:
     @patch("src.chat_agent.db")
@@ -209,6 +210,7 @@ class TestChatAgentTextOnly:
 # run_chat_agent — single tool round then text
 # ---------------------------------------------------------------------------
 
+
 class TestChatAgentSingleTool:
     @patch("src.chat_agent.execute_tool", new_callable=AsyncMock)
     @patch("src.chat_agent.db")
@@ -224,7 +226,9 @@ class TestChatAgentSingleTool:
         ]
         round1_final = _final_message(
             stop_reason="tool_use",
-            content=[MagicMock(type="tool_use", id="tc-1", name="search_projects", input={"state": "TX"})],
+            content=[
+                MagicMock(type="tool_use", id="tc-1", name="search_projects", input={"state": "TX"})
+            ],
         )
 
         # Round 2: text response
@@ -259,6 +263,7 @@ class TestChatAgentSingleTool:
 # ---------------------------------------------------------------------------
 # run_chat_agent — multi-round tool loop
 # ---------------------------------------------------------------------------
+
 
 class TestChatAgentMultiRound:
     @patch("src.chat_agent.execute_tool", new_callable=AsyncMock)
@@ -299,7 +304,16 @@ class TestChatAgentMultiRound:
 
         mock_exec_tool.side_effect = [
             {"projects": [{"id": "p1"}], "count": 1},
-            {"results": [{"title": "Article", "url": "https://example.com", "content": "McCarthy", "score": 0.9}]},
+            {
+                "results": [
+                    {
+                        "title": "Article",
+                        "url": "https://example.com",
+                        "content": "McCarthy",
+                        "score": 0.9,
+                    }
+                ]
+            },
         ]
 
         mock_client = MagicMock()
@@ -310,7 +324,7 @@ class TestChatAgentMultiRound:
         ]
         MockClient.return_value = mock_client
 
-        collected = await _run_chat()
+        await _run_chat()
 
         assert mock_exec_tool.call_count == 2
         assert mock_client.messages.stream.call_count == 3
@@ -319,6 +333,7 @@ class TestChatAgentMultiRound:
 # ---------------------------------------------------------------------------
 # run_chat_agent — max tool rounds safety
 # ---------------------------------------------------------------------------
+
 
 class TestChatAgentMaxRounds:
     @patch("src.chat_agent.MAX_TOOL_ROUNDS", 2)
@@ -350,7 +365,7 @@ class TestChatAgentMaxRounds:
         ]
         MockClient.return_value = mock_client
 
-        collected = await _run_chat()
+        await _run_chat()
 
         assert mock_client.messages.stream.call_count == 2
         assert mock_exec_tool.call_count == 2
@@ -359,6 +374,7 @@ class TestChatAgentMaxRounds:
 # ---------------------------------------------------------------------------
 # run_chat_agent — malformed tool input JSON
 # ---------------------------------------------------------------------------
+
 
 class TestChatAgentJsonError:
     @patch("src.chat_agent.execute_tool", new_callable=AsyncMock)
@@ -394,7 +410,7 @@ class TestChatAgentJsonError:
         ]
         MockClient.return_value = mock_client
 
-        collected = await _run_chat()
+        await _run_chat()
 
         mock_exec_tool.assert_called_once_with("search_projects", {})
 
@@ -402,6 +418,7 @@ class TestChatAgentJsonError:
 # ---------------------------------------------------------------------------
 # run_chat_agent — save_message persistence
 # ---------------------------------------------------------------------------
+
 
 class TestChatAgentPersistence:
     @patch("src.chat_agent.db")
@@ -480,6 +497,7 @@ class TestChatAgentPersistence:
 # run_chat_agent — SSE event ordering
 # ---------------------------------------------------------------------------
 
+
 class TestChatAgentEventOrdering:
     @patch("src.chat_agent.db")
     @patch("src.chat_agent.anthropic.AsyncAnthropic")
@@ -545,4 +563,6 @@ class TestChatAgentEventOrdering:
         # Between tool rounds there should be finish-step, start-step pair
         for i, t in enumerate(types):
             if t == "finish-step" and i + 1 < len(types) and types[i + 1] != "finish":
-                assert types[i + 1] == "start-step", f"Expected start-step after finish-step at index {i}"
+                assert types[i + 1] == "start-step", (
+                    f"Expected start-step after finish-step at index {i}"
+                )

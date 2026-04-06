@@ -18,14 +18,33 @@ _PDF_CONTENT_TYPE = "application/pdf"
 
 _EPC_KEYWORDS: set[str] = {
     # Generic EPC / solar construction terms
-    "epc", "contractor", "construction", "engineering", "procurement",
-    "solar", "megawatt", "mw", "awarded", "selected",
-    "built by", "constructed by", "utility-scale", "utility scale",
-    "commissioning", "commercial operation",
+    "epc",
+    "contractor",
+    "construction",
+    "engineering",
+    "procurement",
+    "solar",
+    "megawatt",
+    "mw",
+    "awarded",
+    "selected",
+    "built by",
+    "constructed by",
+    "utility-scale",
+    "utility scale",
+    "commissioning",
+    "commercial operation",
     # Known large solar EPC company names
-    "blattner", "mccarthy", "mortenson", "primoris",
-    "rosendin", "swinerton", "mas energy", "signal energy",
-    "strata solar", "sunpin solar",
+    "blattner",
+    "mccarthy",
+    "mortenson",
+    "primoris",
+    "rosendin",
+    "swinerton",
+    "mas energy",
+    "signal energy",
+    "strata solar",
+    "sunpin solar",
 }
 
 
@@ -178,7 +197,9 @@ def _handle_pdf(url: str, pdf_bytes: bytes) -> dict:
     reraise=True,
     before_sleep=lambda rs: logger.info(
         "fetch_page retry #%d for %s: %s",
-        rs.attempt_number, rs.args[0] if rs.args else "?", rs.outcome.exception(),
+        rs.attempt_number,
+        rs.args[0] if rs.args else "?",
+        rs.outcome.exception(),
     ),
 )
 async def _fetch_with_retry(url: str) -> httpx.Response:
@@ -207,4 +228,5 @@ async def _fetch_with_retry(url: str) -> httpx.Response:
 
 class _UnsupportedContentType(Exception):
     """Raised for blocked content types — not retried."""
+
     pass

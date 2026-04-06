@@ -19,7 +19,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import ValidationError
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -70,11 +69,14 @@ def _make_client(contact_id: str = _CONTACT_ID):
 # 1. Invalid UUID
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_invalid_uuid_returns_error():
     from src.tools.save_contact import execute
 
-    result = await execute({"entity_id": "not-a-uuid", "full_name": "Bob", "source_method": "linkedin"})
+    result = await execute(
+        {"entity_id": "not-a-uuid", "full_name": "Bob", "source_method": "linkedin"}
+    )
 
     assert "error" in result
     assert "invalid" in result["error"].lower()
@@ -92,6 +94,7 @@ async def test_empty_entity_id_returns_error():
 # ---------------------------------------------------------------------------
 # 2. Valid input — correct upsert payload
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_valid_input_upserts_contact():
@@ -145,6 +148,7 @@ async def test_optional_fields_included_in_upsert():
 # 3. project_id triggers project_contacts insert
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_project_id_links_contact_to_project():
     from src.tools.save_contact import execute
@@ -170,6 +174,7 @@ async def test_project_id_links_contact_to_project():
 # 4. No project_id → project_contacts NOT touched
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_no_project_id_skips_project_contacts():
     from src.tools.save_contact import execute
@@ -188,6 +193,7 @@ async def test_no_project_id_skips_project_contacts():
 # ---------------------------------------------------------------------------
 # 5. Pydantic Input validation
 # ---------------------------------------------------------------------------
+
 
 def test_input_model_valid():
     from src.tools.save_contact import Input
@@ -236,6 +242,7 @@ def test_input_model_with_all_fields():
 # 6. DB error on contacts upsert returns error dict
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_db_error_returns_error_dict():
     from src.tools.save_contact import execute
@@ -255,6 +262,7 @@ async def test_db_error_returns_error_dict():
 # ---------------------------------------------------------------------------
 # 7. project_contacts failure is non-fatal
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_project_link_failure_is_non_fatal():
@@ -291,6 +299,7 @@ async def test_project_link_failure_is_non_fatal():
 # ---------------------------------------------------------------------------
 # 8. Tool registration and DEFINITION
 # ---------------------------------------------------------------------------
+
 
 def test_tool_definition():
     from src.tools.save_contact import DEFINITION

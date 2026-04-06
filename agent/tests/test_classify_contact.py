@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 VALID_UUID = "123e4567-e89b-12d3-a456-426614174000"
 VALID_CONTACT_UUID = "223e4567-e89b-12d3-a456-426614174001"
 VALID_ENTITY_UUID = "323e4567-e89b-12d3-a456-426614174002"
@@ -26,6 +25,7 @@ def test_pydantic_input_valid():
 
 def test_pydantic_input_missing_contact_id():
     from pydantic import ValidationError
+
     from src.tools.classify_contact import Input
 
     with pytest.raises(ValidationError):
@@ -51,7 +51,8 @@ async def test_contact_not_found_returns_error():
     from src.tools.classify_contact import execute
 
     mock_client = MagicMock()
-    mock_client.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value.data = []
+    chain = mock_client.table.return_value.select.return_value
+    chain.eq.return_value.limit.return_value.execute.return_value.data = []
 
     with patch("src.tools.classify_contact.get_client", return_value=mock_client):
         result = await execute({"contact_id": VALID_UUID})
@@ -120,16 +121,20 @@ async def test_successful_classification():
 
     # upsert
     upsert_resp = MagicMock()
-    upsert_resp.data = [{"id": "score-uuid", **{
-        f"ai_{k}": v for k, v in ai_scores.items() if k != "reasoning"
-    }}]
+    upsert_resp.data = [
+        {"id": "score-uuid", **{f"ai_{k}": v for k, v in ai_scores.items() if k != "reasoning"}}
+    ]
 
     def table_side_effect(table_name):
         tbl = MagicMock()
         if table_name == "contacts":
-            tbl.select.return_value.eq.return_value.limit.return_value.execute.return_value = contacts_resp
+            tbl.select.return_value.eq.return_value.limit.return_value.execute.return_value = (
+                contacts_resp
+            )
         elif table_name == "entities":
-            tbl.select.return_value.eq.return_value.limit.return_value.execute.return_value = entity_resp
+            tbl.select.return_value.eq.return_value.limit.return_value.execute.return_value = (
+                entity_resp
+            )
         elif table_name == "contact_persona_scores":
             tbl.upsert.return_value.execute.return_value = upsert_resp
         return tbl
@@ -140,8 +145,12 @@ async def test_successful_classification():
     mock_anthropic_client = MagicMock()
     mock_anthropic_client.messages.create = AsyncMock(return_value=mock_anthropic_response)
 
-    with patch("src.tools.classify_contact.get_client", return_value=mock_client), \
-         patch("src.tools.classify_contact.get_anthropic_client", return_value=mock_anthropic_client):
+    with (
+        patch("src.tools.classify_contact.get_client", return_value=mock_client),
+        patch(
+            "src.tools.classify_contact.get_anthropic_client", return_value=mock_anthropic_client
+        ),
+    ):
         result = await execute({"contact_id": VALID_UUID})
 
     assert result["status"] == "success"
@@ -206,10 +215,16 @@ async def test_partial_match_score():
     mock_client.table.side_effect = table_side_effect
 
     mock_anthropic_client = MagicMock()
-    mock_anthropic_client.messages.create = AsyncMock(return_value=_make_anthropic_response(ai_scores))
+    mock_anthropic_client.messages.create = AsyncMock(
+        return_value=_make_anthropic_response(ai_scores)
+    )
 
-    with patch("src.tools.classify_contact.get_client", return_value=mock_client), \
-         patch("src.tools.classify_contact.get_anthropic_client", return_value=mock_anthropic_client):
+    with (
+        patch("src.tools.classify_contact.get_client", return_value=mock_client),
+        patch(
+            "src.tools.classify_contact.get_anthropic_client", return_value=mock_anthropic_client
+        ),
+    ):
         result = await execute({"contact_id": VALID_UUID})
 
     assert result["status"] == "success"

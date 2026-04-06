@@ -47,6 +47,7 @@ async def test_fetch_page_error_wrapped_in_error_envelope():
 async def test_pydantic_input_validation_empty_url_rejected():
     """Empty URL string fails Pydantic validation."""
     from pydantic import ValidationError
+
     from src.tools.scrape_epc_website import Input
 
     with pytest.raises(ValidationError):
@@ -67,5 +68,8 @@ def test_definition_name_and_description():
     from src.tools.scrape_epc_website import DEFINITION
 
     assert DEFINITION["name"] == "scrape_epc_website"
-    assert "contact" in DEFINITION["description"].lower() or "personnel" in DEFINITION["description"].lower()
+    assert (
+        "contact" in DEFINITION["description"].lower()
+        or "personnel" in DEFINITION["description"].lower()
+    )
     assert "url" in DEFINITION["input_schema"]["required"]

@@ -46,6 +46,7 @@ async def execute(tool_input: dict) -> dict:
 
     # Check HubSpot settings
     from ..hubspot import get_settings, push_discovery
+
     settings = get_settings()
     if not settings:
         return {
@@ -58,13 +59,15 @@ async def execute(tool_input: dict) -> dict:
         return {"error": "HubSpot token could not be decrypted."}
 
     # Look up project
-    from ..db import get_project, get_contacts_for_project
+    from ..db import get_project
+
     project = get_project(project_id)
     if not project:
         return {"error": f"Project {project_id} not found."}
 
     # Find accepted discovery
     from ..db import get_client
+
     client = get_client()
     disc_resp = (
         client.table("epc_discoveries")
@@ -85,12 +88,14 @@ async def execute(tool_input: dict) -> dict:
 
     # Find EPC entity
     from ..knowledge_base import resolve_entity
+
     entity = resolve_entity(epc_name)
     if not entity:
         return {"error": f"EPC entity '{epc_name}' not found in knowledge base."}
 
     # Get contacts
     from ..db import get_contacts_for_entity
+
     contacts = get_contacts_for_entity(entity["id"])
 
     # Push to HubSpot
@@ -110,9 +115,14 @@ async def execute(tool_input: dict) -> dict:
     # Build summary
     summary_parts = []
     if result.get("company"):
-        summary_parts.append(f"Company: {result['company'].get('status')} (ID: {result['company'].get('hubspot_id')})")
+        summary_parts.append(
+            f"Company: {result['company'].get('status')} "
+            f"(ID: {result['company'].get('hubspot_id')})"
+        )
     if result.get("deal"):
-        summary_parts.append(f"Deal: {result['deal'].get('status')} (ID: {result['deal'].get('hubspot_id')})")
+        summary_parts.append(
+            f"Deal: {result['deal'].get('status')} (ID: {result['deal'].get('hubspot_id')})"
+        )
     for c in result.get("contacts", []):
         summary_parts.append(f"Contact {c.get('name')}: {c.get('status')}")
 

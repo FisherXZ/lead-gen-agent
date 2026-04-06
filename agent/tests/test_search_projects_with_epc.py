@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.db import search_projects_with_epc, _normalize_project_first, _normalize_epc_first
-
+from src.db import _normalize_epc_first, _normalize_project_first, search_projects_with_epc
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 def _make_project_row(*, project_id="proj-001", discovery=None):
     """Build a project row as returned by PostgREST with latest_discovery join."""
@@ -62,16 +62,21 @@ def _mock_execute(data):
 # Normalization tests
 # ---------------------------------------------------------------------------
 
+
 class TestNormalization:
     def test_project_first_with_discovery(self):
-        row = _make_project_row(discovery=[{
-            "id": "disc-001",
-            "epc_contractor": "McCarthy Building",
-            "confidence": "likely",
-            "review_status": "pending",
-            "source_count": 2,
-            "created_at": "2026-03-10",
-        }])
+        row = _make_project_row(
+            discovery=[
+                {
+                    "id": "disc-001",
+                    "epc_contractor": "McCarthy Building",
+                    "confidence": "likely",
+                    "review_status": "pending",
+                    "source_count": 2,
+                    "created_at": "2026-03-10",
+                }
+            ]
+        )
         results = _normalize_project_first([row])
         assert len(results) == 1
         r = results[0]
@@ -102,14 +107,18 @@ class TestNormalization:
         assert r["confidence"] == "likely"
 
     def test_both_modes_same_shape(self):
-        proj_row = _make_project_row(discovery=[{
-            "id": "disc-001",
-            "epc_contractor": "McCarthy Building",
-            "confidence": "likely",
-            "review_status": "pending",
-            "source_count": 2,
-            "created_at": "2026-03-10",
-        }])
+        proj_row = _make_project_row(
+            discovery=[
+                {
+                    "id": "disc-001",
+                    "epc_contractor": "McCarthy Building",
+                    "confidence": "likely",
+                    "review_status": "pending",
+                    "source_count": 2,
+                    "created_at": "2026-03-10",
+                }
+            ]
+        )
         disc_row = _make_disc_row()
         proj_result = _normalize_project_first([proj_row])[0]
         epc_result = _normalize_epc_first([disc_row])[0]
@@ -119,6 +128,7 @@ class TestNormalization:
 # ---------------------------------------------------------------------------
 # Mode 1: Project-first
 # ---------------------------------------------------------------------------
+
 
 class TestProjectFirstMode:
     @patch("src.db.get_client")
@@ -178,6 +188,7 @@ class TestProjectFirstMode:
 # Mode 2: EPC-first
 # ---------------------------------------------------------------------------
 
+
 class TestEpcFirstMode:
     @patch("src.db.get_client")
     def test_epc_first_queries_discoveries_table(self, mock_get_client):
@@ -228,6 +239,7 @@ class TestEpcFirstMode:
 # Post-query filters
 # ---------------------------------------------------------------------------
 
+
 class TestPostQueryFilters:
     @patch("src.db.get_client")
     def test_confidence_min_filters_below_threshold(self, mock_get_client):
@@ -235,12 +247,20 @@ class TestPostQueryFilters:
         mock_get_client.return_value = mock_client
 
         disc_confirmed = {
-            "id": "disc-001", "epc_contractor": "A", "confidence": "confirmed",
-            "review_status": "accepted", "source_count": 3, "created_at": "2026-03-10",
+            "id": "disc-001",
+            "epc_contractor": "A",
+            "confidence": "confirmed",
+            "review_status": "accepted",
+            "source_count": 3,
+            "created_at": "2026-03-10",
         }
         disc_possible = {
-            "id": "disc-002", "epc_contractor": "B", "confidence": "possible",
-            "review_status": "pending", "source_count": 1, "created_at": "2026-03-09",
+            "id": "disc-002",
+            "epc_contractor": "B",
+            "confidence": "possible",
+            "review_status": "pending",
+            "source_count": 1,
+            "created_at": "2026-03-09",
         }
         row1 = _make_project_row(project_id="proj-001", discovery=[disc_confirmed])
         row2 = _make_project_row(project_id="proj-002", discovery=[disc_possible])
@@ -263,12 +283,20 @@ class TestPostQueryFilters:
         mock_get_client.return_value = mock_client
 
         disc_pending = {
-            "id": "disc-001", "epc_contractor": "A", "confidence": "likely",
-            "review_status": "pending", "source_count": 2, "created_at": "2026-03-10",
+            "id": "disc-001",
+            "epc_contractor": "A",
+            "confidence": "likely",
+            "review_status": "pending",
+            "source_count": 2,
+            "created_at": "2026-03-10",
         }
         disc_accepted = {
-            "id": "disc-002", "epc_contractor": "B", "confidence": "confirmed",
-            "review_status": "accepted", "source_count": 3, "created_at": "2026-03-09",
+            "id": "disc-002",
+            "epc_contractor": "B",
+            "confidence": "confirmed",
+            "review_status": "accepted",
+            "source_count": 3,
+            "created_at": "2026-03-09",
         }
         row1 = _make_project_row(project_id="proj-001", discovery=[disc_pending])
         row2 = _make_project_row(project_id="proj-002", discovery=[disc_accepted])
@@ -308,6 +336,7 @@ class TestPostQueryFilters:
 # Tool execute
 # ---------------------------------------------------------------------------
 
+
 class TestToolExecute:
     @patch("src.db.search_projects_with_epc")
     @pytest.mark.asyncio
@@ -315,7 +344,11 @@ class TestToolExecute:
         from src.tools.search_projects_with_epc import execute
 
         mock_search.return_value = [
-            {"project_id": "proj-001", "epc_contractor": "McCarthy Building", "confidence": "likely"}
+            {
+                "project_id": "proj-001",
+                "epc_contractor": "McCarthy Building",
+                "confidence": "likely",
+            }
         ]
 
         result = await execute({"state": "TX"})
@@ -355,6 +388,7 @@ class TestToolExecute:
 # Fix regression tests
 # ---------------------------------------------------------------------------
 
+
 class TestConfidenceMinPreservesUnresearched:
     """FIX 1: confidence_min should keep projects with no discovery (confidence=None)."""
 
@@ -364,15 +398,28 @@ class TestConfidenceMinPreservesUnresearched:
         mock_get_client.return_value = mock_client
 
         disc_confirmed = {
-            "id": "disc-001", "epc_contractor": "A", "confidence": "confirmed",
-            "review_status": "accepted", "source_count": 3, "created_at": "2026-03-10",
+            "id": "disc-001",
+            "epc_contractor": "A",
+            "confidence": "confirmed",
+            "review_status": "accepted",
+            "source_count": 3,
+            "created_at": "2026-03-10",
         }
         row_with_disc = _make_project_row(project_id="proj-001", discovery=[disc_confirmed])
         row_no_disc = _make_project_row(project_id="proj-002", discovery=[])
-        row_possible = _make_project_row(project_id="proj-003", discovery=[{
-            "id": "disc-003", "epc_contractor": "C", "confidence": "possible",
-            "review_status": "pending", "source_count": 1, "created_at": "2026-03-08",
-        }])
+        row_possible = _make_project_row(
+            project_id="proj-003",
+            discovery=[
+                {
+                    "id": "disc-003",
+                    "epc_contractor": "C",
+                    "confidence": "possible",
+                    "review_status": "pending",
+                    "source_count": 1,
+                    "created_at": "2026-03-08",
+                }
+            ],
+        )
 
         mock_table = mock_client.table.return_value
         mock_select = mock_table.select.return_value
@@ -393,41 +440,67 @@ class TestRejectedDiscoveriesFiltered:
     """FIX 2: _normalize_project_first filters rejected and sorts by date."""
 
     def test_rejected_discoveries_excluded(self):
-        row = _make_project_row(discovery=[
-            {
-                "id": "disc-old", "epc_contractor": "BadCo", "confidence": "possible",
-                "review_status": "rejected", "source_count": 1, "created_at": "2026-03-01",
-            },
-            {
-                "id": "disc-new", "epc_contractor": "GoodCo", "confidence": "likely",
-                "review_status": "pending", "source_count": 2, "created_at": "2026-03-10",
-            },
-        ])
+        row = _make_project_row(
+            discovery=[
+                {
+                    "id": "disc-old",
+                    "epc_contractor": "BadCo",
+                    "confidence": "possible",
+                    "review_status": "rejected",
+                    "source_count": 1,
+                    "created_at": "2026-03-01",
+                },
+                {
+                    "id": "disc-new",
+                    "epc_contractor": "GoodCo",
+                    "confidence": "likely",
+                    "review_status": "pending",
+                    "source_count": 2,
+                    "created_at": "2026-03-10",
+                },
+            ]
+        )
         results = _normalize_project_first([row])
         assert results[0]["epc_contractor"] == "GoodCo"
 
     def test_all_rejected_yields_empty_discovery(self):
-        row = _make_project_row(discovery=[
-            {
-                "id": "disc-rej", "epc_contractor": "BadCo", "confidence": "possible",
-                "review_status": "rejected", "source_count": 1, "created_at": "2026-03-01",
-            },
-        ])
+        row = _make_project_row(
+            discovery=[
+                {
+                    "id": "disc-rej",
+                    "epc_contractor": "BadCo",
+                    "confidence": "possible",
+                    "review_status": "rejected",
+                    "source_count": 1,
+                    "created_at": "2026-03-01",
+                },
+            ]
+        )
         results = _normalize_project_first([row])
         assert results[0]["epc_contractor"] is None
         assert results[0]["confidence"] is None
 
     def test_sorts_by_created_at_desc(self):
-        row = _make_project_row(discovery=[
-            {
-                "id": "disc-older", "epc_contractor": "OldCo", "confidence": "possible",
-                "review_status": "pending", "source_count": 1, "created_at": "2026-03-01",
-            },
-            {
-                "id": "disc-newer", "epc_contractor": "NewCo", "confidence": "likely",
-                "review_status": "pending", "source_count": 2, "created_at": "2026-03-10",
-            },
-        ])
+        row = _make_project_row(
+            discovery=[
+                {
+                    "id": "disc-older",
+                    "epc_contractor": "OldCo",
+                    "confidence": "possible",
+                    "review_status": "pending",
+                    "source_count": 1,
+                    "created_at": "2026-03-01",
+                },
+                {
+                    "id": "disc-newer",
+                    "epc_contractor": "NewCo",
+                    "confidence": "likely",
+                    "review_status": "pending",
+                    "source_count": 2,
+                    "created_at": "2026-03-10",
+                },
+            ]
+        )
         results = _normalize_project_first([row])
         assert results[0]["epc_contractor"] == "NewCo"
 

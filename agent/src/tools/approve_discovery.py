@@ -35,7 +35,9 @@ DEFINITION = {
             },
             "reason": {
                 "type": "string",
-                "description": "Why the discovery is being accepted or rejected. Required for rejections.",
+                "description": (
+                    "Why the discovery is being accepted or rejected. Required for rejections."
+                ),
             },
         },
         "required": ["discovery_id", "action"],
@@ -86,9 +88,7 @@ async def execute(tool_input: dict) -> dict:
                 )
                 promote_discovery_to_kb(discovery["project_id"], result, project)
             except Exception:
-                logger.warning(
-                    "KB promotion failed for discovery %s", discovery_id, exc_info=True
-                )
+                logger.warning("KB promotion failed for discovery %s", discovery_id, exc_info=True)
 
         return {
             "status": "accepted",

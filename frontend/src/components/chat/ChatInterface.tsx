@@ -46,7 +46,11 @@ interface Conversation {
   updated_at: string;
 }
 
-export default function ChatInterface() {
+interface ChatInterfaceProps {
+  initialContext?: string;
+}
+
+export default function ChatInterface({ initialContext }: ChatInterfaceProps) {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -144,13 +148,21 @@ export default function ChatInterface() {
     return [];
   }, []);
 
-  // On mount: load conversations and resume the most recent one
+  // On mount: load conversations and resume the most recent one,
+  // or auto-send initialContext if provided
+  const initialContextRef = useRef(initialContext);
   useEffect(() => {
-    loadConversations().then((convs) => {
-      if (convs.length > 0) {
-        loadConversation(convs[0].id);
-      }
-    });
+    if (initialContextRef.current) {
+      // Start a new conversation with the pre-loaded context
+      sendMessage({ text: initialContextRef.current });
+      initialContextRef.current = undefined;
+    } else {
+      loadConversations().then((convs) => {
+        if (convs.length > 0) {
+          loadConversation(convs[0].id);
+        }
+      });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

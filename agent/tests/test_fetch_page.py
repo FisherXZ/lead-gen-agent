@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
-from src.tools.fetch_page import _extract_relevant_sections, _MAX_CHARS, _EPC_KEYWORDS
+from src.tools.fetch_page import _EPC_KEYWORDS, _MAX_CHARS, _extract_relevant_sections
 
 
 class TestExtractRelevantSections:
@@ -92,9 +90,16 @@ class TestExtractRelevantSections:
     def test_known_epc_companies_in_keywords(self):
         """All specified EPC company names are in the keyword set."""
         expected = [
-            "blattner", "mccarthy", "mortenson", "primoris",
-            "rosendin", "swinerton", "mas energy", "signal energy",
-            "strata solar", "sunpin solar",
+            "blattner",
+            "mccarthy",
+            "mortenson",
+            "primoris",
+            "rosendin",
+            "swinerton",
+            "mas energy",
+            "signal energy",
+            "strata solar",
+            "sunpin solar",
         ]
         for name in expected:
             assert name in _EPC_KEYWORDS, f"{name} missing from _EPC_KEYWORDS"

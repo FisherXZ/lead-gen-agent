@@ -100,7 +100,10 @@ def _update(session_id: str, updates: list[dict]) -> dict:
     existing = read_scratch(session_id, key=_TODO_KEY)
     if not existing:
         return {
-            "error": "No todo list exists for this session. Call manage_todo with operation='create' first."
+            "error": (
+                "No todo list exists for this session. "
+                "Call manage_todo with operation='create' first."
+            )
         }
 
     current_data = existing[0].get("value", {})
@@ -140,7 +143,10 @@ def _update(session_id: str, updates: list[dict]) -> dict:
 def _read(session_id: str) -> dict:
     existing = read_scratch(session_id, key=_TODO_KEY)
     if not existing:
-        return {"tasks": [], "message": "No plan created yet. Call manage_todo with operation='create' to start."}
+        return {
+            "tasks": [],
+            "message": "No plan created yet. Call manage_todo with operation='create' to start.",
+        }
 
     current_data = existing[0].get("value", {})
     tasks: list[dict] = current_data.get("tasks", [])

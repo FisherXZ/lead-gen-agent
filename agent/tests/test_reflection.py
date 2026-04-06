@@ -1,12 +1,12 @@
 """Tests for the post-research reflection loop in research.py."""
 
-import json
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.research import _run_reflection, REFLECTION_MAX_RETRIES
+import pytest
+
 from src.models import AgentResult
+from src.research import REFLECTION_MAX_RETRIES, _run_reflection
 
 
 def _make_response(*, stop_reason="end_turn", content=None, input_tokens=100, output_tokens=50):
@@ -31,14 +31,22 @@ async def test_reflection_no_gaps_returns_original():
     """Agent reflects and finds no issues — returns original result."""
     original = AgentResult(epc_contractor="McCarthy", confidence="confirmed")
     client = AsyncMock()
-    client.messages.create = AsyncMock(return_value=_make_response(
-        stop_reason="end_turn",
-        content=[_make_text_block("Everything checks out. All tasks done.")],
-    ))
+    client.messages.create = AsyncMock(
+        return_value=_make_response(
+            stop_reason="end_turn",
+            content=[_make_text_block("Everything checks out. All tasks done.")],
+        )
+    )
 
     result, log, tokens = await _run_reflection(
-        client, original, "session-1", [], MagicMock(content=[]), [],
-        agent_log=[], total_tokens=0,
+        client,
+        original,
+        "session-1",
+        [],
+        MagicMock(content=[]),
+        [],
+        agent_log=[],
+        total_tokens=0,
     )
     assert result.epc_contractor == "McCarthy"
     assert result.confidence == "confirmed"
@@ -68,8 +76,14 @@ async def test_reflection_updated_report():
     client.messages.create = AsyncMock(return_value=response)
 
     result, log, tokens = await _run_reflection(
-        client, original, "session-1", [], MagicMock(content=[]), [],
-        agent_log=[], total_tokens=0,
+        client,
+        original,
+        "session-1",
+        [],
+        MagicMock(content=[]),
+        [],
+        agent_log=[],
+        total_tokens=0,
     )
     # Should use the updated result, not the original
     assert result.epc_contractor == "McCarthy Building Companies"
@@ -89,12 +103,18 @@ async def test_reflection_retry_then_report():
     # Turn 2: agent calls report_findings
     turn2 = _make_response(
         stop_reason="tool_use",
-        content=[_make_tool_use_block("report_findings", {
-            "epc_contractor": "Signal Energy",
-            "confidence": "possible",
-            "sources": [],
-            "reasoning": "Found after reflection.",
-        }, block_id="tool-2")],
+        content=[
+            _make_tool_use_block(
+                "report_findings",
+                {
+                    "epc_contractor": "Signal Energy",
+                    "confidence": "possible",
+                    "sources": [],
+                    "reasoning": "Found after reflection.",
+                },
+                block_id="tool-2",
+            )
+        ],
     )
 
     client = AsyncMock()
@@ -103,8 +123,14 @@ async def test_reflection_retry_then_report():
     with patch("src.research.execute_tool", new_callable=AsyncMock) as mock_exec:
         mock_exec.return_value = {"tasks": [], "message": "No plan"}
         result, log, tokens = await _run_reflection(
-            client, original, "session-1", [], MagicMock(content=[]), [],
-            agent_log=[], total_tokens=0,
+            client,
+            original,
+            "session-1",
+            [],
+            MagicMock(content=[]),
+            [],
+            agent_log=[],
+            total_tokens=0,
         )
 
     assert result.epc_contractor == "Signal Energy"
@@ -128,8 +154,14 @@ async def test_reflection_max_retries_fallback():
     with patch("src.research.execute_tool", new_callable=AsyncMock) as mock_exec:
         mock_exec.return_value = {"results": []}
         result, log, tokens = await _run_reflection(
-            client, original, "session-1", [], MagicMock(content=[]), [],
-            agent_log=[], total_tokens=0,
+            client,
+            original,
+            "session-1",
+            [],
+            MagicMock(content=[]),
+            [],
+            agent_log=[],
+            total_tokens=0,
         )
 
     # Should fall back to original after max retries
@@ -143,16 +175,27 @@ async def test_reflection_max_retries_fallback():
 async def test_reflection_api_error_returns_original():
     """API error during reflection — returns original result gracefully."""
     import anthropic
+
     original = AgentResult(epc_contractor="Blattner", confidence="confirmed")
 
     client = AsyncMock()
-    client.messages.create = AsyncMock(side_effect=anthropic.APIError(
-        message="Rate limited", request=MagicMock(), body=None,
-    ))
+    client.messages.create = AsyncMock(
+        side_effect=anthropic.APIError(
+            message="Rate limited",
+            request=MagicMock(),
+            body=None,
+        )
+    )
 
     result, log, tokens = await _run_reflection(
-        client, original, "session-1", [], MagicMock(content=[]), [],
-        agent_log=[], total_tokens=0,
+        client,
+        original,
+        "session-1",
+        [],
+        MagicMock(content=[]),
+        [],
+        agent_log=[],
+        total_tokens=0,
     )
     assert result.epc_contractor == "Blattner"
     assert result.confidence == "confirmed"

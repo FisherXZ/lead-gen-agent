@@ -11,8 +11,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from ._base import validate_uuid
 from ..db import get_client
+from ._base import validate_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,9 @@ DEFINITION = {
             },
             "source_method": {
                 "type": "string",
-                "description": "How found: 'linkedin', 'hubspot', 'exa', 'epc_website', 'osha', 'web_search'.",
+                "description": (
+                    "How found: 'linkedin', 'hubspot', 'exa', 'epc_website', 'osha', 'web_search'."
+                ),
             },
             "source_url": {
                 "type": ["string", "null"],
@@ -86,10 +88,15 @@ class Input(BaseModel):
     linkedin_headline: str | None = Field(None)
     linkedin_location: str | None = Field(None)
     linkedin_experience: list[dict] | None = Field(None, description="Work history from Apify")
-    source_method: str = Field(..., description="How found: 'linkedin', 'hubspot', 'exa', 'epc_website', 'osha', 'web_search'")
+    source_method: str = Field(
+        ...,
+        description="How found: 'linkedin', 'hubspot', 'exa', 'epc_website', 'osha', 'web_search'",
+    )
     source_url: str | None = Field(None)
     hubspot_contact_id: str | None = Field(None)
-    relevance_note: str | None = Field(None, description="Why this contact is relevant to the project")
+    relevance_note: str | None = Field(
+        None, description="Why this contact is relevant to the project"
+    )
 
 
 async def execute(tool_input: dict) -> dict:

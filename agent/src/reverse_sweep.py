@@ -35,11 +35,11 @@ import asyncio
 import json
 import logging
 import os
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 import anthropic
-import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +50,11 @@ HAIKU_MODEL = "claude-haiku-4-5-20251001"
 # Data types
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class SweepCandidate:
     """A potential project-EPC match found by a sweep source."""
+
     project_name_hint: str
     state: str = ""
     mw_hint: float = 0
@@ -65,6 +67,7 @@ class SweepCandidate:
 @dataclass
 class SweepMatch:
     """A confirmed match between a candidate and a project."""
+
     project_id: str
     project_name: str
     epc_name: str
@@ -79,6 +82,7 @@ class SweepMatch:
 @dataclass
 class SweepProgress:
     """Progress update for SSE streaming."""
+
     epc_name: str
     status: str  # "searching", "matching", "completed", "error"
     candidates_found: int = 0
@@ -89,6 +93,7 @@ class SweepProgress:
 @dataclass
 class SweepResult:
     """Final result of the entire reverse sweep."""
+
     epcs_processed: int = 0
     total_candidates: int = 0
     total_matches: int = 0
@@ -100,12 +105,14 @@ class SweepResult:
 # SweepSource Protocol
 # ---------------------------------------------------------------------------
 
+
 @runtime_checkable
 class SweepSource(Protocol):
     """Interface for reverse-sweep data sources.
 
     Each source searches for an EPC's projects and returns candidates.
     """
+
     name: str
 
     async def search(self, epc_name: str, **kwargs: Any) -> list[SweepCandidate]:
@@ -117,8 +124,10 @@ class SweepSource(Protocol):
 # Source adapters (wrap existing tools)
 # ---------------------------------------------------------------------------
 
+
 class EdgarSweepSource:
     """Search SEC EDGAR for an EPC's contract disclosures."""
+
     name = "sec_edgar"
 
     async def search(self, epc_name: str, **kwargs: Any) -> list[SweepCandidate]:
@@ -135,19 +144,22 @@ class EdgarSweepSource:
                 continue
 
             for hit in result.get("results", []):
-                candidates.append(SweepCandidate(
-                    project_name_hint=hit.get("snippet", "")[:200],
-                    source_type="sec_edgar",
-                    source_url=hit.get("url", ""),
-                    excerpt=hit.get("snippet", ""),
-                    epc_name=epc_name,
-                ))
+                candidates.append(
+                    SweepCandidate(
+                        project_name_hint=hit.get("snippet", "")[:200],
+                        source_type="sec_edgar",
+                        source_url=hit.get("url", ""),
+                        excerpt=hit.get("snippet", ""),
+                        epc_name=epc_name,
+                    )
+                )
 
         return candidates
 
 
 class OshaSweepSource:
     """Search OSHA inspection records for an EPC's construction sites."""
+
     name = "osha"
 
     async def search(self, epc_name: str, **kwargs: Any) -> list[SweepCandidate]:
@@ -162,20 +174,26 @@ class OshaSweepSource:
         for record in result.get("results", []):
             address = record.get("address", "")
             state = record.get("state", "")
-            candidates.append(SweepCandidate(
-                project_name_hint=f"Construction site: {address}",
-                state=state,
-                source_type="osha_inspection",
-                source_url=record.get("detail_url", ""),
-                excerpt=f"{record.get('employer_name', '')} inspected at {address} on {record.get('inspection_date', '')}",
-                epc_name=epc_name,
-            ))
+            candidates.append(
+                SweepCandidate(
+                    project_name_hint=f"Construction site: {address}",
+                    state=state,
+                    source_type="osha_inspection",
+                    source_url=record.get("detail_url", ""),
+                    excerpt=(
+                        f"{record.get('employer_name', '')} inspected at "
+                        f"{address} on {record.get('inspection_date', '')}"
+                    ),
+                    epc_name=epc_name,
+                )
+            )
 
         return candidates
 
 
 class PortfolioSweepSource:
     """Fetch an EPC's portfolio page and extract project mentions."""
+
     name = "portfolio"
 
     async def search(self, epc_name: str, **kwargs: Any) -> list[SweepCandidate]:
@@ -200,20 +218,23 @@ class PortfolioSweepSource:
         candidates = []
         # Simple heuristic: look for MW mentions near project names
         import re
+
         for match in re.finditer(r"(\d{2,4})\s*MW", text):
             # Grab surrounding context
             start = max(0, match.start() - 100)
             end = min(len(text), match.end() + 100)
             context = text[start:end].strip()
             mw = float(match.group(1))
-            candidates.append(SweepCandidate(
-                project_name_hint=context[:200],
-                mw_hint=mw,
-                source_type="epc_portfolio",
-                source_url=portfolio_url,
-                excerpt=context[:300],
-                epc_name=epc_name,
-            ))
+            candidates.append(
+                SweepCandidate(
+                    project_name_hint=context[:200],
+                    mw_hint=mw,
+                    source_type="epc_portfolio",
+                    source_url=portfolio_url,
+                    excerpt=context[:300],
+                    epc_name=epc_name,
+                )
+            )
 
         return candidates
 
@@ -222,9 +243,11 @@ class PortfolioSweepSource:
 # Project matching
 # ---------------------------------------------------------------------------
 
+
 def _normalize(s: str) -> str:
     """Normalize a string for fuzzy comparison."""
     import re
+
     return re.sub(r"[^a-z0-9 ]", "", s.lower()).strip()
 
 
@@ -258,17 +281,19 @@ def match_candidates_to_projects(
             continue
 
         if best_score >= 0.7:
-            strong.append(SweepMatch(
-                project_id=best_project["id"],
-                project_name=best_project.get("project_name", ""),
-                epc_name=candidate.epc_name,
-                confidence="possible",
-                source_type=candidate.source_type,
-                source_url=candidate.source_url,
-                excerpt=candidate.excerpt,
-                match_method=best_method,
-                match_score=best_score,
-            ))
+            strong.append(
+                SweepMatch(
+                    project_id=best_project["id"],
+                    project_name=best_project.get("project_name", ""),
+                    epc_name=candidate.epc_name,
+                    confidence="possible",
+                    source_type=candidate.source_type,
+                    source_url=candidate.source_url,
+                    excerpt=candidate.excerpt,
+                    match_method=best_method,
+                    match_score=best_score,
+                )
+            )
         elif best_score >= 0.4:
             ambiguous.append((candidate, best_project))
 
@@ -296,7 +321,14 @@ def _score_match(candidate: SweepCandidate, project: dict) -> tuple[float, str]:
             method = "name"
         elif len(pname_norm) > 5:
             # Partial match — check if major words overlap
-            pname_words = set(pname_norm.split()) - {"solar", "project", "energy", "power", "llc", "inc"}
+            pname_words = set(pname_norm.split()) - {
+                "solar",
+                "project",
+                "energy",
+                "power",
+                "llc",
+                "inc",
+            }
             hint_words = set(hint_norm.split())
             if pname_words and pname_words.issubset(hint_words):
                 score += 0.3
@@ -334,6 +366,7 @@ def _score_match(candidate: SweepCandidate, project: dict) -> tuple[float, str]:
 # Haiku disambiguation
 # ---------------------------------------------------------------------------
 
+
 async def disambiguate_with_haiku(
     candidate: SweepCandidate,
     project: dict,
@@ -347,7 +380,8 @@ async def disambiguate_with_haiku(
     if not key:
         return "unsure"
 
-    prompt = f"""You are matching solar project data. Does this SEC/OSHA record refer to the same project in our database?
+    prompt = f"""You are matching solar project data. Does this SEC/OSHA \
+record refer to the same project in our database?
 
 **Record found:**
 {candidate.excerpt[:500]}
@@ -355,12 +389,13 @@ Source: {candidate.source_type}
 EPC: {candidate.epc_name}
 
 **Project in database:**
-Name: {project.get('project_name', 'Unknown')}
-Developer: {project.get('developer', 'Unknown')}
-State: {project.get('state', 'Unknown')}
-Capacity: {project.get('mw_capacity', 'Unknown')} MW
+Name: {project.get("project_name", "Unknown")}
+Developer: {project.get("developer", "Unknown")}
+State: {project.get("state", "Unknown")}
+Capacity: {project.get("mw_capacity", "Unknown")} MW
 
-Answer ONLY "yes", "no", or "unsure". Consider: name similarity, state match, MW capacity match (DC vs AC can differ by 20-30%), and developer match."""
+Answer ONLY "yes", "no", or "unsure". Consider: name similarity, state \
+match, MW capacity match (DC vs AC can differ by 20-30%), and developer match."""
 
     try:
         client = anthropic.AsyncAnthropic(api_key=key)
@@ -384,18 +419,22 @@ Answer ONLY "yes", "no", or "unsure". Consider: name similarity, state match, MW
 # Discovery creation
 # ---------------------------------------------------------------------------
 
+
 def _create_sweep_discovery(match: SweepMatch) -> dict | None:
     """Create an epc_discovery record from a sweep match.
 
     Returns the created discovery dict, or None if creation fails.
     """
-    from .db import get_client, get_active_discovery
+    from .db import get_active_discovery, get_client
 
     # Skip if project already has a non-rejected discovery
     existing = get_active_discovery(match.project_id)
     if existing:
-        logger.info("Skipping %s — already has discovery (status: %s)",
-                     match.project_name, existing.get("review_status"))
+        logger.info(
+            "Skipping %s — already has discovery (status: %s)",
+            match.project_name,
+            existing.get("review_status"),
+        )
         return None
 
     client = get_client()
@@ -403,25 +442,29 @@ def _create_sweep_discovery(match: SweepMatch) -> dict | None:
         "project_id": match.project_id,
         "epc_contractor": match.epc_name,
         "confidence": match.confidence,
-        "sources": [{
-            "channel": match.source_type,
-            "url": match.source_url,
-            "excerpt": match.excerpt[:500],
-            "reliability": "medium",
-            "source_method": match.source_type,
-        }],
-        "reasoning": json.dumps({
-            "summary": f"Reverse-lookup match: {match.epc_name} found via {match.source_type} "
-                       f"(match method: {match.match_method}, score: {match.match_score:.2f})",
-            "supporting_evidence": [
-                f"Source: {match.source_type} — {match.excerpt[:200]}",
-                f"Match method: {match.match_method} with score {match.match_score:.2f}",
-            ],
-            "gaps": [
-                "This is an automated reverse-lookup match — human review required",
-                "Confidence is 'possible' — additional forward-lookup research recommended",
-            ],
-        }),
+        "sources": [
+            {
+                "channel": match.source_type,
+                "url": match.source_url,
+                "excerpt": match.excerpt[:500],
+                "reliability": "medium",
+                "source_method": match.source_type,
+            }
+        ],
+        "reasoning": json.dumps(
+            {
+                "summary": f"Reverse-lookup match: {match.epc_name} found via {match.source_type} "
+                f"(match method: {match.match_method}, score: {match.match_score:.2f})",
+                "supporting_evidence": [
+                    f"Source: {match.source_type} — {match.excerpt[:200]}",
+                    f"Match method: {match.match_method} with score {match.match_score:.2f}",
+                ],
+                "gaps": [
+                    "This is an automated reverse-lookup match — human review required",
+                    "Confidence is 'possible' — additional forward-lookup research recommended",
+                ],
+            }
+        ),
         "review_status": "pending",
         "searches_performed": [f"reverse_sweep:{match.source_type}:{match.epc_name}"],
         "tokens_used": 0,
@@ -466,7 +509,6 @@ async def run_reverse_sweep(
     """
     global _active_sweep_id
     from .db import get_client
-    from .knowledge_base import resolve_entity
 
     result = SweepResult()
 
@@ -487,9 +529,13 @@ async def run_reverse_sweep(
     if not epcs:
         logger.info("No EPC entities found — run seed_epc_entities first")
         if on_progress:
-            await on_progress(SweepProgress(
-                epc_name="", status="completed", message="No EPC entities found",
-            ))
+            await on_progress(
+                SweepProgress(
+                    epc_name="",
+                    status="completed",
+                    message="No EPC entities found",
+                )
+            )
         return result
 
     # Load all projects for matching (projects without accepted EPC)
@@ -510,17 +556,17 @@ async def run_reverse_sweep(
         result.epcs_processed += 1
 
         if on_progress:
-            await on_progress(SweepProgress(
-                epc_name=epc_name, status="searching",
-                message=f"Searching {len(sources)} sources for {epc_name}",
-            ))
+            await on_progress(
+                SweepProgress(
+                    epc_name=epc_name,
+                    status="searching",
+                    message=f"Searching {len(sources)} sources for {epc_name}",
+                )
+            )
 
         # Search all sources concurrently for this EPC
         all_candidates: list[SweepCandidate] = []
-        search_tasks = [
-            source.search(epc_name, entity=epc)
-            for source in sources
-        ]
+        search_tasks = [source.search(epc_name, entity=epc) for source in sources]
 
         try:
             source_results = await asyncio.gather(*search_tasks, return_exceptions=True)
@@ -531,8 +577,7 @@ async def run_reverse_sweep(
 
         for i, sr in enumerate(source_results):
             if isinstance(sr, Exception):
-                logger.warning("Source %s failed for %s: %s",
-                               sources[i].name, epc_name, sr)
+                logger.warning("Source %s failed for %s: %s", sources[i].name, epc_name, sr)
                 result.errors.append(f"{epc_name}/{sources[i].name}: {sr}")
             elif isinstance(sr, list):
                 all_candidates.extend(sr)
@@ -541,20 +586,30 @@ async def run_reverse_sweep(
 
         if not all_candidates:
             if on_progress:
-                await on_progress(SweepProgress(
-                    epc_name=epc_name, status="completed",
-                    candidates_found=0, matches_found=0,
-                    message=f"No candidates found for {epc_name}",
-                ))
+                await on_progress(
+                    SweepProgress(
+                        epc_name=epc_name,
+                        status="completed",
+                        candidates_found=0,
+                        matches_found=0,
+                        message=f"No candidates found for {epc_name}",
+                    )
+                )
             continue
 
         # Match candidates to projects
         if on_progress:
-            await on_progress(SweepProgress(
-                epc_name=epc_name, status="matching",
-                candidates_found=len(all_candidates),
-                message=f"Matching {len(all_candidates)} candidates against {len(projects)} projects",
-            ))
+            await on_progress(
+                SweepProgress(
+                    epc_name=epc_name,
+                    status="matching",
+                    candidates_found=len(all_candidates),
+                    message=(
+                        f"Matching {len(all_candidates)} candidates "
+                        f"against {len(projects)} projects"
+                    ),
+                )
+            )
 
         strong_matches, ambiguous_pairs = match_candidates_to_projects(all_candidates, projects)
 
@@ -562,17 +617,19 @@ async def run_reverse_sweep(
         for candidate, project in ambiguous_pairs:
             answer = await disambiguate_with_haiku(candidate, project, api_key=api_key)
             if answer == "yes":
-                strong_matches.append(SweepMatch(
-                    project_id=project["id"],
-                    project_name=project.get("project_name", ""),
-                    epc_name=candidate.epc_name,
-                    confidence="possible",
-                    source_type=candidate.source_type,
-                    source_url=candidate.source_url,
-                    excerpt=candidate.excerpt,
-                    match_method="haiku_disambiguation",
-                    match_score=0.5,
-                ))
+                strong_matches.append(
+                    SweepMatch(
+                        project_id=project["id"],
+                        project_name=project.get("project_name", ""),
+                        epc_name=candidate.epc_name,
+                        confidence="possible",
+                        source_type=candidate.source_type,
+                        source_url=candidate.source_url,
+                        excerpt=candidate.excerpt,
+                        match_method="haiku_disambiguation",
+                        match_score=0.5,
+                    )
+                )
 
         # Deduplicate matches by project_id
         seen_projects: set[str] = set()
@@ -590,11 +647,17 @@ async def run_reverse_sweep(
                 result.total_matches += 1
 
         if on_progress:
-            await on_progress(SweepProgress(
-                epc_name=epc_name, status="completed",
-                candidates_found=len(all_candidates),
-                matches_found=len(unique_matches),
-                message=f"{epc_name}: {len(all_candidates)} candidates, {len(unique_matches)} matches",
-            ))
+            await on_progress(
+                SweepProgress(
+                    epc_name=epc_name,
+                    status="completed",
+                    candidates_found=len(all_candidates),
+                    matches_found=len(unique_matches),
+                    message=(
+                        f"{epc_name}: {len(all_candidates)} candidates, "
+                        f"{len(unique_matches)} matches"
+                    ),
+                )
+            )
 
     return result

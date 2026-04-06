@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
-from src.tools.remember import DEFINITION as REMEMBER_DEF, execute as remember_execute
-from src.tools.recall import DEFINITION as RECALL_DEF, execute as recall_execute
-
+from src.tools.recall import DEFINITION as RECALL_DEF
+from src.tools.recall import execute as recall_execute
+from src.tools.remember import DEFINITION as REMEMBER_DEF
+from src.tools.remember import execute as remember_execute
 
 # ---------------------------------------------------------------------------
 # remember tool
 # ---------------------------------------------------------------------------
+
 
 class TestRememberDefinition:
     def test_name(self):
@@ -29,12 +31,14 @@ class TestRememberExecute:
     async def test_remember_stores_to_db(self, mock_save):
         mock_save.return_value = {"id": "abc-123"}
 
-        result = await remember_execute({
-            "memory": "Blattner is the EPC for Lone Star Solar",
-            "scope": "global",
-            "memory_key": "blattner-lone-star",
-            "importance": 8,
-        })
+        result = await remember_execute(
+            {
+                "memory": "Blattner is the EPC for Lone Star Solar",
+                "scope": "global",
+                "memory_key": "blattner-lone-star",
+                "importance": 8,
+            }
+        )
 
         mock_save.assert_called_once_with(
             memory="Blattner is the EPC for Lone Star Solar",
@@ -71,10 +75,12 @@ class TestRememberExecute:
 
     @pytest.mark.asyncio
     async def test_remember_requires_project_id(self):
-        result = await remember_execute({
-            "memory": "Some project fact",
-            "scope": "project",
-        })
+        result = await remember_execute(
+            {
+                "memory": "Some project fact",
+                "scope": "project",
+            }
+        )
         assert "error" in result
         assert "project_id" in result["error"].lower()
 
@@ -92,6 +98,7 @@ class TestRememberExecute:
 # ---------------------------------------------------------------------------
 # recall tool
 # ---------------------------------------------------------------------------
+
 
 class TestRecallDefinition:
     def test_name(self):
@@ -151,9 +158,11 @@ class TestRecallExecute:
 # Registry integration
 # ---------------------------------------------------------------------------
 
+
 class TestRegistryIntegration:
     def test_tools_registered(self):
         from src.tools import get_tool_names
+
         names = get_tool_names()
         assert "remember" in names
         assert "recall" in names

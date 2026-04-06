@@ -34,7 +34,11 @@ DEFINITION = {
         "properties": {
             "query": {
                 "type": "string",
-                "description": "The search query. Be specific: include developer name, project name, state, and 'EPC' or 'construction contractor'.",
+                "description": (
+                    "The search query. Be specific: include developer name, "
+                    "project name, state, and 'EPC' or "
+                    "'construction contractor'."
+                ),
             },
             "max_results": {
                 "type": "integer",
@@ -94,7 +98,9 @@ async def execute(tool_input: dict) -> dict:
     wait=tenacity.wait_exponential(multiplier=1, min=2, max=8),
     reraise=True,
     before_sleep=lambda rs: logger.info(
-        "tavily_search retry #%d: %s", rs.attempt_number, rs.outcome.exception(),
+        "tavily_search retry #%d: %s",
+        rs.attempt_number,
+        rs.outcome.exception(),
     ),
 )
 def _tavily_search_with_retry(api_key: str, query: str, max_results: int) -> dict:

@@ -116,7 +116,9 @@ def make_agent_result(**overrides):
     return AgentResult(**defaults)
 
 
-def make_claude_response(*, stop_reason="end_turn", content=None, input_tokens=100, output_tokens=50):
+def make_claude_response(
+    *, stop_reason="end_turn", content=None, input_tokens=100, output_tokens=50
+):
     """Build a mock Anthropic Messages response."""
     resp = MagicMock()
     resp.stop_reason = stop_reason

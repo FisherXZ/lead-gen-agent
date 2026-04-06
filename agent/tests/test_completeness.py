@@ -1,19 +1,17 @@
 """Tests for completeness evaluation (Harvey AI pattern)."""
 
-import pytest
-
 from src.completeness import (
     CHECKPOINTS,
-    evaluate_completeness,
     _has_new_signals,
-    _is_portfolio_check,
     _is_epc_domain,
+    _is_portfolio_check,
+    evaluate_completeness,
 )
-
 
 # ---------------------------------------------------------------------------
 # Checkpoint configuration
 # ---------------------------------------------------------------------------
+
 
 class TestCheckpoints:
     def test_checkpoint_iterations(self):
@@ -29,12 +27,13 @@ class TestCheckpoints:
 # Portfolio check detection
 # ---------------------------------------------------------------------------
 
+
 class TestPortfolioCheck:
     def test_site_query_detected(self):
         assert _is_portfolio_check('site:mccarthybuilding.com "NextEra"') is True
 
     def test_site_query_mortenson(self):
-        assert _is_portfolio_check('site:mortenson.com solar EPC Texas') is True
+        assert _is_portfolio_check("site:mortenson.com solar EPC Texas") is True
 
     def test_non_site_query(self):
         assert _is_portfolio_check("NextEra solar EPC Texas") is False
@@ -50,6 +49,7 @@ class TestPortfolioCheck:
 # EPC domain detection
 # ---------------------------------------------------------------------------
 
+
 class TestEpcDomain:
     def test_known_domain(self):
         assert _is_epc_domain("https://www.mccarthybuilding.com/projects/solar") is True
@@ -64,6 +64,7 @@ class TestEpcDomain:
 # ---------------------------------------------------------------------------
 # New signals detection
 # ---------------------------------------------------------------------------
+
 
 class TestNewSignals:
     def test_epc_mention_detected(self):
@@ -89,7 +90,18 @@ class TestNewSignals:
 
     def test_non_epc_content(self):
         outputs = [
-            {"results": [{"title": "Solar panel efficiency improvements in 2026", "url": "https://example.com", "content": "New solar panel technology achieves 25% efficiency gains in laboratory testing according to researchers"}]},
+            {
+                "results": [
+                    {
+                        "title": "Solar panel efficiency improvements in 2026",
+                        "url": "https://example.com",
+                        "content": (
+                            "New solar panel technology achieves 25% efficiency "
+                            "gains in laboratory testing according to researchers"
+                        ),
+                    }
+                ]
+            },
         ]
         assert _has_new_signals(outputs) is False
 
@@ -97,6 +109,7 @@ class TestNewSignals:
 # ---------------------------------------------------------------------------
 # Full evaluation — iteration 6 (gentle)
 # ---------------------------------------------------------------------------
+
 
 class TestGentleCheckpoint:
     def test_no_gaps_with_signals_returns_continue(self):
@@ -106,7 +119,10 @@ class TestGentleCheckpoint:
             {"tool": "web_search", "input": {"query": "NextEra solar EPC"}},
             {"tool": "web_search", "input": {"query": 'site:mccarthybuilding.com "NextEra"'}},
             {"tool": "web_search", "input": {"query": 'site:mortenson.com "NextEra"'}},
-            {"tool": "fetch_page", "input": {"url": "https://mccarthybuilding.com/projects/nextera"}},
+            {
+                "tool": "fetch_page",
+                "input": {"url": "https://mccarthybuilding.com/projects/nextera"},
+            },
         ]
         recent = [
             {"results": [{"title": "McCarthy Building solar EPC contractor for NextEra project"}]},
@@ -149,13 +165,11 @@ class TestGentleCheckpoint:
 # Full evaluation — iteration 12 (firm)
 # ---------------------------------------------------------------------------
 
+
 class TestFirmCheckpoint:
     def test_no_new_signals_wrap_up(self):
         """Diminishing returns — should firmly suggest wrap up."""
-        agent_log = [
-            {"tool": "web_search", "input": {"query": f"search {i}"}}
-            for i in range(10)
-        ]
+        agent_log = [{"tool": "web_search", "input": {"query": f"search {i}"}} for i in range(10)]
         recent = [{"error": "no results"}, {"results": []}]
         result = evaluate_completeness(12, agent_log, recent)
         assert result["recommendation"] == "wrap_up"
@@ -164,10 +178,7 @@ class TestFirmCheckpoint:
 
     def test_still_finding_signals_continue(self):
         """New signals at iteration 12 — let it continue with a nudge."""
-        agent_log = [
-            {"tool": "web_search", "input": {"query": f"search {i}"}}
-            for i in range(10)
-        ]
+        agent_log = [{"tool": "web_search", "input": {"query": f"search {i}"}} for i in range(10)]
         recent = [
             {"results": [{"title": "Blattner selected as EPC contractor for 300MW solar"}]},
         ]
@@ -181,13 +192,11 @@ class TestFirmCheckpoint:
 # Full evaluation — iteration 18 (mandatory)
 # ---------------------------------------------------------------------------
 
+
 class TestMandatoryCheckpoint:
     def test_mandatory_always_wraps_up(self):
         """Iteration 18 — must wrap up regardless of signals."""
-        agent_log = [
-            {"tool": "web_search", "input": {"query": f"search {i}"}}
-            for i in range(15)
-        ]
+        agent_log = [{"tool": "web_search", "input": {"query": f"search {i}"}} for i in range(15)]
         recent = [
             {"results": [{"title": "EPC contractor awarded huge solar project"}]},
         ]
@@ -200,6 +209,7 @@ class TestMandatoryCheckpoint:
 # ---------------------------------------------------------------------------
 # Metrics accuracy
 # ---------------------------------------------------------------------------
+
 
 class TestMetrics:
     def test_search_count(self):

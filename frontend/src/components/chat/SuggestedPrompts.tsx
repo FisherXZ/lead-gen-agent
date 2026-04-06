@@ -1,10 +1,12 @@
 "use client";
 
 const PROMPTS = [
-  "Show me the biggest Texas solar projects",
-  "Find ERCOT projects over 200 MW",
-  "Research projects needing EPC discovery",
-  "Show confirmed EPCs",
+  "What's new in ERCOT this week?",
+  "What do we know about Blattner Energy?",
+  "Find contacts at Signal Energy",
+  "Any projects over 300MW entering construction?",
+  "Show me all pending reviews",
+  "Which EPCs are most active in CAISO?",
 ];
 
 interface SuggestedPromptsProps {

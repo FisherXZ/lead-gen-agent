@@ -7,16 +7,18 @@ Coverage:
   2. Tool WITH Input model + valid input → executes successfully, defaults applied
   3. Tool WITHOUT Input model → unaffected (backwards compatibility)
 """
+
 from __future__ import annotations
 
-import sys
 import types
+
 import pytest
 from pydantic import BaseModel
 
 # ---------------------------------------------------------------------------
 # Helpers: build minimal fake tool modules without touching the real registry
 # ---------------------------------------------------------------------------
+
 
 def _make_tool_with_input(schema: type[BaseModel], execute_result: dict) -> types.ModuleType:
     """Return a mock module that has both an Input model and an execute coroutine."""
@@ -47,6 +49,7 @@ def _make_tool_without_input(execute_result: dict) -> types.ModuleType:
 # Fixtures: inject mock modules into the registry for each test
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def patched_registry(monkeypatch):
     """Patch _REGISTRY in src.tools and return it for manipulation."""
@@ -70,6 +73,7 @@ def patched_registry(monkeypatch):
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_invalid_input_returns_validation_error(patched_registry):

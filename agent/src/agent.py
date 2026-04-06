@@ -4,9 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
-
-import anthropic
 
 from .models import AgentResult, EpcSource
 from .prompts import SYSTEM_PROMPT, build_user_message
@@ -114,6 +111,7 @@ async def run_agent_async(
     Returns (result, agent_log, total_tokens).
     """
     from .db import get_anthropic_client
+
     client = get_anthropic_client(api_key)
 
     messages = [{"role": "user", "content": build_user_message(project, knowledge_context)}]
@@ -127,22 +125,26 @@ async def run_agent_async(
         response = await client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=4096,
-            system=[{
-                "type": "text",
-                "text": SYSTEM_PROMPT,
-                "cache_control": {"type": "ephemeral"},
-            }],
+            system=[
+                {
+                    "type": "text",
+                    "text": SYSTEM_PROMPT,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
             tools=cached_tools,
             messages=messages,
         )
 
         total_tokens += response.usage.input_tokens + response.usage.output_tokens
-        agent_log.append({
-            "iteration": iteration,
-            "stop_reason": response.stop_reason,
-            "input_tokens": response.usage.input_tokens,
-            "output_tokens": response.usage.output_tokens,
-        })
+        agent_log.append(
+            {
+                "iteration": iteration,
+                "stop_reason": response.stop_reason,
+                "input_tokens": response.usage.input_tokens,
+                "output_tokens": response.usage.output_tokens,
+            }
+        )
 
         # If the model stopped without tool use, we're done (shouldn't happen normally)
         if response.stop_reason == "end_turn":
@@ -168,18 +170,22 @@ async def run_agent_async(
 
                 try:
                     results = tavily_search(query, max_results=max_results)
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": json.dumps(results),
-                    })
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": json.dumps(results),
+                        }
+                    )
                 except Exception as e:
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": json.dumps({"error": str(e)}),
-                        "is_error": True,
-                    })
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": json.dumps({"error": str(e)}),
+                            "is_error": True,
+                        }
+                    )
 
             elif block.name == "report_findings":
                 inp = block.input
@@ -203,11 +209,13 @@ async def run_agent_async(
                     searches_performed=inp.get("searches_performed", []),
                 )
                 # Acknowledge the tool call so the conversation is well-formed
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": "Findings recorded. Thank you.",
-                })
+                tool_results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": "Findings recorded. Thank you.",
+                    }
+                )
 
         # If report_findings was called, we're done
         if report_result is not None:
@@ -218,7 +226,11 @@ async def run_agent_async(
         messages.append({"role": "user", "content": tool_results})
 
     # Max iterations reached — return whatever we have
-    return AgentResult(reasoning="Max iterations reached without findings."), agent_log, total_tokens
+    return (
+        AgentResult(reasoning="Max iterations reached without findings."),
+        agent_log,
+        total_tokens,
+    )
 
 
 def run_agent(project: dict) -> tuple[AgentResult, list[dict], int]:

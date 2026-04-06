@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import os
 
-import httpx
 import jwt
-from jwt import PyJWKClient
 from fastapi import HTTPException, Request
+from jwt import PyJWKClient
 
 # Cache the JWKS client so we don't re-fetch keys on every request.
 _jwks_client: PyJWKClient | None = None
@@ -41,7 +40,7 @@ def verify_token(request: Request) -> dict:
     try:
         header = jwt.get_unverified_header(token)
     except jwt.DecodeError:
-        raise HTTPException(status_code=401, detail="Malformed token")
+        raise HTTPException(status_code=401, detail="Malformed token") from None
 
     alg = header.get("alg", "")
 
@@ -52,7 +51,10 @@ def verify_token(request: Request) -> dict:
             if not secret:
                 raise HTTPException(status_code=500, detail="SUPABASE_JWT_SECRET not configured")
             payload = jwt.decode(
-                token, secret, algorithms=["HS256"], audience="authenticated",
+                token,
+                secret,
+                algorithms=["HS256"],
+                audience="authenticated",
             )
         else:
             # ES256 / asymmetric: fetch public key from JWKS endpoint
@@ -66,9 +68,9 @@ def verify_token(request: Request) -> dict:
             )
         return payload
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired")
+        raise HTTPException(status_code=401, detail="Token expired") from None
     except jwt.InvalidTokenError as e:
-        raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
+        raise HTTPException(status_code=401, detail=f"Invalid token: {e}") from e
 
 
 def _extract_user_id(payload: dict) -> str:

@@ -70,7 +70,9 @@ def compact_messages(
 
         user_msg = messages[user_idx]
         # Build a tool_use_id -> tool_name map from the preceding assistant message
-        tool_name_map = _build_tool_name_map(messages[assistant_idx] if assistant_idx is not None else None)
+        tool_name_map = _build_tool_name_map(
+            messages[assistant_idx] if assistant_idx is not None else None
+        )
 
         new_content = []
         for item in user_msg["content"]:

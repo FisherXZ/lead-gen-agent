@@ -51,7 +51,7 @@ class AgentJob:
         try:
             await asyncio.wait_for(event.wait(), timeout=timeout)
             return True
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return False
         finally:
             self._waiters.remove(event)
@@ -137,8 +137,7 @@ def _cleanup_old() -> None:
     """Remove jobs that completed more than _CLEANUP_AFTER seconds ago."""
     now = time.time()
     to_remove = [
-        jid for jid, j in _jobs.items()
-        if j.done and (now - j.created_at) > _CLEANUP_AFTER
+        jid for jid, j in _jobs.items() if j.done and (now - j.created_at) > _CLEANUP_AFTER
     ]
     for jid in to_remove:
         del _jobs[jid]

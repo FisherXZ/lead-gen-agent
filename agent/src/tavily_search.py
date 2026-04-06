@@ -45,12 +45,14 @@ def search(query: str, max_results: int = 5) -> list[dict]:
     )
     results = []
     for r in response.get("results", []):
-        results.append({
-            "title": r.get("title", ""),
-            "url": r.get("url", ""),
-            "content": r.get("content", ""),
-            "score": r.get("score", 0),
-        })
+        results.append(
+            {
+                "title": r.get("title", ""),
+                "url": r.get("url", ""),
+                "content": r.get("content", ""),
+                "score": r.get("score", 0),
+            }
+        )
 
     _cache[cache_key] = (now, results)
     return results

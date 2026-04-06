@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import os
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Missing API key returns helpful error
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_missing_api_key_returns_error():
@@ -29,6 +29,7 @@ async def test_missing_api_key_returns_error():
 # Empty query returns error
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_empty_query_returns_error():
     from src.tools.brave_search import execute
@@ -41,10 +42,11 @@ async def test_empty_query_returns_error():
 # Successful search parses response correctly
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 @patch.dict(os.environ, {"BRAVE_SEARCH_API_KEY": "test-brave-key"})
 async def test_successful_search():
-    from src.tools.brave_search import execute, _cache
+    from src.tools.brave_search import _cache, execute
 
     _cache.clear()
 
@@ -92,10 +94,11 @@ async def test_successful_search():
 # Caching works
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 @patch.dict(os.environ, {"BRAVE_SEARCH_API_KEY": "test-brave-key"})
 async def test_cache_avoids_duplicate_calls():
-    from src.tools.brave_search import execute, _cache
+    from src.tools.brave_search import _cache, execute
 
     _cache.clear()
 
@@ -119,6 +122,7 @@ async def test_cache_avoids_duplicate_calls():
 # ---------------------------------------------------------------------------
 # Tool is registered in the tool registry
 # ---------------------------------------------------------------------------
+
 
 def test_tool_registered():
     from src.tools import get_tool_names

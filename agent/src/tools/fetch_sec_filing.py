@@ -32,11 +32,29 @@ _ACCESSION_RE = re.compile(r"^\d{10}-\d{2}-\d{6}$")
 
 # Keywords for relevance filtering
 _EPC_KEYWORDS = {
-    "epc", "contractor", "construction", "engineering", "procurement",
-    "solar", "megawatt", "mw", "awarded", "selected",
-    "built by", "constructed by", "utility-scale", "commissioning",
-    "blattner", "mccarthy", "mortenson", "primoris", "rosendin",
-    "solv energy", "signal energy", "strata", "moss",
+    "epc",
+    "contractor",
+    "construction",
+    "engineering",
+    "procurement",
+    "solar",
+    "megawatt",
+    "mw",
+    "awarded",
+    "selected",
+    "built by",
+    "constructed by",
+    "utility-scale",
+    "commissioning",
+    "blattner",
+    "mccarthy",
+    "mortenson",
+    "primoris",
+    "rosendin",
+    "solv energy",
+    "signal energy",
+    "strata",
+    "moss",
 }
 
 
@@ -104,7 +122,11 @@ async def execute(tool_input: dict) -> dict:
                 "Get it from search_sec_edgar results (the 'cik' field)."
             }
         if not _ACCESSION_RE.match(accession):
-            return {"error": f"Invalid accession number format: {accession}. Expected: XXXXXXXXXX-XX-XXXXXX"}
+            return {
+                "error": (
+                    f"Invalid accession number format: {accession}. Expected: XXXXXXXXXX-XX-XXXXXX"
+                )
+            }
         url = _build_archives_url(cik, accession, primary_doc)
 
     if not url.startswith(("http://", "https://")):
@@ -197,7 +219,7 @@ async def _resolve_filing_document(index_url: str) -> str | None:
                     return f"{index_url.rstrip('/')}/{link}"
                 return link
 
-    except Exception:
+    except Exception:  # noqa: S110 — fallback to index URL on parse failure
         pass
 
     # Fallback: return the index URL and let the HTML extractor handle it
@@ -239,6 +261,7 @@ def _extract_from_pdf(url: str, pdf_bytes: bytes) -> dict:
 
     try:
         from src.skills.pdf.extractor import extract_text
+
         result = extract_text(pdf_bytes)
     except Exception as e:
         return {"error": f"PDF extraction failed: {e}"}
@@ -302,7 +325,9 @@ def _is_retryable(exc: BaseException) -> bool:
     wait=tenacity.wait_exponential(multiplier=1, min=2, max=8),
     reraise=True,
     before_sleep=lambda rs: logger.info(
-        "fetch_sec_filing retry #%d: %s", rs.attempt_number, rs.outcome.exception(),
+        "fetch_sec_filing retry #%d: %s",
+        rs.attempt_number,
+        rs.outcome.exception(),
     ),
 )
 async def _fetch_with_retry(url: str) -> httpx.Response:

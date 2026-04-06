@@ -33,18 +33,32 @@ HARD_STOP_ITERATION = 22
 
 # Tools available during standalone research
 RESEARCH_TOOLS = [
-    "web_search", "web_search_broad", "fetch_page", "query_knowledge_base",
-    "notify_progress", "research_scratchpad", "report_findings",
+    "web_search",
+    "web_search_broad",
+    "fetch_page",
+    "query_knowledge_base",
+    "notify_progress",
+    "research_scratchpad",
+    "report_findings",
     # Structured data source tools
-    "search_sec_edgar", "fetch_sec_filing", "search_osha",
-    "search_enr", "search_wiki_solar", "search_spw",
+    "search_sec_edgar",
+    "fetch_sec_filing",
+    "search_osha",
+    "search_enr",
+    "search_wiki_solar",
+    "search_spw",
 ]
 
 # Planning phase: KB + quick web/structured search + notify, no scratchpad or broad search
 PLANNING_TOOLS = [
-    "web_search", "fetch_page", "query_knowledge_base",
-    "search_sec_edgar", "search_wiki_solar", "search_spw",
-    "notify_progress", "report_findings",
+    "web_search",
+    "fetch_page",
+    "query_knowledge_base",
+    "search_sec_edgar",
+    "search_wiki_solar",
+    "search_spw",
+    "notify_progress",
+    "report_findings",
 ]
 MAX_PLANNING_ITERATIONS = 5
 
@@ -83,6 +97,7 @@ async def run_research(
         (result, agent_log, total_tokens)
     """
     from .db import get_anthropic_client
+
     client = get_anthropic_client(api_key)
 
     session_id = f"research-{project.get('id', 'unknown')}-{uuid4().hex[:8]}"
@@ -112,15 +127,15 @@ async def run_research(
             agent_log.append({"completeness_check": check})
             logger.info(
                 "Completeness check at effective iteration %d (raw %d): %s (%s)",
-                effective_iteration, iteration, check["recommendation"], check["level"],
+                effective_iteration,
+                iteration,
+                check["recommendation"],
+                check["level"],
             )
             if check["message"]:
                 # Inject into last tool_result message (append-only — preserves KV cache)
                 last_msg = messages[-1]
-                if (
-                    isinstance(last_msg.get("content"), list)
-                    and last_msg["content"]
-                ):
+                if isinstance(last_msg.get("content"), list) and last_msg["content"]:
                     last_msg["content"][-1]["content"] += check["message"]
 
         # Hard stop: at iteration 22+, strip all tools except report_findings
@@ -147,50 +162,66 @@ async def run_research(
                 client,
                 model=MODEL,
                 max_tokens=4096,
-                system=[{
-                    "type": "text",
-                    "text": RESEARCH_SYSTEM_PROMPT,
-                    "cache_control": {"type": "ephemeral"},
-                }],
+                system=[
+                    {
+                        "type": "text",
+                        "text": RESEARCH_SYSTEM_PROMPT,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ],
                 tools=active_tools,
                 messages=messages,
             )
         except anthropic.AuthenticationError as exc:
-            return AgentResult(
-                reasoning="Authentication failed.",
-                error=ResearchError(
-                    category="api_key_missing",
-                    message="Anthropic API key is invalid or missing.",
-                    detail=str(exc),
+            return (
+                AgentResult(
+                    reasoning="Authentication failed.",
+                    error=ResearchError(
+                        category="api_key_missing",
+                        message="Anthropic API key is invalid or missing.",
+                        detail=str(exc),
+                    ),
                 ),
-            ), agent_log, total_tokens
+                agent_log,
+                total_tokens,
+            )
         except anthropic.RateLimitError as exc:
             logger.warning("Rate limit exceeded after 3 retries: %s", exc)
-            return AgentResult(
-                reasoning="Anthropic API rate limit exceeded after retries.",
-                error=ResearchError(
-                    category="anthropic_error",
-                    message="Rate limit exceeded after 3 retries.",
-                    detail=str(exc),
+            return (
+                AgentResult(
+                    reasoning="Anthropic API rate limit exceeded after retries.",
+                    error=ResearchError(
+                        category="anthropic_error",
+                        message="Rate limit exceeded after 3 retries.",
+                        detail=str(exc),
+                    ),
                 ),
-            ), agent_log, total_tokens
+                agent_log,
+                total_tokens,
+            )
         except anthropic.APIError as exc:
-            return AgentResult(
-                reasoning=f"Anthropic API error: {exc}",
-                error=ResearchError(
-                    category="anthropic_error",
-                    message=f"Anthropic API error: {type(exc).__name__}",
-                    detail=str(exc),
+            return (
+                AgentResult(
+                    reasoning=f"Anthropic API error: {exc}",
+                    error=ResearchError(
+                        category="anthropic_error",
+                        message=f"Anthropic API error: {type(exc).__name__}",
+                        detail=str(exc),
+                    ),
                 ),
-            ), agent_log, total_tokens
+                agent_log,
+                total_tokens,
+            )
 
         total_tokens += response.usage.input_tokens + response.usage.output_tokens
-        agent_log.append({
-            "iteration": iteration,
-            "stop_reason": response.stop_reason,
-            "input_tokens": response.usage.input_tokens,
-            "output_tokens": response.usage.output_tokens,
-        })
+        agent_log.append(
+            {
+                "iteration": iteration,
+                "stop_reason": response.stop_reason,
+                "input_tokens": response.usage.input_tokens,
+                "output_tokens": response.usage.output_tokens,
+            }
+        )
 
         # 3d: Model stopped without tool use — end_turn without report_findings
         if response.stop_reason == "end_turn":
@@ -198,13 +229,17 @@ async def run_research(
             for block in response.content:
                 if block.type == "text":
                     text += block.text
-            return AgentResult(
-                reasoning=text or "Agent stopped without reporting findings.",
-                error=ResearchError(
-                    category="no_report",
-                    message="Agent ended without calling report_findings.",
+            return (
+                AgentResult(
+                    reasoning=text or "Agent stopped without reporting findings.",
+                    error=ResearchError(
+                        category="no_report",
+                        message="Agent ended without calling report_findings.",
+                    ),
                 ),
-            ), agent_log, total_tokens
+                agent_log,
+                total_tokens,
+            )
 
         # Process tool use blocks
         tool_results = []
@@ -219,29 +254,35 @@ async def run_research(
             if block.name == "report_findings":
                 # Parse structured findings into AgentResult
                 report_result = parse_report_findings(block.input)
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": "Findings recorded. Thank you.",
-                })
+                tool_results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": "Findings recorded. Thank you.",
+                    }
+                )
             else:
                 # Dispatch to shared tool handler
                 try:
                     result = await execute_tool(block.name, block.input)
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": json.dumps(result),
-                    })
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": json.dumps(result),
+                        }
+                    )
                     recent_tool_outputs.append(result)
                 except Exception as e:
                     error_result = {"error": str(e)}
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": json.dumps(error_result),
-                        "is_error": True,
-                    })
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": json.dumps(error_result),
+                            "is_error": True,
+                        }
+                    )
                     recent_tool_outputs.append(error_result)
 
         # If report_findings was called, we're done
@@ -266,7 +307,8 @@ async def run_research(
             # Append bail-out instruction to last real tool result
             tool_results[-1]["content"] += (
                 f"\n\nSYSTEM WARNING: {health_msg}. Tools are failing repeatedly. "
-                "Please call report_findings now with confidence 'unknown' and document what went wrong in reasoning."
+                "Please call report_findings now with confidence 'unknown' "
+                "and document what went wrong in reasoning."
             )
 
         # Feed tool results back and continue
@@ -286,13 +328,17 @@ async def run_research(
             )
 
     # 3c: Max iterations reached
-    return AgentResult(
-        reasoning="Research timed out after maximum iterations.",
-        error=ResearchError(
-            category="max_iterations",
-            message="Research timed out after maximum iterations without completing.",
+    return (
+        AgentResult(
+            reasoning="Research timed out after maximum iterations.",
+            error=ResearchError(
+                category="max_iterations",
+                message="Research timed out after maximum iterations without completing.",
+            ),
         ),
-    ), agent_log, total_tokens
+        agent_log,
+        total_tokens,
+    )
 
 
 async def run_research_plan(
@@ -314,6 +360,7 @@ async def run_research_plan(
         (plan_text, agent_log, total_tokens)
     """
     from .db import get_anthropic_client
+
     client = get_anthropic_client(api_key)
 
     user_msg = build_user_message(project, knowledge_context)
@@ -330,11 +377,13 @@ async def run_research_plan(
                 client,
                 model=MODEL,
                 max_tokens=4096,
-                system=[{
-                    "type": "text",
-                    "text": PLANNING_SYSTEM_PROMPT,
-                    "cache_control": {"type": "ephemeral"},
-                }],
+                system=[
+                    {
+                        "type": "text",
+                        "text": PLANNING_SYSTEM_PROMPT,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ],
                 tools=cached_tools,
                 messages=messages,
             )
@@ -342,12 +391,14 @@ async def run_research_plan(
             return f"Planning failed: {exc}", agent_log, total_tokens
 
         total_tokens += response.usage.input_tokens + response.usage.output_tokens
-        agent_log.append({
-            "iteration": iteration,
-            "stop_reason": response.stop_reason,
-            "input_tokens": response.usage.input_tokens,
-            "output_tokens": response.usage.output_tokens,
-        })
+        agent_log.append(
+            {
+                "iteration": iteration,
+                "stop_reason": response.stop_reason,
+                "input_tokens": response.usage.input_tokens,
+                "output_tokens": response.usage.output_tokens,
+            }
+        )
 
         if response.stop_reason == "end_turn":
             text = ""
@@ -375,26 +426,32 @@ async def run_research_plan(
                         plan_text += "\n\n" + "\n".join(f"- {e}" for e in evidence)
                 else:
                     plan_text = raw_reasoning
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": "Plan recorded. Awaiting approval.",
-                })
+                tool_results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": "Plan recorded. Awaiting approval.",
+                    }
+                )
             else:
                 try:
                     result = await execute_tool(block.name, block.input)
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": json.dumps(result),
-                    })
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": json.dumps(result),
+                        }
+                    )
                 except Exception as e:
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": json.dumps({"error": str(e)}),
-                        "is_error": True,
-                    })
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": json.dumps({"error": str(e)}),
+                            "is_error": True,
+                        }
+                    )
 
         if plan_text is not None:
             return plan_text, agent_log, total_tokens
@@ -402,6 +459,8 @@ async def run_research_plan(
         messages.append({"role": "assistant", "content": response.content})
         messages.append({"role": "user", "content": tool_results})
 
-    return "Planning timed out — could not produce a plan within iteration limit.", agent_log, total_tokens
-
-
+    return (
+        "Planning timed out — could not produce a plan within iteration limit.",
+        agent_log,
+        total_tokens,
+    )

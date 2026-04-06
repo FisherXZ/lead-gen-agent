@@ -32,9 +32,11 @@ async def test_parse_snapshot_fixture():
     mock_response.text = html
     mock_client.post.return_value = mock_response
 
-    with patch("src.tools.search_osha.httpx.AsyncClient") as mock_cls, \
-         patch("src.tools.search_osha.cache_get", return_value=None), \
-         patch("src.tools.search_osha.cache_set"):
+    with (
+        patch("src.tools.search_osha.httpx.AsyncClient") as mock_cls,
+        patch("src.tools.search_osha.cache_get", return_value=None),
+        patch("src.tools.search_osha.cache_set"),
+    ):
         mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
         mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
         result = await execute({"employer_name": "SOLV Energy"})
@@ -70,9 +72,11 @@ async def test_no_results_returns_empty_list():
     mock_response.text = html
     mock_client.post.return_value = mock_response
 
-    with patch("src.tools.search_osha.httpx.AsyncClient") as mock_cls, \
-         patch("src.tools.search_osha.cache_get", return_value=None), \
-         patch("src.tools.search_osha.cache_set"):
+    with (
+        patch("src.tools.search_osha.httpx.AsyncClient") as mock_cls,
+        patch("src.tools.search_osha.cache_get", return_value=None),
+        patch("src.tools.search_osha.cache_set"),
+    ):
         mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
         mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
         result = await execute({"employer_name": "Nonexistent Corp"})
@@ -86,7 +90,10 @@ async def test_html_structure_change_returns_error():
     from src.tools.search_osha import execute
 
     # Large HTML with tables but completely different structure (>5000 chars)
-    html = "<html><body>" + "<table><tr><td>totally different structure with lots of content padding</td></tr></table>\n" * 100 + "</body></html>"
+    html = (
+        "<html><body>" + "<table><tr><td>totally different structure with lots of "
+        "content padding</td></tr></table>\n" * 100 + "</body></html>"
+    )
 
     mock_client = AsyncMock()
     mock_response = MagicMock()
@@ -94,8 +101,10 @@ async def test_html_structure_change_returns_error():
     mock_response.text = html
     mock_client.post.return_value = mock_response
 
-    with patch("src.tools.search_osha.httpx.AsyncClient") as mock_cls, \
-         patch("src.tools.search_osha.cache_get", return_value=None):
+    with (
+        patch("src.tools.search_osha.httpx.AsyncClient") as mock_cls,
+        patch("src.tools.search_osha.cache_get", return_value=None),
+    ):
         mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
         mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
         result = await execute({"employer_name": "SOLV Energy"})
@@ -119,14 +128,17 @@ async def test_cache_hit():
 
 @pytest.mark.asyncio
 async def test_timeout_returns_error():
-    from src.tools.search_osha import execute
     import httpx
+
+    from src.tools.search_osha import execute
 
     mock_client = AsyncMock()
     mock_client.post.side_effect = httpx.ReadTimeout("timeout")
 
-    with patch("src.tools.search_osha.httpx.AsyncClient") as mock_cls, \
-         patch("src.tools.search_osha.cache_get", return_value=None):
+    with (
+        patch("src.tools.search_osha.httpx.AsyncClient") as mock_cls,
+        patch("src.tools.search_osha.cache_get", return_value=None),
+    ):
         mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
         mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
         result = await execute({"employer_name": "SOLV Energy"})

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -15,6 +15,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 def _clear_tickers():
     """Clear the module-level tickers cache between tests."""
     from src.tools.search_sec_edgar import _clear_tickers_cache
+
     _clear_tickers_cache()
     yield
     _clear_tickers_cache()
@@ -48,9 +49,11 @@ async def test_cik_direct_input():
 
     submissions = _mock_submissions()
 
-    with patch("src.tools.search_sec_edgar.cache_get", return_value=None), \
-         patch("src.tools.search_sec_edgar.cache_set"), \
-         patch("src.tools.search_sec_edgar._fetch_submissions", return_value=submissions):
+    with (
+        patch("src.tools.search_sec_edgar.cache_get", return_value=None),
+        patch("src.tools.search_sec_edgar.cache_set"),
+        patch("src.tools.search_sec_edgar._fetch_submissions", return_value=submissions),
+    ):
         result = await execute({"company_name": "3153"})
 
     assert "results" in result
@@ -65,9 +68,11 @@ async def test_fuzzy_match():
 
     tickers_data = _mock_tickers()
 
-    with patch("src.tools.search_sec_edgar._fetch_tickers_with_retry", return_value=tickers_data), \
-         patch("src.tools.search_sec_edgar.cache_get", return_value=None), \
-         patch("src.tools.search_sec_edgar.cache_set"):
+    with (
+        patch("src.tools.search_sec_edgar._fetch_tickers_with_retry", return_value=tickers_data),
+        patch("src.tools.search_sec_edgar.cache_get", return_value=None),
+        patch("src.tools.search_sec_edgar.cache_set"),
+    ):
         cik, matched_name = await _resolve_cik("First Solar")
 
     assert cik == "1274494"
@@ -82,10 +87,12 @@ async def test_submissions_parsing():
     tickers_data = _mock_tickers()
     submissions = _mock_submissions()
 
-    with patch("src.tools.search_sec_edgar._fetch_tickers_with_retry", return_value=tickers_data), \
-         patch("src.tools.search_sec_edgar.cache_get", return_value=None), \
-         patch("src.tools.search_sec_edgar.cache_set"), \
-         patch("src.tools.search_sec_edgar._fetch_submissions", return_value=submissions):
+    with (
+        patch("src.tools.search_sec_edgar._fetch_tickers_with_retry", return_value=tickers_data),
+        patch("src.tools.search_sec_edgar.cache_get", return_value=None),
+        patch("src.tools.search_sec_edgar.cache_set"),
+        patch("src.tools.search_sec_edgar._fetch_submissions", return_value=submissions),
+    ):
         result = await execute({"company_name": "SolarMax Technology"})
 
     assert "results" in result
@@ -111,10 +118,12 @@ async def test_form_type_filter():
     tickers_data = _mock_tickers()
     submissions = _mock_submissions()
 
-    with patch("src.tools.search_sec_edgar._fetch_tickers_with_retry", return_value=tickers_data), \
-         patch("src.tools.search_sec_edgar.cache_get", return_value=None), \
-         patch("src.tools.search_sec_edgar.cache_set"), \
-         patch("src.tools.search_sec_edgar._fetch_submissions", return_value=submissions):
+    with (
+        patch("src.tools.search_sec_edgar._fetch_tickers_with_retry", return_value=tickers_data),
+        patch("src.tools.search_sec_edgar.cache_get", return_value=None),
+        patch("src.tools.search_sec_edgar.cache_set"),
+        patch("src.tools.search_sec_edgar._fetch_submissions", return_value=submissions),
+    ):
         result = await execute({"company_name": "SolarMax Technology", "form_type": "8-K"})
 
     assert "results" in result
@@ -129,9 +138,11 @@ async def test_company_not_found():
 
     tickers_data = _mock_tickers()
 
-    with patch("src.tools.search_sec_edgar._fetch_tickers_with_retry", return_value=tickers_data), \
-         patch("src.tools.search_sec_edgar.cache_get", return_value=None), \
-         patch("src.tools.search_sec_edgar.cache_set"):
+    with (
+        patch("src.tools.search_sec_edgar._fetch_tickers_with_retry", return_value=tickers_data),
+        patch("src.tools.search_sec_edgar.cache_get", return_value=None),
+        patch("src.tools.search_sec_edgar.cache_set"),
+    ):
         result = await execute({"company_name": "Completely Fake Company XYZ123"})
 
     assert "error" in result
@@ -154,15 +165,21 @@ async def test_cache_hit_skips_http():
 
 @pytest.mark.asyncio
 async def test_timeout_returns_error():
-    from src.tools.search_sec_edgar import execute
     import httpx
+
+    from src.tools.search_sec_edgar import execute
 
     tickers_data = _mock_tickers()
 
-    with patch("src.tools.search_sec_edgar._fetch_tickers_with_retry", return_value=tickers_data), \
-         patch("src.tools.search_sec_edgar.cache_get", return_value=None), \
-         patch("src.tools.search_sec_edgar.cache_set"), \
-         patch("src.tools.search_sec_edgar._fetch_submissions", side_effect=httpx.ReadTimeout("timeout")):
+    with (
+        patch("src.tools.search_sec_edgar._fetch_tickers_with_retry", return_value=tickers_data),
+        patch("src.tools.search_sec_edgar.cache_get", return_value=None),
+        patch("src.tools.search_sec_edgar.cache_set"),
+        patch(
+            "src.tools.search_sec_edgar._fetch_submissions",
+            side_effect=httpx.ReadTimeout("timeout"),
+        ),
+    ):
         result = await execute({"company_name": "SolarMax Technology"})
 
     assert "error" in result
@@ -171,18 +188,23 @@ async def test_timeout_returns_error():
 
 @pytest.mark.asyncio
 async def test_rate_limit_returns_error():
-    from src.tools.search_sec_edgar import execute
     import httpx
+
+    from src.tools.search_sec_edgar import execute
 
     tickers_data = _mock_tickers()
     mock_response = MagicMock()
     mock_response.status_code = 429
 
-    with patch("src.tools.search_sec_edgar._fetch_tickers_with_retry", return_value=tickers_data), \
-         patch("src.tools.search_sec_edgar.cache_get", return_value=None), \
-         patch("src.tools.search_sec_edgar.cache_set"), \
-         patch("src.tools.search_sec_edgar._fetch_submissions",
-               side_effect=httpx.HTTPStatusError("429", request=MagicMock(), response=mock_response)):
+    with (
+        patch("src.tools.search_sec_edgar._fetch_tickers_with_retry", return_value=tickers_data),
+        patch("src.tools.search_sec_edgar.cache_get", return_value=None),
+        patch("src.tools.search_sec_edgar.cache_set"),
+        patch(
+            "src.tools.search_sec_edgar._fetch_submissions",
+            side_effect=httpx.HTTPStatusError("429", request=MagicMock(), response=mock_response),
+        ),
+    ):
         result = await execute({"company_name": "SolarMax Technology"})
 
     assert "error" in result

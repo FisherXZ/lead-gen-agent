@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from ._base import validate_uuid
 from .. import db
+from ._base import validate_uuid
 
 DEFINITION = {
     "name": "get_discoveries",
@@ -21,7 +21,9 @@ DEFINITION = {
             "project_ids": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Optional list of project UUIDs to filter by. Omit to return all discoveries.",
+                "description": (
+                    "Optional list of project UUIDs to filter by. Omit to return all discoveries."
+                ),
             },
         },
     },

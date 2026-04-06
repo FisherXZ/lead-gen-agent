@@ -99,6 +99,7 @@ async def execute(tool_input: dict) -> dict:
     queries = _build_search_queries(inp.company_name, inp.role_keywords, inp.location)
 
     import asyncio
+
     search_tasks = [_run_web_search(q, max_results=inp.max_results) for q in queries]
     search_results = await asyncio.gather(*search_tasks)
     all_search_results: list[dict] = []
@@ -308,7 +309,7 @@ def _merge_apify_profiles(candidates: list[dict], profiles: list[dict]) -> list[
         # Extract experience list
         experience: list[dict] = []
         positions = profile.get("positions") or {}
-        for pos in (positions.get("positionHistory") or []):
+        for pos in positions.get("positionHistory") or []:
             exp_entry: dict[str, Any] = {
                 "company": pos.get("companyName", ""),
                 "title": pos.get("title", ""),

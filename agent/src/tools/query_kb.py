@@ -20,11 +20,16 @@ DEFINITION = {
         "properties": {
             "entity_name": {
                 "type": "string",
-                "description": "Company name to look up (developer or EPC). Must be the full name — partial match not supported.",
+                "description": (
+                    "Company name to look up (developer or EPC). "
+                    "Must be the full name — partial match not supported."
+                ),
             },
             "state": {
                 "type": "string",
-                "description": "Two-letter state abbreviation to find active EPCs (e.g. 'TX', 'CA').",
+                "description": (
+                    "Two-letter state abbreviation to find active EPCs (e.g. 'TX', 'CA')."
+                ),
             },
         },
     },
@@ -43,6 +48,7 @@ async def execute(tool_input: dict) -> dict:
     response: dict = {"knowledge": result}
     if entity_name:
         from ..knowledge_base import resolve_entity
+
         entity = resolve_entity(entity_name)
         if entity:
             response["entity_id"] = entity["id"]

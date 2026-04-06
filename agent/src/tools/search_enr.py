@@ -25,7 +25,11 @@ _MAX_RETRIES = 2
 _CACHE_TTL_HOURS = 168  # 7 days — rankings updated annually
 
 _HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    ),
     "Accept": "text/html,application/xhtml+xml",
 }
 
@@ -58,7 +62,9 @@ DEFINITION = {
         "properties": {
             "company_name": {
                 "type": "string",
-                "description": "Company name to look up (e.g., 'SOLV Energy', 'McCarthy', 'Blattner').",
+                "description": (
+                    "Company name to look up (e.g., 'SOLV Energy', 'McCarthy', 'Blattner')."
+                ),
             },
         },
         "required": ["company_name"],
@@ -100,7 +106,11 @@ async def execute(tool_input: dict) -> dict:
     return {
         "results": [],
         "matched": False,
-        "note": f"'{company}' not found in ENR top power firms rankings. This does not mean they're not a real EPC — ENR covers the top ~50 firms only.",
+        "note": (
+            f"'{company}' not found in ENR top power firms rankings. "
+            "This does not mean they're not a real EPC — "
+            "ENR covers the top ~50 firms only."
+        ),
     }
 
 
@@ -163,7 +173,9 @@ def _is_retryable(exc: BaseException) -> bool:
     wait=tenacity.wait_exponential(multiplier=1, min=2, max=8),
     reraise=True,
     before_sleep=lambda rs: logger.info(
-        "enr_fetch retry #%d: %s", rs.attempt_number, rs.outcome.exception(),
+        "enr_fetch retry #%d: %s",
+        rs.attempt_number,
+        rs.outcome.exception(),
     ),
 )
 async def _fetch_with_retry() -> str:

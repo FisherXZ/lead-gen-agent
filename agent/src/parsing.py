@@ -29,29 +29,33 @@ def parse_report_findings(tool_input: dict) -> AgentResult:
             url = f"search:{first_search}"
             search_query = first_search
         elif url and url.startswith("search:"):
-            search_query = url[len("search:"):].strip() or None
+            search_query = url[len("search:") :].strip() or None
             if not search_query:
                 url = None
 
-        sources.append(EpcSource(
-            channel=s.get("channel", "web_search"),
-            publication=s.get("publication"),
-            date=s.get("date"),
-            url=url,
-            excerpt=s.get("excerpt", ""),
-            reliability=s.get("reliability", "medium"),
-            search_query=search_query,
-            source_method=s.get("source_method"),
-        ))
+        sources.append(
+            EpcSource(
+                channel=s.get("channel", "web_search"),
+                publication=s.get("publication"),
+                date=s.get("date"),
+                url=url,
+                excerpt=s.get("excerpt", ""),
+                reliability=s.get("reliability", "medium"),
+                search_query=search_query,
+                source_method=s.get("source_method"),
+            )
+        )
 
     # Parse negative evidence
     negative_evidence: list[NegativeEvidence] = []
     for ne in tool_input.get("negative_evidence", []):
-        negative_evidence.append(NegativeEvidence(
-            search_query=ne.get("search_query", ""),
-            expected_to_find=ne.get("expected_to_find"),
-            what_was_found=ne.get("what_was_found", "nothing"),
-        ))
+        negative_evidence.append(
+            NegativeEvidence(
+                search_query=ne.get("search_query", ""),
+                expected_to_find=ne.get("expected_to_find"),
+                what_was_found=ne.get("what_was_found", "nothing"),
+            )
+        )
 
     # Compute confidence upgrade
     raw_confidence = tool_input.get("confidence", "unknown")

@@ -6,10 +6,10 @@ from unittest.mock import patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Wiki-Solar tool tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_wiki_solar_empty_name():
@@ -76,6 +76,7 @@ async def test_wiki_solar_entity_without_ranking():
 # SPW tool tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_spw_empty_name():
     from src.tools.search_spw import execute
@@ -123,6 +124,7 @@ async def test_spw_entity_not_found():
 # ---------------------------------------------------------------------------
 # Registration tests
 # ---------------------------------------------------------------------------
+
 
 def test_tools_registered():
     from src.tools import get_tool_names

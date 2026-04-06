@@ -17,8 +17,36 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["ruff", "pytest", "pytest-asyncio", "httpx"]
+dev = ["ruff", "pytest", "pytest-asyncio", "pytest-cov", "httpx"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S106"]
+"src/main.py" = ["E402"]          # load_dotenv() must run before imports
+"src/seed_epc_entities.py" = ["E402"]  # load_dotenv() must run before imports
+"tests/test_agents_chat.py" = ["E402"]       # sys.modules stub before import
+"tests/test_agents_research.py" = ["E402"]   # sys.modules stub before import
+"tests/test_hook_batch_tracking.py" = ["E402"]  # sys.modules stub before import
+"tests/test_hook_discovery.py" = ["E402"]    # sys.modules stub before import
+"tests/test_run_research_tool.py" = ["E402"] # sys.modules stub before import
+"src/tools/__init__.py" = ["E402"]           # run_research imported after registry setup
+
+[tool.ruff.format]
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true

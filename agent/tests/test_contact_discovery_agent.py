@@ -6,10 +6,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # agents/contact_discovery.py
 # ---------------------------------------------------------------------------
+
 
 class TestContactDiscoveryTools:
     def test_all_expected_tools_present(self):
@@ -35,6 +35,7 @@ class TestContactDiscoveryTools:
 
     def test_tool_list_is_not_empty(self):
         from src.agents.contact_discovery import CONTACT_DISCOVERY_TOOLS
+
         assert len(CONTACT_DISCOVERY_TOOLS) > 0
 
 
@@ -104,13 +105,16 @@ class TestBuildContactDiscoveryPrompt:
 # tools/run_contact_discovery.py
 # ---------------------------------------------------------------------------
 
+
 class TestRunContactDiscoveryDefinition:
     def test_definition_name(self):
         from src.tools.run_contact_discovery import DEFINITION
+
         assert DEFINITION["name"] == "run_contact_discovery"
 
     def test_definition_has_required_fields(self):
         from src.tools.run_contact_discovery import DEFINITION
+
         schema = DEFINITION["input_schema"]
         assert "entity_id" in schema["properties"]
         assert "project_id" in schema["properties"]
@@ -121,25 +125,32 @@ class TestRunContactDiscoveryDefinition:
 class TestRunContactDiscoveryInput:
     def test_valid_input(self):
         from src.tools.run_contact_discovery import Input
+
         inp = Input(entity_id="abc-123", project_id=42)
         assert inp.entity_id == "abc-123"
         assert inp.project_id == 42
 
     def test_missing_entity_id_raises(self):
         from pydantic import ValidationError
+
         from src.tools.run_contact_discovery import Input
+
         with pytest.raises(ValidationError):
             Input(project_id=42)
 
     def test_missing_project_id_raises(self):
         from pydantic import ValidationError
+
         from src.tools.run_contact_discovery import Input
+
         with pytest.raises(ValidationError):
             Input(entity_id="abc-123")
 
     def test_project_id_must_be_int(self):
         from pydantic import ValidationError
+
         from src.tools.run_contact_discovery import Input
+
         with pytest.raises(ValidationError):
             Input(entity_id="abc-123", project_id="not-an-int")
 
@@ -148,37 +159,44 @@ class TestRunContactDiscoveryInput:
 class TestRunContactDiscoveryExecute:
     async def test_returns_success_status(self):
         from src.tools.run_contact_discovery import execute
+
         result = await execute({"entity_id": "abc-123", "project_id": 42})
         assert result["status"] == "success"
 
     async def test_returns_source_field(self):
         from src.tools.run_contact_discovery import execute
+
         result = await execute({"entity_id": "abc-123", "project_id": 42})
         assert result["source"] == "contact_discovery"
 
     async def test_returns_available_tools(self):
-        from src.tools.run_contact_discovery import execute
         from src.agents.contact_discovery import CONTACT_DISCOVERY_TOOLS
+        from src.tools.run_contact_discovery import execute
+
         result = await execute({"entity_id": "abc-123", "project_id": 42})
         assert result["data"]["available_tools"] == CONTACT_DISCOVERY_TOOLS
 
     async def test_echoes_entity_id(self):
         from src.tools.run_contact_discovery import execute
+
         result = await execute({"entity_id": "abc-123", "project_id": 42})
         assert result["data"]["entity_id"] == "abc-123"
 
     async def test_echoes_project_id(self):
         from src.tools.run_contact_discovery import execute
+
         result = await execute({"entity_id": "abc-123", "project_id": 42})
         assert result["data"]["project_id"] == 42
 
     async def test_mode_is_manual(self):
         from src.tools.run_contact_discovery import execute
+
         result = await execute({"entity_id": "abc-123", "project_id": 42})
         assert result["data"]["mode"] == "manual"
 
     async def test_message_mentions_runtime_revamp(self):
         from src.tools.run_contact_discovery import execute
+
         result = await execute({"entity_id": "abc-123", "project_id": 42})
         assert "runtime revamp" in result["data"]["message"]
 
@@ -187,16 +205,19 @@ class TestRunContactDiscoveryExecute:
 # hooks/contact_save.py
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 class TestContactSaveHookPreTool:
     async def test_pre_tool_returns_continue(self):
         from src.hooks.contact_save import ContactSaveHook
+
         hook = ContactSaveHook()
         result = await hook.pre_tool("save_contact", {"entity_id": "x"}, {})
         assert result["action"] == "continue"
 
     async def test_pre_tool_passes_through_input(self):
         from src.hooks.contact_save import ContactSaveHook
+
         hook = ContactSaveHook()
         tool_input = {"entity_id": "x", "full_name": "Jane"}
         result = await hook.pre_tool("save_contact", tool_input, {})
@@ -204,6 +225,7 @@ class TestContactSaveHookPreTool:
 
     async def test_pre_tool_noop_for_other_tools(self):
         from src.hooks.contact_save import ContactSaveHook
+
         hook = ContactSaveHook()
         tool_input = {"query": "something"}
         result = await hook.pre_tool("web_search", tool_input, {})
@@ -215,6 +237,7 @@ class TestContactSaveHookPreTool:
 class TestContactSaveHookPostTool:
     async def test_noop_for_non_save_contact_tool(self):
         from src.hooks.contact_save import ContactSaveHook
+
         hook = ContactSaveHook()
         result = {"status": "success", "data": {}}
         returned = await hook.post_tool("web_search", {}, result, {})
@@ -222,6 +245,7 @@ class TestContactSaveHookPostTool:
 
     async def test_noop_when_result_not_success(self):
         from src.hooks.contact_save import ContactSaveHook
+
         hook = ContactSaveHook()
         result = {"status": "error", "message": "something broke"}
         returned = await hook.post_tool("save_contact", {"entity_id": "x"}, result, {})
@@ -240,9 +264,7 @@ class TestContactSaveHookPostTool:
         with patch("src.db.get_client", return_value=mock_client):
             hook = ContactSaveHook()
             result = {"status": "success", "data": {"id": "contact-1"}}
-            returned = await hook.post_tool(
-                "save_contact", {"entity_id": "entity-abc"}, result, {}
-            )
+            returned = await hook.post_tool("save_contact", {"entity_id": "entity-abc"}, result, {})
 
         mock_client.table.assert_called_once_with("entities")
         mock_table.update.assert_called_once_with({"contact_discovery_status": "in_progress"})
@@ -272,8 +294,6 @@ class TestContactSaveHookPostTool:
             hook = ContactSaveHook()
             result = {"status": "success"}
             # Should not raise
-            returned = await hook.post_tool(
-                "save_contact", {"entity_id": "entity-abc"}, result, {}
-            )
+            returned = await hook.post_tool("save_contact", {"entity_id": "entity-abc"}, result, {})
 
         assert returned is result

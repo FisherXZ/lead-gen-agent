@@ -16,15 +16,11 @@ import asyncio
 import json
 import os
 import uuid
-from typing import AsyncGenerator
-
-import anthropic
+from collections.abc import AsyncGenerator
 
 from . import db
-from .batch_progress import create_batch, get_cancel_event, update_project, mark_done
-from .models import AgentResult
+from .batch_progress import create_batch, get_cancel_event, mark_done, update_project
 from .parsing import parse_report_findings
-from .knowledge_base import build_knowledge_context
 from .prompts import CHAT_SYSTEM_PROMPT
 from .sse import StreamWriter
 from .tools import execute_tool, get_all_tools
@@ -36,6 +32,7 @@ MAX_TOOL_ROUNDS = 15
 # ---------------------------------------------------------------------------
 # Tool result post-processing
 # ---------------------------------------------------------------------------
+
 
 async def _handle_report_findings(tool_input: dict) -> dict:
     """When the chat agent calls report_findings, store the discovery.
@@ -55,14 +52,21 @@ async def _handle_report_findings(tool_input: dict) -> dict:
             discovery = db.store_discovery(
                 project_id, result, agent_log=[], total_tokens=0, project=project
             )
-            return {"status": "recorded", "discovery_id": discovery.get("id") if discovery else None}
+            return {
+                "status": "recorded",
+                "discovery_id": discovery.get("id") if discovery else None,
+            }
 
-    return {"status": "recorded", "note": "No project_id provided — finding recorded in conversation only."}
+    return {
+        "status": "recorded",
+        "note": "No project_id provided — finding recorded in conversation only.",
+    }
 
 
 # ---------------------------------------------------------------------------
 # Batch progress formatting
 # ---------------------------------------------------------------------------
+
 
 def _format_batch_progress(update: dict) -> str | None:
     """Format a batch progress update as a text line for SSE streaming."""
@@ -87,6 +91,7 @@ def _format_batch_progress(update: dict) -> str | None:
 # Streaming chat agent
 # ---------------------------------------------------------------------------
 
+
 async def run_chat_agent(
     messages: list[dict],
     conversation_id: str,
@@ -105,17 +110,20 @@ async def run_chat_agent(
         SSE-formatted strings for the frontend.
     """
     from .db import get_anthropic_client
+
     client = get_anthropic_client(api_key)
 
     # Get all tools from the shared registry
     all_tools = get_all_tools()
 
     # Cache system prompt + tools to reduce input token costs (~90% savings)
-    cached_system = [{
-        "type": "text",
-        "text": CHAT_SYSTEM_PROMPT,
-        "cache_control": {"type": "ephemeral"},
-    }]
+    cached_system = [
+        {
+            "type": "text",
+            "text": CHAT_SYSTEM_PROMPT,
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
     cached_tools = [*all_tools[:-1], {**all_tools[-1], "cache_control": {"type": "ephemeral"}}]
 
     message_id = str(uuid.uuid4())
@@ -133,7 +141,9 @@ async def run_chat_agent(
             api_messages[i] = {
                 "role": msg["role"],
                 "content": [
-                    b if b.get("type") == "text" else {"type": "text", "text": f"[Attached {b.get('type', 'file')}]"}
+                    b
+                    if b.get("type") == "text"
+                    else {"type": "text", "text": f"[Attached {b.get('type', 'file')}]"}
                     for b in content
                 ],
             }
@@ -143,6 +153,7 @@ async def run_chat_agent(
 
     # Compact old tool outputs if conversation history is large
     from .compaction import compact_messages
+
     api_messages = compact_messages(api_messages)
 
     remember_count = 0
@@ -165,7 +176,6 @@ async def run_chat_agent(
             messages=api_messages,
         ) as stream:
             async for event in stream:
-
                 # --- Text streaming ---
                 if event.type == "content_block_start":
                     if event.content_block.type == "text":
@@ -176,11 +186,13 @@ async def run_chat_agent(
                             yield stream_writer.text_start(current_text_part_id)
 
                     elif event.content_block.type == "tool_use":
-                        tool_calls.append({
-                            "id": event.content_block.id,
-                            "name": event.content_block.name,
-                            "input": {},
-                        })
+                        tool_calls.append(
+                            {
+                                "id": event.content_block.id,
+                                "name": event.content_block.name,
+                                "input": {},
+                            }
+                        )
                         current_tool_input = ""
                         yield stream_writer.tool_input_start(
                             event.content_block.id,
@@ -195,9 +207,7 @@ async def run_chat_agent(
                                 current_text_part_id, event.delta.text
                             )
                         else:
-                            yield stream_writer.text_delta(
-                                current_text_part_id, event.delta.text
-                            )
+                            yield stream_writer.text_delta(current_text_part_id, event.delta.text)
 
                     elif event.delta.type == "input_json_delta":
                         current_tool_input += event.delta.partial_json
@@ -215,13 +225,13 @@ async def run_chat_agent(
                         # Parse accumulated JSON input
                         tc = tool_calls[-1]
                         try:
-                            tc["input"] = json.loads(current_tool_input) if current_tool_input else {}
+                            tc["input"] = (
+                                json.loads(current_tool_input) if current_tool_input else {}
+                            )
                         except json.JSONDecodeError:
                             tc["input"] = {}
 
-                        yield stream_writer.tool_input_available(
-                            tc["id"], tc["name"], tc["input"]
-                        )
+                        yield stream_writer.tool_input_available(tc["id"], tc["name"], tc["input"])
 
             # Get the final message for stop_reason
             response = await stream.get_final_message()
@@ -252,7 +262,9 @@ async def run_chat_agent(
                         if p:
                             batch_projects.append(p)
 
-                    batch_state = create_batch(batch_id, batch_projects, conversation_id=conversation_id)
+                    batch_state = create_batch(
+                        batch_id, batch_projects, conversation_id=conversation_id
+                    )
 
                     # Inject batch_id into tool input so frontend knows
                     # which progress endpoint to connect to
@@ -273,10 +285,12 @@ async def run_chat_agent(
                     # Re-emit tool-input-available with enriched input
                     # (so frontend gets _batch_id before tool completes)
                     # Strip non-serializable internal objects before SSE emission
-                    sse_input = {k: v for k, v in tc["input"].items() if k not in ("_progress_callback", "_cancel_event")}
-                    yield stream_writer.tool_input_available(
-                        tc["id"], tc["name"], sse_input
-                    )
+                    sse_input = {
+                        k: v
+                        for k, v in tc["input"].items()
+                        if k not in ("_progress_callback", "_cancel_event")
+                    }
+                    yield stream_writer.tool_input_available(tc["id"], tc["name"], sse_input)
 
                     try:
                         output = await execute_tool(tc["name"], tc["input"])
@@ -286,7 +300,8 @@ async def run_chat_agent(
                         # If cancelled, build partial results from batch state
                         if batch_state.cancelled:
                             completed_projects = [
-                                p for p in batch_state.projects
+                                p
+                                for p in batch_state.projects
                                 if p.status in ("completed", "skipped", "error")
                             ]
                             output = {
@@ -297,7 +312,11 @@ async def run_chat_agent(
                                         "project_id": p.project_id,
                                         "project_name": p.project_name,
                                         "status": p.status,
-                                        **({"epc_contractor": p.epc_contractor} if p.epc_contractor else {}),
+                                        **(
+                                            {"epc_contractor": p.epc_contractor}
+                                            if p.epc_contractor
+                                            else {}
+                                        ),
                                         **({"confidence": p.confidence} if p.confidence else {}),
                                     }
                                     for p in completed_projects
@@ -315,20 +334,28 @@ async def run_chat_agent(
                 yield stream_writer.tool_output_available(tc["id"], output)
 
                 # Strip non-serializable internal objects from persisted input
-                serializable_input = {k: v for k, v in tc["input"].items() if not callable(v) and not isinstance(v, asyncio.Event)}
-                all_parts.append({
-                    "type": "tool-invocation",
-                    "toolCallId": tc["id"],
-                    "toolName": tc["name"],
-                    "input": serializable_input,
-                    "output": output,
-                })
+                serializable_input = {
+                    k: v
+                    for k, v in tc["input"].items()
+                    if not callable(v) and not isinstance(v, asyncio.Event)
+                }
+                all_parts.append(
+                    {
+                        "type": "tool-invocation",
+                        "toolCallId": tc["id"],
+                        "toolName": tc["name"],
+                        "input": serializable_input,
+                        "output": output,
+                    }
+                )
 
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": tc["id"],
-                    "content": json.dumps(output, default=str),
-                })
+                tool_results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tc["id"],
+                        "content": json.dumps(output, default=str),
+                    }
+                )
 
             # Feed results back and loop
             api_messages.append({"role": "assistant", "content": response.content})

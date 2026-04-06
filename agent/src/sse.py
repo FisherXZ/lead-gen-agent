@@ -8,7 +8,6 @@ and validates against a strict Zod schema — no extra fields allowed.
 from __future__ import annotations
 
 import json
-import uuid
 
 
 def _event(payload: dict) -> str:
@@ -70,30 +69,30 @@ class StreamWriter:
 
     # -- Tool invocations ---------------------------------------------------
 
-    def tool_input_start(
-        self, tool_call_id: str, tool_name: str
-    ) -> str:
-        return _event({
-            "type": "tool-input-start",
-            "toolCallId": tool_call_id,
-            "toolName": tool_name,
-        })
+    def tool_input_start(self, tool_call_id: str, tool_name: str) -> str:
+        return _event(
+            {
+                "type": "tool-input-start",
+                "toolCallId": tool_call_id,
+                "toolName": tool_name,
+            }
+        )
 
-    def tool_input_available(
-        self, tool_call_id: str, tool_name: str, input_data: dict
-    ) -> str:
-        return _event({
-            "type": "tool-input-available",
-            "toolCallId": tool_call_id,
-            "toolName": tool_name,
-            "input": input_data,
-        })
+    def tool_input_available(self, tool_call_id: str, tool_name: str, input_data: dict) -> str:
+        return _event(
+            {
+                "type": "tool-input-available",
+                "toolCallId": tool_call_id,
+                "toolName": tool_name,
+                "input": input_data,
+            }
+        )
 
-    def tool_output_available(
-        self, tool_call_id: str, output: dict | list | str
-    ) -> str:
-        return _event({
-            "type": "tool-output-available",
-            "toolCallId": tool_call_id,
-            "output": output,
-        })
+    def tool_output_available(self, tool_call_id: str, output: dict | list | str) -> str:
+        return _event(
+            {
+                "type": "tool-output-available",
+                "toolCallId": tool_call_id,
+                "output": output,
+            }
+        )

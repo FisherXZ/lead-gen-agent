@@ -3,19 +3,15 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 
-import pytest
-
-from src.batch import run_batch, _research_one
-from src.models import AgentResult, EpcSource
-
+from src.batch import _research_one, run_batch
 from tests.conftest import make_agent_result
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _fake_agent_result():
     return (
@@ -39,6 +35,7 @@ def _fake_discovery(project_id):
 # _research_one
 # ---------------------------------------------------------------------------
 
+
 class TestResearchOne:
     @patch("src.batch.store_discovery")
     @patch("src.batch.run_research", new_callable=AsyncMock)
@@ -51,6 +48,7 @@ class TestResearchOne:
         mock_store.return_value = _fake_discovery("proj-001")
 
         progress_events = []
+
         async def on_progress(update):
             progress_events.append(update)
 
@@ -75,6 +73,7 @@ class TestResearchOne:
         mock_get_active.return_value = {"id": "disc-existing", "review_status": "accepted"}
 
         progress_events = []
+
         async def on_progress(update):
             progress_events.append(update)
 
@@ -93,13 +92,16 @@ class TestResearchOne:
     @patch("src.batch.run_research", new_callable=AsyncMock)
     @patch("src.batch.get_active_discovery")
     @patch("src.batch.build_knowledge_context", return_value=None)
-    async def test_does_not_skip_pending_discovery(self, mock_kb, mock_get_active, mock_agent, mock_store):
+    async def test_does_not_skip_pending_discovery(
+        self, mock_kb, mock_get_active, mock_agent, mock_store
+    ):
         """Project with pending (not accepted) discovery → runs agent."""
         mock_get_active.return_value = {"id": "disc-pending", "review_status": "pending"}
         mock_agent.return_value = _fake_agent_result()
         mock_store.return_value = _fake_discovery("proj-001")
 
         progress_events = []
+
         async def on_progress(update):
             progress_events.append(update)
 
@@ -115,12 +117,15 @@ class TestResearchOne:
     @patch("src.batch.run_research", new_callable=AsyncMock)
     @patch("src.batch.get_active_discovery")
     @patch("src.batch.build_knowledge_context", return_value=None)
-    async def test_agent_error_returns_error_status(self, mock_kb, mock_get_active, mock_agent, mock_store):
+    async def test_agent_error_returns_error_status(
+        self, mock_kb, mock_get_active, mock_agent, mock_store
+    ):
         """Agent exception → error result with traceback."""
         mock_get_active.return_value = None
         mock_agent.side_effect = RuntimeError("API failure")
 
         progress_events = []
+
         async def on_progress(update):
             progress_events.append(update)
 
@@ -137,13 +142,16 @@ class TestResearchOne:
     @patch("src.batch.run_research", new_callable=AsyncMock)
     @patch("src.batch.get_active_discovery")
     @patch("src.batch.build_knowledge_context", return_value=None)
-    async def test_uses_queue_id_fallback_for_label(self, mock_kb, mock_get_active, mock_agent, mock_store):
+    async def test_uses_queue_id_fallback_for_label(
+        self, mock_kb, mock_get_active, mock_agent, mock_store
+    ):
         """Project without project_name uses queue_id as label."""
         mock_get_active.return_value = None
         mock_agent.return_value = _fake_agent_result()
         mock_store.return_value = _fake_discovery("proj-001")
 
         progress_events = []
+
         async def on_progress(update):
             progress_events.append(update)
 
@@ -158,6 +166,7 @@ class TestResearchOne:
 # ---------------------------------------------------------------------------
 # run_batch — concurrency + gather
 # ---------------------------------------------------------------------------
+
 
 class TestRunBatch:
     @patch("src.batch.store_discovery")
@@ -175,6 +184,7 @@ class TestRunBatch:
         ]
 
         progress_events = []
+
         async def on_progress(update):
             progress_events.append(update)
 
@@ -191,6 +201,7 @@ class TestRunBatch:
     @patch("src.batch.build_knowledge_context", return_value=None)
     async def test_mixed_results(self, mock_kb, mock_get_active, mock_agent, mock_store):
         """Mix of normal, skipped, and error projects."""
+
         def get_active(pid):
             if pid == "proj-skip":
                 return {"id": "disc-skip", "review_status": "accepted"}
@@ -199,6 +210,7 @@ class TestRunBatch:
         mock_get_active.side_effect = get_active
 
         call_count = 0
+
         async def fake_agent(project, knowledge_context=None):
             nonlocal call_count
             call_count += 1
@@ -216,6 +228,7 @@ class TestRunBatch:
         ]
 
         progress_events = []
+
         async def on_progress(update):
             progress_events.append(update)
 
@@ -230,7 +243,9 @@ class TestRunBatch:
     @patch("src.batch.run_research", new_callable=AsyncMock)
     @patch("src.batch.get_active_discovery")
     @patch("src.batch.build_knowledge_context", return_value=None)
-    async def test_semaphore_limits_concurrency(self, mock_kb, mock_get_active, mock_agent, mock_store):
+    async def test_semaphore_limits_concurrency(
+        self, mock_kb, mock_get_active, mock_agent, mock_store
+    ):
         """At most `concurrency` agents run simultaneously."""
         mock_get_active.return_value = None
 
@@ -271,6 +286,7 @@ class TestRunBatch:
     @patch("src.batch.build_knowledge_context", return_value=None)
     async def test_empty_project_list(self, mock_kb, mock_get_active, mock_agent, mock_store):
         progress_events = []
+
         async def on_progress(update):
             progress_events.append(update)
 
@@ -285,10 +301,12 @@ class TestRunBatch:
 # Error isolation (return_exceptions=True safety net)
 # ---------------------------------------------------------------------------
 
+
 class TestBatchErrorIsolation:
     async def test_uncaught_exception_becomes_error_dict(self):
         """If _research_one raises unexpectedly, it becomes an error dict."""
         progress_events = []
+
         async def on_progress(update):
             progress_events.append(update)
 
@@ -326,6 +344,7 @@ class TestBatchErrorIsolation:
 
         progress_events = []
         crash_count = 0
+
         async def on_progress(update):
             nonlocal crash_count
             # Make on_progress crash for first "started" event only
@@ -350,6 +369,7 @@ class TestBatchErrorIsolation:
         self, mock_kb, mock_get_active, mock_agent, mock_store, mock_logger
     ):
         """Batch logs a summary with completed/skipped/error counts."""
+
         def get_active(pid):
             if pid == "proj-skip":
                 return {"id": "d", "review_status": "accepted"}
@@ -367,7 +387,7 @@ class TestBatchErrorIsolation:
         async def on_progress(update):
             pass
 
-        results = await run_batch(projects, on_progress)
+        await run_batch(projects, on_progress)
 
         mock_logger.info.assert_called_once()
         log_msg = mock_logger.info.call_args[0][0]

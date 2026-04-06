@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Pydantic Input validation
 # ---------------------------------------------------------------------------
+
 
 def test_input_defaults():
     from src.tools.search_linkedin import Input
@@ -23,8 +23,9 @@ def test_input_defaults():
 
 
 def test_input_max_results_bounds():
-    from src.tools.search_linkedin import Input
     from pydantic import ValidationError
+
+    from src.tools.search_linkedin import Input
 
     with pytest.raises(ValidationError):
         Input(company_name="Acme", max_results=0)
@@ -40,8 +41,9 @@ def test_input_max_results_bounds():
 
 
 def test_input_company_name_required():
-    from src.tools.search_linkedin import Input
     from pydantic import ValidationError
+
+    from src.tools.search_linkedin import Input
 
     with pytest.raises(ValidationError):
         Input()
@@ -59,6 +61,7 @@ def test_input_with_location():
 # Query construction
 # ---------------------------------------------------------------------------
 
+
 def test_build_search_queries_basic():
     """Constructs correct site:linkedin.com/in queries for each role keyword."""
     from src.tools.search_linkedin import _build_search_queries
@@ -70,7 +73,7 @@ def test_build_search_queries_basic():
     )
 
     assert len(queries) == 2
-    assert 'site:linkedin.com/in' in queries[0]
+    assert "site:linkedin.com/in" in queries[0]
     assert '"Signal Energy"' in queries[0]
     assert '"project manager"' in queries[0]
     assert '"VP construction"' in queries[1]
@@ -105,6 +108,7 @@ def test_build_search_queries_no_location():
 # ---------------------------------------------------------------------------
 # LinkedIn URL extraction
 # ---------------------------------------------------------------------------
+
 
 def test_extract_linkedin_urls_from_results():
     """Parses linkedin.com/in URLs and name/title snippets from search results."""
@@ -141,7 +145,11 @@ def test_extract_candidates_deduplicates_urls():
 
     results = [
         {"url": "https://linkedin.com/in/tomrivera", "title": "Tom Rivera", "content": ""},
-        {"url": "https://linkedin.com/in/tomrivera", "title": "Tom Rivera duplicate", "content": ""},
+        {
+            "url": "https://linkedin.com/in/tomrivera",
+            "title": "Tom Rivera duplicate",
+            "content": "",
+        },
     ]
 
     candidates = _extract_candidates(results)
@@ -157,6 +165,7 @@ def test_extract_candidates_empty_results():
 # ---------------------------------------------------------------------------
 # Graceful degradation without APIFY_API_TOKEN
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_no_apify_token_returns_search_only():
@@ -177,11 +186,13 @@ async def test_no_apify_token_returns_search_only():
     with patch.dict(os.environ, {}, clear=False):
         os.environ.pop("APIFY_API_TOKEN", None)
         with patch("src.tools.search_linkedin._run_web_search", return_value=mock_search_result):
-            result = await execute({
-                "company_name": "Signal Energy",
-                "role_keywords": ["project manager"],
-                "max_results": 5,
-            })
+            result = await execute(
+                {
+                    "company_name": "Signal Energy",
+                    "role_keywords": ["project manager"],
+                    "max_results": 5,
+                }
+            )
 
     assert result["status"] == "success"
     assert result["data"]["enriched"] is False
@@ -208,6 +219,7 @@ async def test_no_apify_token_no_crash():
 # Full enrichment path (Apify available)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 @patch.dict(os.environ, {"APIFY_API_TOKEN": "test-apify-token"})
 async def test_apify_enrichment_called_with_linkedin_urls():
@@ -233,20 +245,28 @@ async def test_apify_enrichment_called_with_linkedin_urls():
         "url": "https://linkedin.com/in/tomrivera",
         "positions": {
             "positionHistory": [
-                {"companyName": "Signal Energy", "title": "Senior PM", "startEndDate": {"start": {"year": 2023}}}
+                {
+                    "companyName": "Signal Energy",
+                    "title": "Senior PM",
+                    "startEndDate": {"start": {"year": 2023}},
+                }
             ]
         },
     }
 
-    with patch("src.tools.search_linkedin.cache_get", return_value=None), \
-         patch("src.tools.search_linkedin.cache_set"), \
-         patch("src.tools.search_linkedin._run_web_search", return_value=mock_search_result), \
-         patch("src.tools.search_linkedin._enrich_with_apify", return_value=[apify_profile]):
-        result = await execute({
-            "company_name": "Signal Energy",
-            "role_keywords": ["project manager"],
-            "max_results": 5,
-        })
+    with (
+        patch("src.tools.search_linkedin.cache_get", return_value=None),
+        patch("src.tools.search_linkedin.cache_set"),
+        patch("src.tools.search_linkedin._run_web_search", return_value=mock_search_result),
+        patch("src.tools.search_linkedin._enrich_with_apify", return_value=[apify_profile]),
+    ):
+        result = await execute(
+            {
+                "company_name": "Signal Energy",
+                "role_keywords": ["project manager"],
+                "max_results": 5,
+            }
+        )
 
     assert result["status"] == "success"
     assert result["data"]["enriched"] is True
@@ -274,15 +294,21 @@ async def test_apify_failure_falls_back_to_search_results():
         ]
     }
 
-    with patch("src.tools.search_linkedin.cache_get", return_value=None), \
-         patch("src.tools.search_linkedin.cache_set"), \
-         patch("src.tools.search_linkedin._run_web_search", return_value=mock_search_result), \
-         patch("src.tools.search_linkedin._enrich_with_apify", side_effect=Exception("Apify timeout")):
-        result = await execute({
-            "company_name": "Blattner Energy",
-            "role_keywords": ["VP construction"],
-            "max_results": 5,
-        })
+    with (
+        patch("src.tools.search_linkedin.cache_get", return_value=None),
+        patch("src.tools.search_linkedin.cache_set"),
+        patch("src.tools.search_linkedin._run_web_search", return_value=mock_search_result),
+        patch(
+            "src.tools.search_linkedin._enrich_with_apify", side_effect=Exception("Apify timeout")
+        ),
+    ):
+        result = await execute(
+            {
+                "company_name": "Blattner Energy",
+                "role_keywords": ["VP construction"],
+                "max_results": 5,
+            }
+        )
 
     assert result["status"] == "success"
     assert result["data"]["enriched"] is False
@@ -293,18 +319,23 @@ async def test_apify_failure_falls_back_to_search_results():
 # Cache
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_cache_hit_skips_search():
     """A cache hit returns immediately without calling web search."""
     from src.tools.search_linkedin import execute
 
     cached_data = {
-        "candidates": [{"full_name": "Cached Person", "linkedin_url": "https://linkedin.com/in/cached"}],
+        "candidates": [
+            {"full_name": "Cached Person", "linkedin_url": "https://linkedin.com/in/cached"}
+        ],
         "enriched": False,
     }
 
-    with patch("src.tools.search_linkedin.cache_get", return_value=cached_data), \
-         patch("src.tools.search_linkedin._run_web_search") as mock_search:
+    with (
+        patch("src.tools.search_linkedin.cache_get", return_value=cached_data),
+        patch("src.tools.search_linkedin._run_web_search") as mock_search,
+    ):
         result = await execute({"company_name": "Signal Energy"})
 
     mock_search.assert_not_called()
@@ -316,6 +347,7 @@ async def test_cache_hit_skips_search():
 # ---------------------------------------------------------------------------
 # max_results respected
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_max_results_limits_candidates():
@@ -336,11 +368,13 @@ async def test_max_results_limits_candidates():
     with patch.dict(os.environ, {}, clear=False):
         os.environ.pop("APIFY_API_TOKEN", None)
         with patch("src.tools.search_linkedin._run_web_search", return_value={"results": results}):
-            result = await execute({
-                "company_name": "Acme Solar",
-                "role_keywords": ["project manager"],
-                "max_results": 3,
-            })
+            result = await execute(
+                {
+                    "company_name": "Acme Solar",
+                    "role_keywords": ["project manager"],
+                    "max_results": 3,
+                }
+            )
 
     assert len(result["data"]["candidates"]) <= 3
 
@@ -348,6 +382,7 @@ async def test_max_results_limits_candidates():
 # ---------------------------------------------------------------------------
 # DEFINITION dict
 # ---------------------------------------------------------------------------
+
 
 def test_definition_name():
     from src.tools.search_linkedin import DEFINITION

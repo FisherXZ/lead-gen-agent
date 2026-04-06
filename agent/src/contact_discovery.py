@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import re
+from datetime import UTC
 
 import anthropic
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
@@ -37,8 +38,11 @@ _discovery_semaphore = asyncio.Semaphore(2)
 
 # Tools available during contact discovery
 CONTACT_TOOLS = [
-    "web_search", "web_search_broad", "fetch_page",
-    "search_sec_edgar", "fetch_sec_filing",
+    "web_search",
+    "web_search_broad",
+    "fetch_page",
+    "search_sec_edgar",
+    "fetch_sec_filing",
 ]
 
 CONTACT_DISCOVERY_PROMPT = """\
@@ -117,10 +121,12 @@ async def discover_contacts(
 
     # Set status to pending
     try:
-        client_db.table("entities").update({
-            "contact_discovery_status": "pending",
-            "contact_discovery_error": None,
-        }).eq("id", entity_id).execute()
+        client_db.table("entities").update(
+            {
+                "contact_discovery_status": "pending",
+                "contact_discovery_error": None,
+            }
+        ).eq("id", entity_id).execute()
     except Exception:
         logger.warning("Failed to set contact_discovery_status=pending for %s", entity_id)
 
@@ -131,16 +137,19 @@ async def discover_contacts(
         logger.error("Contact discovery failed for %s: %s", entity_name, exc, exc_info=True)
         # Mark failed
         try:
-            client_db.table("entities").update({
-                "contact_discovery_status": "failed",
-                "contact_discovery_error": str(exc)[:500],
-            }).eq("id", entity_id).execute()
-        except Exception:
+            client_db.table("entities").update(
+                {
+                    "contact_discovery_status": "failed",
+                    "contact_discovery_error": str(exc)[:500],
+                }
+            ).eq("id", entity_id).execute()
+        except Exception:  # noqa: S110 — best-effort status update
             pass
         return []
 
     # Store contacts in DB
     from .db import store_contacts
+
     stored = store_contacts(entity_id, contacts)
 
     # Generate outreach context for each contact (if project provided)
@@ -149,10 +158,11 @@ async def discover_contacts(
         # Fetch entity profile for richer context
         try:
             from .knowledge_base import get_entity_with_profile
+
             full_entity = get_entity_with_profile(entity_id)
             if full_entity:
                 entity = full_entity
-        except Exception:
+        except Exception:  # noqa: S110 — best-effort entity lookup
             pass
 
         for contact in stored:
@@ -161,23 +171,26 @@ async def discover_contacts(
                     project=project, entity=entity, contact=contact, api_key=api_key
                 )
                 if context:
-                    client_db.table("contacts").update({
-                        "outreach_context": context,
-                    }).eq("id", contact["id"]).execute()
+                    client_db.table("contacts").update(
+                        {
+                            "outreach_context": context,
+                        }
+                    ).eq("id", contact["id"]).execute()
                     contact["outreach_context"] = context
             except Exception as exc:
-                logger.warning(
-                    "Outreach context failed for %s: %s", contact.get("full_name"), exc
-                )
+                logger.warning("Outreach context failed for %s: %s", contact.get("full_name"), exc)
 
     # Mark completed
     try:
-        from datetime import datetime, timezone
-        client_db.table("entities").update({
-            "contact_discovery_status": "completed",
-            "contact_discovery_error": None,
-            "contacts_discovered_at": datetime.now(timezone.utc).isoformat(),
-        }).eq("id", entity_id).execute()
+        from datetime import datetime
+
+        client_db.table("entities").update(
+            {
+                "contact_discovery_status": "completed",
+                "contact_discovery_error": None,
+                "contacts_discovered_at": datetime.now(UTC).isoformat(),
+            }
+        ).eq("id", entity_id).execute()
     except Exception:
         logger.warning("Failed to set contact_discovery_status=completed for %s", entity_id)
 
@@ -197,7 +210,7 @@ async def _run_contact_agent(
 
     tools = get_tools(CONTACT_TOOLS)
 
-    for iteration in range(MAX_ITERATIONS):
+    for _iteration in range(MAX_ITERATIONS):
         try:
             response = await _call_api(
                 client,
@@ -229,18 +242,22 @@ async def _run_contact_agent(
                 continue
             try:
                 result = await execute_tool(block.name, block.input)
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": json.dumps(result),
-                })
+                tool_results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": json.dumps(result),
+                    }
+                )
             except Exception as e:
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": json.dumps({"error": str(e)}),
-                    "is_error": True,
-                })
+                tool_results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": json.dumps({"error": str(e)}),
+                        "is_error": True,
+                    }
+                )
 
         messages.append({"role": "assistant", "content": response.content})
         messages.append({"role": "user", "content": tool_results})
@@ -297,13 +314,15 @@ def _validate_contacts(contacts: list) -> list[dict]:
         name = (c.get("full_name") or "").strip()
         if not name:
             continue
-        valid.append({
-            "full_name": name,
-            "title": (c.get("title") or "").strip() or None,
-            "linkedin_url": (c.get("linkedin_url") or "").strip() or None,
-            "source_url": (c.get("source_url") or "").strip() or None,
-            "source_method": c.get("source_method", "web_search"),
-        })
+        valid.append(
+            {
+                "full_name": name,
+                "title": (c.get("title") or "").strip() or None,
+                "linkedin_url": (c.get("linkedin_url") or "").strip() or None,
+                "source_url": (c.get("source_url") or "").strip() or None,
+                "source_method": c.get("source_method", "web_search"),
+            }
+        )
     return valid
 
 
@@ -336,7 +355,7 @@ EPC contractor: {epc_name} (won this project)
 Contact: {contact_name}, {contact_title}
 
 Company context:
-{entity_profile[:1000] if entity_profile else 'No prior history in our system.'}
+{entity_profile[:1000] if entity_profile else "No prior history in our system."}
 
 Write a concise, professional paragraph explaining:
 1. Why this lead is relevant (project specifics)
