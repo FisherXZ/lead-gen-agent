@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import pytest
-
 from src.confidence import compute_confidence_upgrade
 from src.models import EpcSource
 
 
-def _make_source(url: str = "https://example.com", reliability: str = "medium", source_method: str | None = None) -> EpcSource:
+def _make_source(
+    url: str = "https://example.com", reliability: str = "medium", source_method: str | None = None
+) -> EpcSource:
     return EpcSource(
         channel="web_search",
         excerpt="test excerpt",

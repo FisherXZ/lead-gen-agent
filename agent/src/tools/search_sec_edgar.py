@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import difflib
 import logging
-import re
 
 import httpx
 import tenacity
@@ -174,9 +173,24 @@ def _normalize_company_name(name: str) -> str:
     """Strip common suffixes and normalize for fuzzy matching."""
     upper = name.upper().strip()
     # Remove common corporate suffixes
-    for suffix in [", INC", ", INC.", " INC", " INC.", ", LLC", " LLC",
-                   ", CORP", " CORP", ", CO", " CO", ", LTD", " LTD",
-                   ", LP", " LP", ", L.P.", " L.P."]:
+    for suffix in [
+        ", INC",
+        ", INC.",
+        " INC",
+        " INC.",
+        ", LLC",
+        " LLC",
+        ", CORP",
+        " CORP",
+        ", CO",
+        " CO",
+        ", LTD",
+        " LTD",
+        ", LP",
+        " LP",
+        ", L.P.",
+        " L.P.",
+    ]:
         if upper.endswith(suffix):
             upper = upper[: -len(suffix)]
             break
@@ -228,7 +242,9 @@ def _is_retryable(exc: BaseException) -> bool:
     wait=tenacity.wait_exponential(multiplier=1, min=2, max=8),
     reraise=True,
     before_sleep=lambda rs: logger.info(
-        "sec_edgar retry #%d: %s", rs.attempt_number, rs.outcome.exception(),
+        "sec_edgar retry #%d: %s",
+        rs.attempt_number,
+        rs.outcome.exception(),
     ),
 )
 async def _fetch_tickers_with_retry() -> dict:
@@ -244,7 +260,9 @@ async def _fetch_tickers_with_retry() -> dict:
     wait=tenacity.wait_exponential(multiplier=1, min=2, max=8),
     reraise=True,
     before_sleep=lambda rs: logger.info(
-        "sec_edgar retry #%d: %s", rs.attempt_number, rs.outcome.exception(),
+        "sec_edgar retry #%d: %s",
+        rs.attempt_number,
+        rs.outcome.exception(),
     ),
 )
 async def _fetch_submissions(cik: str) -> dict:
@@ -319,17 +337,19 @@ def _filter_filings(
         accession_no_dashes = accession.replace("-", "")
         url = f"https://www.sec.gov/Archives/edgar/data/{padded_cik}/{accession_no_dashes}/{primary_doc}"
 
-        results.append({
-            "company_name": entity_name,
-            "cik": padded_cik,
-            "form_type": filing_form,
-            "filing_date": filing_date,
-            "accession_number": accession,
-            "primary_document": primary_doc,
-            "description": description,
-            "url": url,
-            "source_type": "sec_edgar",
-        })
+        results.append(
+            {
+                "company_name": entity_name,
+                "cik": padded_cik,
+                "form_type": filing_form,
+                "filing_date": filing_date,
+                "accession_number": accession,
+                "primary_document": primary_doc,
+                "description": description,
+                "url": url,
+                "source_type": "sec_edgar",
+            }
+        )
 
     return results
 

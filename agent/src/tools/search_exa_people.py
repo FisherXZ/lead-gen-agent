@@ -39,8 +39,7 @@ DEFINITION = {
             "query": {
                 "type": "string",
                 "description": (
-                    "Natural language query, e.g. "
-                    "'Signal Energy solar project manager Texas'"
+                    "Natural language query, e.g. 'Signal Energy solar project manager Texas'"
                 ),
             },
             "max_results": {
@@ -55,7 +54,9 @@ DEFINITION = {
 
 
 class Input(BaseModel):
-    query: str = Field(..., description="Natural language query, e.g. 'Signal Energy solar project manager Texas'")
+    query: str = Field(
+        ..., description="Natural language query, e.g. 'Signal Energy solar project manager Texas'"
+    )
     max_results: int = Field(10, ge=1, le=20)
 
 

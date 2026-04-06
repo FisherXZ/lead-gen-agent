@@ -16,16 +16,21 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_hs_company_search_response(company_id: str | None):
     """Simulate a HubSpot company search response."""
     if company_id:
         return {
-            "results": [{"id": company_id, "properties": {"name": "Acme Solar EPC", "domain": "acmesolar.com"}}],
+            "results": [
+                {
+                    "id": company_id,
+                    "properties": {"name": "Acme Solar EPC", "domain": "acmesolar.com"},
+                }
+            ],
             "total": 1,
         }
     return {"results": [], "total": 0}
@@ -60,6 +65,7 @@ def _make_hs_deals_response(deals: list[dict]):
 # DEFINITION tests
 # ---------------------------------------------------------------------------
 
+
 def test_definition_shape():
     from src.tools.lookup_hubspot_contacts import DEFINITION
 
@@ -78,6 +84,7 @@ def test_tool_registered():
 # ---------------------------------------------------------------------------
 # Pydantic validation
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_invalid_input_missing_company_name():
@@ -113,6 +120,7 @@ async def test_valid_input_with_domain():
 # Missing API key
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_missing_api_key_returns_error():
     """When HubSpot is not configured, execute returns a graceful error."""
@@ -142,6 +150,7 @@ async def test_missing_token_in_settings_returns_error():
 # Company not found
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_company_not_found():
     """When HubSpot has no matching company, return company_found=False."""
@@ -157,10 +166,12 @@ async def test_company_not_found():
     mock_cache_get = MagicMock(return_value=None)
     mock_cache_set = MagicMock()
 
-    with patch("src.hubspot.get_settings", return_value=mock_settings), \
-         patch("src.tools.lookup_hubspot_contacts.cache_get", mock_cache_get), \
-         patch("src.tools.lookup_hubspot_contacts.cache_set", mock_cache_set), \
-         patch("httpx.AsyncClient") as mock_client_cls:
+    with (
+        patch("src.hubspot.get_settings", return_value=mock_settings),
+        patch("src.tools.lookup_hubspot_contacts.cache_get", mock_cache_get),
+        patch("src.tools.lookup_hubspot_contacts.cache_set", mock_cache_set),
+        patch("httpx.AsyncClient") as mock_client_cls,
+    ):
         mock_async_client = AsyncMock()
         mock_async_client.post.return_value = mock_resp
         mock_client_cls.return_value.__aenter__.return_value = mock_async_client
@@ -176,6 +187,7 @@ async def test_company_not_found():
 # ---------------------------------------------------------------------------
 # Valid result with contacts
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_valid_result_with_contacts():
@@ -193,9 +205,7 @@ async def test_valid_result_with_contacts():
     # Contacts associated with company
     contacts_assoc_resp = MagicMock()
     contacts_assoc_resp.status_code = 200
-    contacts_assoc_resp.json.return_value = _make_hs_contacts_response([
-        {"id": "con-1"}
-    ])
+    contacts_assoc_resp.json.return_value = _make_hs_contacts_response([{"id": "con-1"}])
     contacts_assoc_resp.raise_for_status = MagicMock()
 
     # Individual contact detail
@@ -207,9 +217,18 @@ async def test_valid_result_with_contacts():
     # Deals for contact
     deals_resp = MagicMock()
     deals_resp.status_code = 200
-    deals_resp.json.return_value = _make_hs_deals_response([
-        {"id": "deal-1", "properties": {"dealname": "Solar Farm TX", "dealstage": "closedwon", "amount": "500000"}}
-    ])
+    deals_resp.json.return_value = _make_hs_deals_response(
+        [
+            {
+                "id": "deal-1",
+                "properties": {
+                    "dealname": "Solar Farm TX",
+                    "dealstage": "closedwon",
+                    "amount": "500000",
+                },
+            }
+        ]
+    )
     deals_resp.raise_for_status = MagicMock()
 
     mock_cache_get = MagicMock(return_value=None)
@@ -227,10 +246,12 @@ async def test_valid_result_with_contacts():
         # contact detail
         return contact_detail_resp
 
-    with patch("src.hubspot.get_settings", return_value=mock_settings), \
-         patch("src.tools.lookup_hubspot_contacts.cache_get", mock_cache_get), \
-         patch("src.tools.lookup_hubspot_contacts.cache_set", mock_cache_set), \
-         patch("httpx.AsyncClient") as mock_client_cls:
+    with (
+        patch("src.hubspot.get_settings", return_value=mock_settings),
+        patch("src.tools.lookup_hubspot_contacts.cache_get", mock_cache_get),
+        patch("src.tools.lookup_hubspot_contacts.cache_set", mock_cache_set),
+        patch("httpx.AsyncClient") as mock_client_cls,
+    ):
         mock_async_client = AsyncMock()
         mock_async_client.post = AsyncMock(side_effect=mock_post)
         mock_async_client.get = AsyncMock(side_effect=mock_get)
@@ -259,6 +280,7 @@ async def test_valid_result_with_contacts():
 # Caching
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_caching_hit_skips_http():
     """When cache_get returns data, no HTTP call is made."""
@@ -273,9 +295,11 @@ async def test_caching_hit_skips_http():
     mock_settings = {"api_key": "pat-na-test-token"}
     mock_cache_get = MagicMock(return_value=cached_data)
 
-    with patch("src.hubspot.get_settings", return_value=mock_settings), \
-         patch("src.tools.lookup_hubspot_contacts.cache_get", mock_cache_get), \
-         patch("httpx.AsyncClient") as mock_client_cls:
+    with (
+        patch("src.hubspot.get_settings", return_value=mock_settings),
+        patch("src.tools.lookup_hubspot_contacts.cache_get", mock_cache_get),
+        patch("httpx.AsyncClient") as mock_client_cls,
+    ):
         result = await execute({"company_name": "Acme Solar EPC", "company_domain": None})
 
     # No HTTP requests made
@@ -298,10 +322,12 @@ async def test_caching_miss_writes_cache():
     mock_cache_get = MagicMock(return_value=None)
     mock_cache_set = MagicMock()
 
-    with patch("src.hubspot.get_settings", return_value=mock_settings), \
-         patch("src.tools.lookup_hubspot_contacts.cache_get", mock_cache_get), \
-         patch("src.tools.lookup_hubspot_contacts.cache_set", mock_cache_set), \
-         patch("httpx.AsyncClient") as mock_client_cls:
+    with (
+        patch("src.hubspot.get_settings", return_value=mock_settings),
+        patch("src.tools.lookup_hubspot_contacts.cache_get", mock_cache_get),
+        patch("src.tools.lookup_hubspot_contacts.cache_set", mock_cache_set),
+        patch("httpx.AsyncClient") as mock_client_cls,
+    ):
         mock_async_client = AsyncMock()
         mock_async_client.post = AsyncMock(return_value=company_search_resp)
         mock_client_cls.return_value.__aenter__.return_value = mock_async_client
@@ -317,6 +343,7 @@ async def test_caching_miss_writes_cache():
 # ---------------------------------------------------------------------------
 # Domain-based search
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_domain_included_in_search_when_provided():
@@ -339,10 +366,12 @@ async def test_domain_included_in_search_when_provided():
         captured_payloads.append(kwargs.get("json", {}))
         return company_search_resp
 
-    with patch("src.hubspot.get_settings", return_value=mock_settings), \
-         patch("src.tools.lookup_hubspot_contacts.cache_get", mock_cache_get), \
-         patch("src.tools.lookup_hubspot_contacts.cache_set", mock_cache_set), \
-         patch("httpx.AsyncClient") as mock_client_cls:
+    with (
+        patch("src.hubspot.get_settings", return_value=mock_settings),
+        patch("src.tools.lookup_hubspot_contacts.cache_get", mock_cache_get),
+        patch("src.tools.lookup_hubspot_contacts.cache_set", mock_cache_set),
+        patch("httpx.AsyncClient") as mock_client_cls,
+    ):
         mock_async_client = AsyncMock()
         mock_async_client.post = AsyncMock(side_effect=capture_post)
         mock_client_cls.return_value.__aenter__.return_value = mock_async_client

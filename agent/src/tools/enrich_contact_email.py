@@ -16,8 +16,8 @@ import os
 import httpx
 from pydantic import BaseModel, Field
 
-from ._base import validate_uuid
 from ..db import get_client
+from ._base import validate_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -116,9 +116,9 @@ async def execute(tool_input: dict) -> dict:
     if email:
         try:
             db = get_client()
-            db.table("contacts").update(
-                {"email": email, "email_source": source}
-            ).eq("id", contact_id).execute()
+            db.table("contacts").update({"email": email, "email_source": source}).eq(
+                "id", contact_id
+            ).execute()
         except Exception as exc:
             logger.warning("DB update failed for contact %s: %s", contact_id, exc)
 

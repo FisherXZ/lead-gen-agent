@@ -1,6 +1,7 @@
 """Tests for the think tool."""
 
 import pytest
+
 from src.tools.think import execute
 
 

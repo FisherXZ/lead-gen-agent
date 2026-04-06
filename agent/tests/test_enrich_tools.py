@@ -29,6 +29,7 @@ class TestEnrichContactEmailInput:
 
     def test_missing_contact_id_raises(self):
         from pydantic import ValidationError
+
         from src.tools.enrich_contact_email import Input
 
         with pytest.raises(ValidationError):
@@ -36,6 +37,7 @@ class TestEnrichContactEmailInput:
 
     def test_missing_linkedin_url_raises(self):
         from pydantic import ValidationError
+
         from src.tools.enrich_contact_email import Input
 
         with pytest.raises(ValidationError):
@@ -53,9 +55,7 @@ class TestEnrichContactEmailNoKeys:
         with patch.dict(os.environ, env):
             os.environ.pop("ENRICHMENT_API_KEY", None)
             os.environ.pop("APOLLO_API_KEY", None)
-            result = await execute(
-                {"contact_id": VALID_UUID, "linkedin_url": VALID_LINKEDIN}
-            )
+            result = await execute({"contact_id": VALID_UUID, "linkedin_url": VALID_LINKEDIN})
 
         assert result["status"] == "error"
         assert result["error_category"] == "api_key_missing"
@@ -66,9 +66,7 @@ class TestEnrichContactEmailNoKeys:
         from src.tools.enrich_contact_email import execute
 
         with patch.dict(os.environ, {"ENRICHMENT_API_KEY": "key"}):
-            result = await execute(
-                {"contact_id": "not-a-uuid", "linkedin_url": VALID_LINKEDIN}
-            )
+            result = await execute({"contact_id": "not-a-uuid", "linkedin_url": VALID_LINKEDIN})
 
         assert result["status"] == "error"
         assert result["error_category"] == "validation_error"
@@ -90,15 +88,17 @@ class TestEnrichContactEmailPrimarySucceeds:
         mock_client.post.return_value = mock_resp
 
         mock_db = MagicMock()
-        mock_db.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock()
+        mock_db.table.return_value.update.return_value.eq.return_value.execute.return_value = (
+            MagicMock()
+        )
 
-        with patch("src.tools.enrich_contact_email.httpx.AsyncClient") as mock_cls, \
-             patch("src.tools.enrich_contact_email.get_client", return_value=mock_db, create=True):
+        with (
+            patch("src.tools.enrich_contact_email.httpx.AsyncClient") as mock_cls,
+            patch("src.tools.enrich_contact_email.get_client", return_value=mock_db, create=True),
+        ):
             mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
-            result = await execute(
-                {"contact_id": VALID_UUID, "linkedin_url": VALID_LINKEDIN}
-            )
+            result = await execute({"contact_id": VALID_UUID, "linkedin_url": VALID_LINKEDIN})
 
         assert result["status"] == "success"
         assert result["data"]["email"] == "john@company.com"
@@ -122,10 +122,14 @@ class TestEnrichContactEmailPrimarySucceeds:
         mock_client.post.return_value = mock_resp
 
         mock_db = MagicMock()
-        mock_db.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock()
+        mock_db.table.return_value.update.return_value.eq.return_value.execute.return_value = (
+            MagicMock()
+        )
 
-        with patch("src.tools.enrich_contact_email.httpx.AsyncClient") as mock_cls, \
-             patch("src.tools.enrich_contact_email.get_client", return_value=mock_db, create=True):
+        with (
+            patch("src.tools.enrich_contact_email.httpx.AsyncClient") as mock_cls,
+            patch("src.tools.enrich_contact_email.get_client", return_value=mock_db, create=True),
+        ):
             mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
             await execute({"contact_id": VALID_UUID, "linkedin_url": VALID_LINKEDIN})
@@ -159,15 +163,17 @@ class TestEnrichContactEmailFallback:
         mock_client.post.side_effect = [enrich_resp, apollo_resp]
 
         mock_db = MagicMock()
-        mock_db.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock()
+        mock_db.table.return_value.update.return_value.eq.return_value.execute.return_value = (
+            MagicMock()
+        )
 
-        with patch("src.tools.enrich_contact_email.httpx.AsyncClient") as mock_cls, \
-             patch("src.tools.enrich_contact_email.get_client", return_value=mock_db, create=True):
+        with (
+            patch("src.tools.enrich_contact_email.httpx.AsyncClient") as mock_cls,
+            patch("src.tools.enrich_contact_email.get_client", return_value=mock_db, create=True),
+        ):
             mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
-            result = await execute(
-                {"contact_id": VALID_UUID, "linkedin_url": VALID_LINKEDIN}
-            )
+            result = await execute({"contact_id": VALID_UUID, "linkedin_url": VALID_LINKEDIN})
 
         assert result["status"] == "success"
         assert result["data"]["email"] == "fallback@company.com"
@@ -195,9 +201,7 @@ class TestEnrichContactEmailAllFail:
         with patch("src.tools.enrich_contact_email.httpx.AsyncClient") as mock_cls:
             mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
-            result = await execute(
-                {"contact_id": VALID_UUID, "linkedin_url": VALID_LINKEDIN}
-            )
+            result = await execute({"contact_id": VALID_UUID, "linkedin_url": VALID_LINKEDIN})
 
         assert result["status"] == "success"
         assert result["data"]["email"] is None
@@ -235,6 +239,7 @@ class TestEnrichContactPhoneInput:
 
     def test_missing_contact_id_raises(self):
         from pydantic import ValidationError
+
         from src.tools.enrich_contact_phone import Input
 
         with pytest.raises(ValidationError):
@@ -242,6 +247,7 @@ class TestEnrichContactPhoneInput:
 
     def test_missing_linkedin_url_raises(self):
         from pydantic import ValidationError
+
         from src.tools.enrich_contact_phone import Input
 
         with pytest.raises(ValidationError):
@@ -258,9 +264,7 @@ class TestEnrichContactPhoneNoKeys:
         for key in ["LEADMAGIC_API_KEY", "PROSPEO_API_KEY", "CONTACTOUT_API_KEY", "PDL_API_KEY"]:
             os.environ.pop(key, None)
 
-        result = await execute(
-            {"contact_id": VALID_UUID, "linkedin_url": VALID_LINKEDIN}
-        )
+        result = await execute({"contact_id": VALID_UUID, "linkedin_url": VALID_LINKEDIN})
 
         assert result["status"] == "error"
         assert result["error_category"] == "api_key_missing"
@@ -271,9 +275,7 @@ class TestEnrichContactPhoneNoKeys:
         from src.tools.enrich_contact_phone import execute
 
         with patch.dict(os.environ, {"LEADMAGIC_API_KEY": "key"}):
-            result = await execute(
-                {"contact_id": "not-a-uuid", "linkedin_url": VALID_LINKEDIN}
-            )
+            result = await execute({"contact_id": "not-a-uuid", "linkedin_url": VALID_LINKEDIN})
 
         assert result["status"] == "error"
         assert result["error_category"] == "validation_error"
@@ -295,15 +297,17 @@ class TestEnrichContactPhonePrimarySucceeds:
         mock_client.post.return_value = mock_resp
 
         mock_db = MagicMock()
-        mock_db.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock()
+        mock_db.table.return_value.update.return_value.eq.return_value.execute.return_value = (
+            MagicMock()
+        )
 
-        with patch("src.tools.enrich_contact_phone.httpx.AsyncClient") as mock_cls, \
-             patch("src.tools.enrich_contact_phone.get_client", return_value=mock_db, create=True):
+        with (
+            patch("src.tools.enrich_contact_phone.httpx.AsyncClient") as mock_cls,
+            patch("src.tools.enrich_contact_phone.get_client", return_value=mock_db, create=True),
+        ):
             mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
-            result = await execute(
-                {"contact_id": VALID_UUID, "linkedin_url": VALID_LINKEDIN}
-            )
+            result = await execute({"contact_id": VALID_UUID, "linkedin_url": VALID_LINKEDIN})
 
         assert result["status"] == "success"
         assert result["data"]["phone"] == "+15551234567"
@@ -326,10 +330,14 @@ class TestEnrichContactPhonePrimarySucceeds:
         mock_client.post.return_value = mock_resp
 
         mock_db = MagicMock()
-        mock_db.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock()
+        mock_db.table.return_value.update.return_value.eq.return_value.execute.return_value = (
+            MagicMock()
+        )
 
-        with patch("src.tools.enrich_contact_phone.httpx.AsyncClient") as mock_cls, \
-             patch("src.tools.enrich_contact_phone.get_client", return_value=mock_db, create=True):
+        with (
+            patch("src.tools.enrich_contact_phone.httpx.AsyncClient") as mock_cls,
+            patch("src.tools.enrich_contact_phone.get_client", return_value=mock_db, create=True),
+        ):
             mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
             await execute({"contact_id": VALID_UUID, "linkedin_url": VALID_LINKEDIN})
@@ -362,15 +370,17 @@ class TestEnrichContactPhoneFallback:
         mock_client.post.side_effect = [lm_resp, prospeo_resp]
 
         mock_db = MagicMock()
-        mock_db.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock()
+        mock_db.table.return_value.update.return_value.eq.return_value.execute.return_value = (
+            MagicMock()
+        )
 
-        with patch("src.tools.enrich_contact_phone.httpx.AsyncClient") as mock_cls, \
-             patch("src.tools.enrich_contact_phone.get_client", return_value=mock_db, create=True):
+        with (
+            patch("src.tools.enrich_contact_phone.httpx.AsyncClient") as mock_cls,
+            patch("src.tools.enrich_contact_phone.get_client", return_value=mock_db, create=True),
+        ):
             mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
-            result = await execute(
-                {"contact_id": VALID_UUID, "linkedin_url": VALID_LINKEDIN}
-            )
+            result = await execute({"contact_id": VALID_UUID, "linkedin_url": VALID_LINKEDIN})
 
         assert result["status"] == "success"
         assert result["data"]["phone"] == "+15550001111"
@@ -401,15 +411,17 @@ class TestEnrichContactPhoneFallback:
         mock_client.post.side_effect = [fail_resp, fail_resp, fail_resp, pdl_resp]
 
         mock_db = MagicMock()
-        mock_db.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock()
+        mock_db.table.return_value.update.return_value.eq.return_value.execute.return_value = (
+            MagicMock()
+        )
 
-        with patch("src.tools.enrich_contact_phone.httpx.AsyncClient") as mock_cls, \
-             patch("src.tools.enrich_contact_phone.get_client", return_value=mock_db, create=True):
+        with (
+            patch("src.tools.enrich_contact_phone.httpx.AsyncClient") as mock_cls,
+            patch("src.tools.enrich_contact_phone.get_client", return_value=mock_db, create=True),
+        ):
             mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
-            result = await execute(
-                {"contact_id": VALID_UUID, "linkedin_url": VALID_LINKEDIN}
-            )
+            result = await execute({"contact_id": VALID_UUID, "linkedin_url": VALID_LINKEDIN})
 
         assert result["status"] == "success"
         assert result["data"]["phone"] == "+15552223333"
@@ -442,9 +454,7 @@ class TestEnrichContactPhoneAllFail:
         with patch("src.tools.enrich_contact_phone.httpx.AsyncClient") as mock_cls:
             mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
-            result = await execute(
-                {"contact_id": VALID_UUID, "linkedin_url": VALID_LINKEDIN}
-            )
+            result = await execute({"contact_id": VALID_UUID, "linkedin_url": VALID_LINKEDIN})
 
         assert result["status"] == "success"
         assert result["data"]["phone"] is None

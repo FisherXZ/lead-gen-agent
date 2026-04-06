@@ -1,7 +1,10 @@
 """Tests for Compactor."""
-import pytest
+
 from unittest.mock import AsyncMock, patch
-from agent.src.runtime.compactor import Compactor, estimate_tokens, _build_summary_message
+
+import pytest
+from agent.src.runtime.compactor import Compactor, _build_summary_message, estimate_tokens
+
 
 def _make_messages(count, content_size=100):
     msgs = []
@@ -9,17 +12,22 @@ def _make_messages(count, content_size=100):
         if i % 2 == 0:
             msgs.append({"role": "user", "content": "x" * content_size})
         else:
-            msgs.append({"role": "assistant", "content": [{"type": "text", "text": "y" * content_size}]})
+            msgs.append(
+                {"role": "assistant", "content": [{"type": "text", "text": "y" * content_size}]}
+            )
     return msgs
+
 
 def test_estimate_tokens():
     assert estimate_tokens([{"role": "user", "content": "hello"}]) > 0
+
 
 @pytest.mark.asyncio
 async def test_no_compaction_under_threshold():
     c = Compactor(max_tokens=100_000, preserve_recent=4)
     msgs = _make_messages(4, 50)
     assert await c.maybe_compact(msgs) == msgs
+
 
 @pytest.mark.asyncio
 async def test_compaction_preserves_recent():
@@ -33,6 +41,7 @@ async def test_compaction_preserves_recent():
     assert "Summary" in result[0]["content"]
     assert result[1:] == msgs[-4:]
 
+
 @pytest.mark.asyncio
 async def test_compaction_calls_summarize():
     c = Compactor(max_tokens=100, preserve_recent=2)
@@ -42,6 +51,7 @@ async def test_compaction_calls_summarize():
         await c.maybe_compact(msgs)
     older = mock.call_args[0][0]
     assert len(older) == 4
+
 
 def test_summary_message_format():
     msg = _build_summary_message("User researched EPC for Sunrise Solar.")

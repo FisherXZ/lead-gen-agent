@@ -60,7 +60,9 @@ DEFINITION = {
             },
             "company_domain": {
                 "type": "string",
-                "description": "Company domain (e.g. acmesolar.com) for precise matching. Optional.",
+                "description": (
+                    "Company domain (e.g. acmesolar.com) for precise matching. Optional."
+                ),
             },
         },
         "required": ["company_name"],
@@ -80,6 +82,7 @@ async def execute(tool_input: dict) -> dict:
 
     # --- API key ---
     from ..hubspot import get_settings
+
     settings = get_settings()
     if not settings:
         return {
@@ -189,11 +192,13 @@ async def _search_company(
         }
     ]
     if company_domain:
-        filters.append({
-            "propertyName": "domain",
-            "operator": "EQ",
-            "value": company_domain,
-        })
+        filters.append(
+            {
+                "propertyName": "domain",
+                "operator": "EQ",
+                "value": company_domain,
+            }
+        )
 
     payload = {
         "filterGroups": [{"filters": filters}],

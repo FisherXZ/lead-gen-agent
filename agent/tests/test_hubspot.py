@@ -9,11 +9,14 @@ import pytest
 
 def test_fernet_roundtrip():
     """Encrypt + decrypt produces original text."""
-    from src.hubspot import _encrypt, _decrypt
+    from src.hubspot import _decrypt, _encrypt
 
-    with patch.dict("os.environ", {"HUBSPOT_ENCRYPTION_KEY": "VGVzdEtleUZvckhCU1BvdEZlcm5ldDMyYg=="}):
+    with patch.dict(
+        "os.environ", {"HUBSPOT_ENCRYPTION_KEY": "VGVzdEtleUZvckhCU1BvdEZlcm5ldDMyYg=="}
+    ):
         # Generate a real Fernet key for testing
         from cryptography.fernet import Fernet
+
         key = Fernet.generate_key().decode()
 
         with patch.dict("os.environ", {"HUBSPOT_ENCRYPTION_KEY": key}):
@@ -31,6 +34,7 @@ def test_fernet_missing_key_raises():
     with patch.dict("os.environ", {}, clear=True):
         # Remove the key
         import os
+
         old = os.environ.pop("HUBSPOT_ENCRYPTION_KEY", None)
         try:
             with pytest.raises(ValueError, match="HUBSPOT_ENCRYPTION_KEY"):
@@ -142,18 +146,22 @@ def test_push_discovery_full_success():
     from src.hubspot import push_discovery
 
     mock_table = MagicMock()
-    mock_table.select.return_value.eq.return_value.eq.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value = MagicMock(data=[])
+    eq_chain = mock_table.select.return_value.eq.return_value.eq.return_value
+    eq_chain.eq.return_value.order.return_value.limit.return_value.execute.return_value = MagicMock(
+        data=[]
+    )
     mock_table.insert.return_value.execute.return_value = MagicMock(data=[{}])
     mock_db = MagicMock()
     mock_db.table.return_value = mock_table
 
-    with patch("src.hubspot.get_client", return_value=mock_db), \
-         patch("src.hubspot.search_company", return_value=None), \
-         patch("src.hubspot.create_company", return_value="hs-co-1"), \
-         patch("src.hubspot.create_deal", return_value="hs-deal-1"), \
-         patch("src.hubspot.create_contact", return_value="hs-ct-1"), \
-         patch("src.hubspot._associate"):
-
+    with (
+        patch("src.hubspot.get_client", return_value=mock_db),
+        patch("src.hubspot.search_company", return_value=None),
+        patch("src.hubspot.create_company", return_value="hs-co-1"),
+        patch("src.hubspot.create_deal", return_value="hs-deal-1"),
+        patch("src.hubspot.create_contact", return_value="hs-ct-1"),
+        patch("src.hubspot._associate"),
+    ):
         result = push_discovery(
             project={"id": "proj-1", "project_name": "Test Solar", "mw_capacity": 200},
             entity={"id": "ent-1", "name": "McCarthy"},
@@ -172,18 +180,22 @@ def test_push_discovery_partial_failure():
     from src.hubspot import push_discovery
 
     mock_table = MagicMock()
-    mock_table.select.return_value.eq.return_value.eq.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value = MagicMock(data=[])
+    eq_chain = mock_table.select.return_value.eq.return_value.eq.return_value
+    eq_chain.eq.return_value.order.return_value.limit.return_value.execute.return_value = MagicMock(
+        data=[]
+    )
     mock_table.insert.return_value.execute.return_value = MagicMock(data=[{}])
     mock_db = MagicMock()
     mock_db.table.return_value = mock_table
 
-    with patch("src.hubspot.get_client", return_value=mock_db), \
-         patch("src.hubspot.search_company", return_value=None), \
-         patch("src.hubspot.create_company", return_value="hs-co-1"), \
-         patch("src.hubspot.create_deal", side_effect=RuntimeError("Deal creation failed")), \
-         patch("src.hubspot.create_contact", return_value="hs-ct-1"), \
-         patch("src.hubspot._associate"):
-
+    with (
+        patch("src.hubspot.get_client", return_value=mock_db),
+        patch("src.hubspot.search_company", return_value=None),
+        patch("src.hubspot.create_company", return_value="hs-co-1"),
+        patch("src.hubspot.create_deal", side_effect=RuntimeError("Deal creation failed")),
+        patch("src.hubspot.create_contact", return_value="hs-ct-1"),
+        patch("src.hubspot._associate"),
+    ):
         result = push_discovery(
             project={"id": "proj-1", "project_name": "Test"},
             entity={"id": "ent-1", "name": "EPC Corp"},

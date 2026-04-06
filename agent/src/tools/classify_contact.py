@@ -7,7 +7,7 @@ then writes results to the contact_persona_scores table.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
@@ -117,7 +117,8 @@ def _build_prompt(contact: dict, entity_name: str) -> str:
     else:
         experience_summary = "No experience listed"
 
-    return f"""Classify this contact for Civ Robotics, which sells autonomous layout robots to solar EPCs.
+    return f"""Classify this contact for Civ Robotics, which sells \
+autonomous layout robots to solar EPCs.
 
 Contact: {full_name}, {title} at {entity_name}
 LinkedIn headline: {headline}
@@ -125,10 +126,14 @@ Experience:
 {experience_summary}
 
 Score each criterion:
-- role_aligned: Is this a construction/operations/PM/procurement role? (NOT HR/Finance/Legal/Marketing/IT)
-- is_decision_maker: VP/Director/Senior level who could approve equipment purchases?
-- project_relevant: Working in solar energy, renewable construction, or the specific region?
-- persona_fit: Overall — would this person be interested in robots that automate layout staking on solar farms?
+- role_aligned: Is this a construction/operations/PM/procurement role? \
+(NOT HR/Finance/Legal/Marketing/IT)
+- is_decision_maker: VP/Director/Senior level who could approve \
+equipment purchases?
+- project_relevant: Working in solar energy, renewable construction, \
+or the specific region?
+- persona_fit: Overall — would this person be interested in robots \
+that automate layout staking on solar farms?
 
 Be strict: only mark true if genuinely aligned. Use the score_contact tool to return results."""
 
@@ -142,20 +147,30 @@ async def execute(tool_input: dict) -> dict:
     contact_id = tool_input.get("contact_id", "").strip()
 
     if not validate_uuid(contact_id):
-        return {"status": "error", "error": f"Invalid contact_id: {contact_id!r}", "error_category": "validation_error"}
+        return {
+            "status": "error",
+            "error": f"Invalid contact_id: {contact_id!r}",
+            "error_category": "validation_error",
+        }
 
     client = get_client()
 
     # 1. Fetch contact
     contact_resp = (
         client.table("contacts")
-        .select("id, entity_id, full_name, title, linkedin_headline, linkedin_experience, source_method")
+        .select(
+            "id, entity_id, full_name, title, linkedin_headline, linkedin_experience, source_method"
+        )
         .eq("id", contact_id)
         .limit(1)
         .execute()
     )
     if not contact_resp.data:
-        return {"status": "error", "error": f"Contact not found: {contact_id}", "error_category": "not_found"}
+        return {
+            "status": "error",
+            "error": f"Contact not found: {contact_id}",
+            "error_category": "not_found",
+        }
 
     contact = contact_resp.data[0]
     entity_id = contact.get("entity_id")
@@ -164,11 +179,7 @@ async def execute(tool_input: dict) -> dict:
     entity_name = "Unknown Company"
     if entity_id:
         entity_resp = (
-            client.table("entities")
-            .select("id, name")
-            .eq("id", entity_id)
-            .limit(1)
-            .execute()
+            client.table("entities").select("id, name").eq("id", entity_id).limit(1).execute()
         )
         if entity_resp.data:
             entity_name = entity_resp.data[0].get("name") or entity_name
@@ -188,7 +199,10 @@ async def execute(tool_input: dict) -> dict:
     # Extract tool_use block
     scores = None
     for block in response.content:
-        if getattr(block, "type", None) == "tool_use" and getattr(block, "name", None) == "score_contact":
+        if (
+            getattr(block, "type", None) == "tool_use"
+            and getattr(block, "name", None) == "score_contact"
+        ):
             scores = block.input
             break
 
@@ -214,7 +228,7 @@ async def execute(tool_input: dict) -> dict:
         "ai_project_relevant": project_relevant,
         "ai_persona_fit": persona_fit,
         "ai_reasoning": reasoning,
-        "ai_classified_at": datetime.now(timezone.utc).isoformat(),
+        "ai_classified_at": datetime.now(UTC).isoformat(),
     }
     try:
         client.table("contact_persona_scores").upsert(

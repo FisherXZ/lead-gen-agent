@@ -31,7 +31,15 @@ target-version = "py311"
 select = ["E", "F", "I", "UP", "B", "S"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101"]
+"tests/*" = ["S101", "S106"]
+"src/main.py" = ["E402"]          # load_dotenv() must run before imports
+"src/seed_epc_entities.py" = ["E402"]  # load_dotenv() must run before imports
+"tests/test_agents_chat.py" = ["E402"]       # sys.modules stub before import
+"tests/test_agents_research.py" = ["E402"]   # sys.modules stub before import
+"tests/test_hook_batch_tracking.py" = ["E402"]  # sys.modules stub before import
+"tests/test_hook_discovery.py" = ["E402"]    # sys.modules stub before import
+"tests/test_run_research_tool.py" = ["E402"] # sys.modules stub before import
+"src/tools/__init__.py" = ["E402"]           # run_research imported after registry setup
 
 [tool.ruff.format]
 

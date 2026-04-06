@@ -10,8 +10,6 @@ contractor? What's their global MW installed?"
 
 from __future__ import annotations
 
-from ._base import cache_get, cache_set
-
 DEFINITION = {
     "name": "search_wiki_solar",
     "description": (
@@ -28,7 +26,9 @@ DEFINITION = {
         "properties": {
             "epc_name": {
                 "type": "string",
-                "description": "EPC company name to look up (e.g., 'SOLV Energy', 'McCarthy', 'Blattner').",
+                "description": (
+                    "EPC company name to look up (e.g., 'SOLV Energy', 'McCarthy', 'Blattner')."
+                ),
             },
         },
         "required": ["epc_name"],
@@ -48,7 +48,10 @@ async def execute(tool_input: dict) -> dict:
     if not entity:
         return {
             "found": False,
-            "note": f"'{epc_name}' not found in entity database. May not be seeded yet or may be under a different name.",
+            "note": (
+                f"'{epc_name}' not found in entity database. "
+                "May not be seeded yet or may be under a different name."
+            ),
         }
 
     metadata = entity.get("metadata") or {}

@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import os
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Missing API key returns structured error
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_missing_api_key_returns_structured_error():
@@ -30,11 +30,12 @@ async def test_missing_api_key_returns_structured_error():
 # Valid search returns correct envelope structure
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 @patch.dict(os.environ, {"EXA_API_KEY": "test-exa-key"})
 async def test_successful_search_returns_correct_structure():
     """Valid search with mocked Exa API returns correct output envelope."""
-    from src.tools.search_exa_people import execute, _cache
+    from src.tools.search_exa_people import _cache, execute
 
     _cache.clear()
 
@@ -46,7 +47,10 @@ async def test_successful_search_returns_correct_structure():
             {
                 "title": "Signal Energy | Leadership Team",
                 "url": "https://signalenergy.com/team",
-                "text": "John Doe, Senior Project Manager at Signal Energy, oversees solar construction in Texas.",
+                "text": (
+                    "John Doe, Senior Project Manager at Signal Energy, "
+                    "oversees solar construction in Texas."
+                ),
                 "score": 0.95,
             },
             {
@@ -64,10 +68,12 @@ async def test_successful_search_returns_correct_structure():
     with patch("src.tools.search_exa_people.httpx.AsyncClient") as mock_cls:
         mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
         mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
-        result = await execute({
-            "query": "Signal Energy solar project manager Texas",
-            "max_results": 10,
-        })
+        result = await execute(
+            {
+                "query": "Signal Energy solar project manager Texas",
+                "max_results": 10,
+            }
+        )
 
     assert result["status"] == "success"
     assert result["source"] == "exa"
@@ -88,7 +94,7 @@ async def test_successful_search_returns_correct_structure():
 @patch.dict(os.environ, {"EXA_API_KEY": "test-exa-key"})
 async def test_api_called_with_correct_payload():
     """Exa API is called with correct request body."""
-    from src.tools.search_exa_people import execute, _cache
+    from src.tools.search_exa_people import _cache, execute
 
     _cache.clear()
 
@@ -123,6 +129,7 @@ async def test_api_called_with_correct_payload():
 # Pydantic Input validation
 # ---------------------------------------------------------------------------
 
+
 def test_pydantic_input_valid():
     """Input model accepts valid inputs and applies defaults."""
     from src.tools.search_exa_people import Input
@@ -143,6 +150,7 @@ def test_pydantic_input_custom_max_results():
 def test_pydantic_input_rejects_out_of_range_max_results():
     """Input model rejects max_results outside [1, 20]."""
     from pydantic import ValidationError
+
     from src.tools.search_exa_people import Input
 
     with pytest.raises(ValidationError):
@@ -155,6 +163,7 @@ def test_pydantic_input_rejects_out_of_range_max_results():
 def test_pydantic_input_requires_query():
     """Input model requires query field."""
     from pydantic import ValidationError
+
     from src.tools.search_exa_people import Input
 
     with pytest.raises(ValidationError):
@@ -165,11 +174,12 @@ def test_pydantic_input_requires_query():
 # Caching works
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 @patch.dict(os.environ, {"EXA_API_KEY": "test-exa-key"})
 async def test_cache_avoids_duplicate_calls():
     """Second identical call hits in-memory cache and skips HTTP request."""
-    from src.tools.search_exa_people import execute, _cache
+    from src.tools.search_exa_people import _cache, execute
 
     _cache.clear()
 
@@ -197,7 +207,8 @@ async def test_cache_avoids_duplicate_calls():
 async def test_cache_respects_ttl():
     """Expired cache entries trigger a fresh API call."""
     import time
-    from src.tools.search_exa_people import execute, _cache, _CACHE_TTL
+
+    from src.tools.search_exa_people import _CACHE_TTL, _cache, execute
 
     _cache.clear()
 
@@ -225,6 +236,7 @@ async def test_cache_respects_ttl():
 # DEFINITION dict
 # ---------------------------------------------------------------------------
 
+
 def test_definition_name():
     from src.tools.search_exa_people import DEFINITION
 
@@ -248,6 +260,7 @@ def test_definition_has_required_query():
 # Tool registered in registry
 # ---------------------------------------------------------------------------
 
+
 def test_tool_registered():
     from src.tools import get_tool_names
 
@@ -257,6 +270,7 @@ def test_tool_registered():
 # ---------------------------------------------------------------------------
 # Blank query rejection
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_blank_query_returns_validation_error():
@@ -274,11 +288,12 @@ async def test_blank_query_returns_validation_error():
 # Cache size bounded to _MAX_CACHE_SIZE
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 @patch.dict(os.environ, {"EXA_API_KEY": "test-exa-key"})
 async def test_cache_does_not_exceed_max_size():
     """Cache evicts oldest entries when it exceeds _MAX_CACHE_SIZE."""
-    from src.tools.search_exa_people import execute, _cache, _MAX_CACHE_SIZE
+    from src.tools.search_exa_people import _MAX_CACHE_SIZE, _cache, execute
 
     _cache.clear()
 
@@ -296,8 +311,10 @@ async def test_cache_does_not_exceed_max_size():
         call_counter[0] += 1
         return float(call_counter[0])
 
-    with patch("src.tools.search_exa_people.httpx.AsyncClient") as mock_cls, \
-         patch("src.tools.search_exa_people.time.monotonic", side_effect=monotonic_side_effect):
+    with (
+        patch("src.tools.search_exa_people.httpx.AsyncClient") as mock_cls,
+        patch("src.tools.search_exa_people.time.monotonic", side_effect=monotonic_side_effect),
+    ):
         mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
         mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 

@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 @dataclass
 class TurnResult:
     """Result of a single agent turn (user message -> resolved response)."""
+
     messages: list[dict]
     usage: dict
     events: list[dict] = field(default_factory=list)
@@ -17,6 +18,7 @@ class TurnResult:
 @dataclass
 class RunContext:
     """Contextual info passed to hooks during tool execution."""
+
     conversation_id: str
     session_id: str
     user_id: str
@@ -28,6 +30,7 @@ class RunContext:
 @dataclass
 class HookAction:
     """Result of a pre-tool hook."""
+
     kind: str
     modified_input: dict | None = None
     reason: str | None = None
@@ -49,6 +52,7 @@ class HookAction:
 @dataclass
 class Action:
     """Result of escalation policy evaluation."""
+
     kind: str
     message: str | None = None
     reason: str | None = None

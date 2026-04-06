@@ -5,13 +5,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import traceback
-from typing import Any, Callable, Awaitable
+from collections.abc import Awaitable, Callable
 
-logger = logging.getLogger(__name__)
-
-from .research import run_research
 from .db import get_active_discovery, sanitize_key_from_string, store_discovery
 from .knowledge_base import build_knowledge_context
+from .research import run_research
+
+logger = logging.getLogger(__name__)
 
 
 async def _research_one(
@@ -53,11 +53,13 @@ async def _research_one(
                 "project_name": project_label,
                 "status": "cancelled",
             }
-        await on_progress({
-            "project_id": project_id,
-            "status": "started",
-            "project_name": project_label,
-        })
+        await on_progress(
+            {
+                "project_id": project_id,
+                "status": "started",
+                "project_name": project_label,
+            }
+        )
 
         try:
             knowledge_context = build_knowledge_context(project)
@@ -65,7 +67,10 @@ async def _research_one(
                 project, knowledge_context, api_key=api_key
             )
             discovery = store_discovery(
-                project_id, agent_result, agent_log, total_tokens,
+                project_id,
+                agent_result,
+                agent_log,
+                total_tokens,
                 project=project,
             )
             result = {
@@ -119,7 +124,8 @@ async def run_batch(
             project_id = projects[i]["id"] if i < len(projects) else "unknown"
             logger.error(
                 "Uncaught exception in _research_one for %s: %s",
-                project_id, r,
+                project_id,
+                r,
             )
             error_dict = {
                 "project_id": project_id,
@@ -140,7 +146,10 @@ async def run_batch(
     errors = sum(1 for r in results if r.get("status") == "error")
     logger.info(
         "Batch complete: %d projects — %d completed, %d skipped, %d errors",
-        len(results), completed, skipped, errors,
+        len(results),
+        completed,
+        skipped,
+        errors,
     )
 
     return results

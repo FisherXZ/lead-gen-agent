@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 
@@ -32,6 +32,7 @@ _TIMEOUT = 15.0
 # Fernet encryption for token storage
 # ---------------------------------------------------------------------------
 
+
 def _get_fernet():
     """Get a Fernet instance using HUBSPOT_ENCRYPTION_KEY env var."""
     from cryptography.fernet import Fernet
@@ -40,7 +41,9 @@ def _get_fernet():
     if not key:
         raise ValueError(
             "HUBSPOT_ENCRYPTION_KEY environment variable is not set. "
-            "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+            "Generate one with: python -c "
+            '"from cryptography.fernet import Fernet; '
+            'print(Fernet.generate_key().decode())"'
         )
     return Fernet(key.encode() if isinstance(key, str) else key)
 
@@ -57,6 +60,7 @@ def _decrypt(ciphertext: str) -> str:
 # Settings management
 # ---------------------------------------------------------------------------
 
+
 def get_settings() -> dict | None:
     """Read HubSpot settings, decrypt token. Returns None if not configured."""
     client = get_client()
@@ -72,7 +76,9 @@ def get_settings() -> dict | None:
     return settings
 
 
-def save_settings(token: str, pipeline_id: str | None = None, deal_stage_id: str | None = None) -> dict:
+def save_settings(
+    token: str, pipeline_id: str | None = None, deal_stage_id: str | None = None
+) -> dict:
     """Validate token, encrypt, and save/update settings."""
     # Validate first
     info = validate_token(token)
@@ -91,7 +97,9 @@ def save_settings(token: str, pipeline_id: str | None = None, deal_stage_id: str
     # Check if settings row exists
     existing = client.table("hubspot_settings").select("id").limit(1).execute()
     if existing.data:
-        resp = client.table("hubspot_settings").update(data).eq("id", existing.data[0]["id"]).execute()
+        resp = (
+            client.table("hubspot_settings").update(data).eq("id", existing.data[0]["id"]).execute()
+        )
     else:
         resp = client.table("hubspot_settings").insert(data).execute()
 
@@ -101,12 +109,15 @@ def save_settings(token: str, pipeline_id: str | None = None, deal_stage_id: str
 def delete_settings() -> None:
     """Remove HubSpot settings (disconnect)."""
     client = get_client()
-    client.table("hubspot_settings").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+    client.table("hubspot_settings").delete().neq(
+        "id", "00000000-0000-0000-0000-000000000000"
+    ).execute()
 
 
 # ---------------------------------------------------------------------------
 # HubSpot API calls
 # ---------------------------------------------------------------------------
+
 
 def _hs_headers(token: str) -> dict:
     return {
@@ -135,13 +146,17 @@ def search_company(name: str, token: str) -> str | None:
             f"{HUBSPOT_API}/crm/v3/objects/companies/search",
             headers=_hs_headers(token),
             json={
-                "filterGroups": [{
-                    "filters": [{
-                        "propertyName": "name",
-                        "operator": "EQ",
-                        "value": name,
-                    }]
-                }],
+                "filterGroups": [
+                    {
+                        "filters": [
+                            {
+                                "propertyName": "name",
+                                "operator": "EQ",
+                                "value": name,
+                            }
+                        ]
+                    }
+                ],
                 "limit": 1,
             },
         )
@@ -170,10 +185,18 @@ def create_company(entity: dict, token: str) -> str:
         return resp.json()["id"]
 
 
-def create_deal(project: dict, company_hs_id: str, token: str, pipeline_id: str | None = None, deal_stage_id: str | None = None) -> str:
+def create_deal(
+    project: dict,
+    company_hs_id: str,
+    token: str,
+    pipeline_id: str | None = None,
+    deal_stage_id: str | None = None,
+) -> str:
     """Create a HubSpot Deal. Returns hubspot_id."""
     properties = {
-        "dealname": f"{project.get('project_name', 'Solar Project')} — {project.get('mw_capacity', '?')}MW",
+        "dealname": (
+            f"{project.get('project_name', 'Solar Project')} — {project.get('mw_capacity', '?')}MW"
+        ),
         "pipeline": pipeline_id or "default",
         "dealstage": deal_stage_id or "appointmentscheduled",
         "description": (
@@ -203,11 +226,16 @@ def create_contact(contact: dict, company_hs_id: str, token: str, db_client=None
     """Create or find a HubSpot Contact. Returns hubspot_id."""
     # Check sync_log cache for prior successful sync
     if db_client and contact.get("id"):
-        existing = db_client.table("hubspot_sync_log").select("hubspot_object_id").eq(
-            "contact_id", contact["id"]
-        ).eq("hubspot_object_type", "contact").eq("sync_status", "success").order(
-            "synced_at", desc=True
-        ).limit(1).execute()
+        existing = (
+            db_client.table("hubspot_sync_log")
+            .select("hubspot_object_id")
+            .eq("contact_id", contact["id"])
+            .eq("hubspot_object_type", "contact")
+            .eq("sync_status", "success")
+            .order("synced_at", desc=True)
+            .limit(1)
+            .execute()
+        )
         if existing.data:
             hs_id = existing.data[0]["hubspot_object_id"]
             _associate("contacts", hs_id, "companies", company_hs_id, token)
@@ -260,12 +288,15 @@ def _associate(from_type: str, from_id: str, to_type: str, to_id: str, token: st
         )
         # 200 or 201 both fine; log but don't fail on association errors
         if resp.status_code >= 400:
-            logger.warning("HubSpot association failed %s→%s: %s", from_type, to_type, resp.text[:200])
+            logger.warning(
+                "HubSpot association failed %s→%s: %s", from_type, to_type, resp.text[:200]
+            )
 
 
 # ---------------------------------------------------------------------------
 # Push orchestrator
 # ---------------------------------------------------------------------------
+
 
 def push_discovery(
     project: dict,
@@ -282,17 +313,22 @@ def push_discovery(
     """
     db_client = get_client()
     result = {"company": None, "deal": None, "contacts": [], "errors": []}
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     # 1. Company — search before create
     company_hs_id = None
     try:
         # Check sync_log cache first
-        existing_sync = db_client.table("hubspot_sync_log").select("hubspot_object_id").eq(
-            "entity_id", entity.get("id")
-        ).eq("hubspot_object_type", "company").eq("sync_status", "success").order(
-            "synced_at", desc=True
-        ).limit(1).execute()
+        existing_sync = (
+            db_client.table("hubspot_sync_log")
+            .select("hubspot_object_id")
+            .eq("entity_id", entity.get("id"))
+            .eq("hubspot_object_type", "company")
+            .eq("sync_status", "success")
+            .order("synced_at", desc=True)
+            .limit(1)
+            .execute()
+        )
 
         if existing_sync.data:
             company_hs_id = existing_sync.data[0]["hubspot_object_id"]
@@ -307,23 +343,27 @@ def push_discovery(
                 result["company"] = {"status": "created", "hubspot_id": company_hs_id}
 
         # Log success
-        db_client.table("hubspot_sync_log").insert({
-            "entity_id": entity.get("id"),
-            "hubspot_object_type": "company",
-            "hubspot_object_id": company_hs_id,
-            "sync_status": "success",
-            "synced_at": now,
-        }).execute()
+        db_client.table("hubspot_sync_log").insert(
+            {
+                "entity_id": entity.get("id"),
+                "hubspot_object_type": "company",
+                "hubspot_object_id": company_hs_id,
+                "sync_status": "success",
+                "synced_at": now,
+            }
+        ).execute()
     except Exception as e:
         error_msg = str(e)[:500]
         result["errors"].append(f"Company: {error_msg}")
-        db_client.table("hubspot_sync_log").insert({
-            "entity_id": entity.get("id"),
-            "hubspot_object_type": "company",
-            "sync_status": "error",
-            "error_message": error_msg,
-            "synced_at": now,
-        }).execute()
+        db_client.table("hubspot_sync_log").insert(
+            {
+                "entity_id": entity.get("id"),
+                "hubspot_object_type": "company",
+                "sync_status": "error",
+                "error_message": error_msg,
+                "synced_at": now,
+            }
+        ).execute()
 
     if not company_hs_id:
         return result  # Can't create deal/contacts without company
@@ -340,24 +380,28 @@ def push_discovery(
     # Log deal result (best-effort)
     try:
         if deal_hs_id:
-            db_client.table("hubspot_sync_log").insert({
-                "project_id": project.get("id"),
-                "entity_id": entity.get("id"),
-                "hubspot_object_type": "deal",
-                "hubspot_object_id": deal_hs_id,
-                "sync_status": "success",
-                "synced_at": now,
-            }).execute()
+            db_client.table("hubspot_sync_log").insert(
+                {
+                    "project_id": project.get("id"),
+                    "entity_id": entity.get("id"),
+                    "hubspot_object_type": "deal",
+                    "hubspot_object_id": deal_hs_id,
+                    "sync_status": "success",
+                    "synced_at": now,
+                }
+            ).execute()
         elif result["errors"]:
-            db_client.table("hubspot_sync_log").insert({
-                "project_id": project.get("id"),
-                "hubspot_object_type": "deal",
-                "sync_status": "error",
-                "error_message": result["errors"][-1],
-                "synced_at": now,
-            }).execute()
-    except Exception:
-        pass  # Best-effort logging
+            db_client.table("hubspot_sync_log").insert(
+                {
+                    "project_id": project.get("id"),
+                    "hubspot_object_type": "deal",
+                    "sync_status": "error",
+                    "error_message": result["errors"][-1],
+                    "synced_at": now,
+                }
+            ).execute()
+    except Exception:  # noqa: S110 — best-effort sync logging
+        pass
 
     # 3. Contacts
     for contact in contacts:
@@ -367,38 +411,46 @@ def push_discovery(
             if deal_hs_id:
                 _associate("contacts", contact_hs_id, "deals", deal_hs_id, token)
 
-            result["contacts"].append({
-                "name": contact.get("full_name"),
-                "status": "created",
-                "hubspot_id": contact_hs_id,
-            })
+            result["contacts"].append(
+                {
+                    "name": contact.get("full_name"),
+                    "status": "created",
+                    "hubspot_id": contact_hs_id,
+                }
+            )
 
-            db_client.table("hubspot_sync_log").insert({
-                "contact_id": contact.get("id"),
-                "entity_id": entity.get("id"),
-                "hubspot_object_type": "contact",
-                "hubspot_object_id": contact_hs_id,
-                "sync_status": "success",
-                "synced_at": now,
-            }).execute()
-        except Exception as e:
-            error_msg = str(e)[:500]
-            result["contacts"].append({
-                "name": contact.get("full_name"),
-                "status": "error",
-                "error": error_msg,
-            })
-            result["errors"].append(f"Contact {contact.get('full_name')}: {error_msg}")
-            try:
-                db_client.table("hubspot_sync_log").insert({
+            db_client.table("hubspot_sync_log").insert(
+                {
                     "contact_id": contact.get("id"),
                     "entity_id": entity.get("id"),
                     "hubspot_object_type": "contact",
-                    "sync_status": "error",
-                    "error_message": error_msg,
+                    "hubspot_object_id": contact_hs_id,
+                    "sync_status": "success",
                     "synced_at": now,
-                }).execute()
-            except Exception:
+                }
+            ).execute()
+        except Exception as e:
+            error_msg = str(e)[:500]
+            result["contacts"].append(
+                {
+                    "name": contact.get("full_name"),
+                    "status": "error",
+                    "error": error_msg,
+                }
+            )
+            result["errors"].append(f"Contact {contact.get('full_name')}: {error_msg}")
+            try:
+                db_client.table("hubspot_sync_log").insert(
+                    {
+                        "contact_id": contact.get("id"),
+                        "entity_id": entity.get("id"),
+                        "hubspot_object_type": "contact",
+                        "sync_status": "error",
+                        "error_message": error_msg,
+                        "synced_at": now,
+                    }
+                ).execute()
+            except Exception:  # noqa: S110 — best-effort sync logging
                 pass
 
     return result

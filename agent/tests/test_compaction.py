@@ -6,7 +6,6 @@ import copy
 import json
 
 from src.compaction import (
-    COMPACTION_THRESHOLD_CHARS,
     KEEP_RECENT_TURNS,
     MAX_CONTEXT_CHARS,
     _compact_tool_result,
@@ -14,10 +13,10 @@ from src.compaction import (
     estimate_context_size,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers to build api_messages
 # ---------------------------------------------------------------------------
+
 
 def _big_json(n_items: int = 50) -> str:
     """Return a large JSON string with a list of items."""
@@ -37,12 +36,14 @@ def _make_assistant_msg(tool_calls: list[tuple[str, str]]) -> dict:
     """
     content = []
     for tid, tname in tool_calls:
-        content.append({
-            "type": "tool_use",
-            "id": tid,
-            "name": tname,
-            "input": {},
-        })
+        content.append(
+            {
+                "type": "tool_use",
+                "id": tid,
+                "name": tname,
+                "input": {},
+            }
+        )
     return {"role": "assistant", "content": content}
 
 
@@ -53,11 +54,13 @@ def _make_user_tool_result_msg(results: list[tuple[str, str]]) -> dict:
     """
     content = []
     for tid, content_str in results:
-        content.append({
-            "type": "tool_result",
-            "tool_use_id": tid,
-            "content": content_str,
-        })
+        content.append(
+            {
+                "type": "tool_result",
+                "tool_use_id": tid,
+                "content": content_str,
+            }
+        )
     return {"role": "user", "content": content}
 
 
@@ -156,16 +159,20 @@ class TestPreservesRecent3Turns:
 
         # Find all user tool_result messages
         original_tool_user_msgs = [
-            (i, m) for i, m in enumerate(original)
+            (i, m)
+            for i, m in enumerate(original)
             if m.get("role") == "user" and isinstance(m.get("content"), list)
         ]
         result_tool_user_msgs = [
-            (i, m) for i, m in enumerate(result)
+            (i, m)
+            for i, m in enumerate(result)
             if m.get("role") == "user" and isinstance(m.get("content"), list)
         ]
 
         # Last 3 should be identical
-        for orig, res in zip(original_tool_user_msgs[-3:], result_tool_user_msgs[-3:]):
+        for orig, res in zip(
+            original_tool_user_msgs[-3:], result_tool_user_msgs[-3:], strict=False
+        ):
             assert json.dumps(orig[1]) == json.dumps(res[1])
 
 
@@ -177,7 +184,7 @@ class TestPreservesTextMessages:
         result = compact_messages(msgs, max_context_chars=1)
 
         # Check text messages are identical
-        for orig, res in zip(original, result):
+        for orig, res in zip(original, result, strict=False):
             if isinstance(orig.get("content"), str):
                 assert orig["content"] == res["content"]
                 assert orig["role"] == res["role"]

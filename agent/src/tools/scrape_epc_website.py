@@ -8,7 +8,9 @@ from . import fetch_page
 
 
 class Input(BaseModel):
-    url: str = Field(..., min_length=1, description="URL of EPC team/about/project page to scrape for contacts")
+    url: str = Field(
+        ..., min_length=1, description="URL of EPC team/about/project page to scrape for contacts"
+    )
 
 
 DEFINITION = {

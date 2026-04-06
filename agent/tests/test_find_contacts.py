@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -39,10 +39,12 @@ async def test_cache_hit_returns_fast():
     cached = [{"full_name": "Cached Person", "title": "VP"}]
 
     with patch("src.tools.find_contacts.cache_get", return_value=cached):
-        result = await execute({
-            "entity_id": "123e4567-e89b-12d3-a456-426614174000",
-            "entity_name": "McCarthy",
-        })
+        result = await execute(
+            {
+                "entity_id": "123e4567-e89b-12d3-a456-426614174000",
+                "entity_name": "McCarthy",
+            }
+        )
 
     assert result["cached"] is True
     assert result["contacts"] == cached
@@ -55,13 +57,17 @@ async def test_db_cache_hit():
 
     db_contacts = [{"full_name": "DB Person", "title": "Director"}]
 
-    with patch("src.tools.find_contacts.cache_get", return_value=None), \
-         patch("src.tools.find_contacts.cache_set"), \
-         patch("src.db.get_contacts_for_entity", return_value=db_contacts):
-        result = await execute({
-            "entity_id": "123e4567-e89b-12d3-a456-426614174000",
-            "entity_name": "Test EPC",
-        })
+    with (
+        patch("src.tools.find_contacts.cache_get", return_value=None),
+        patch("src.tools.find_contacts.cache_set"),
+        patch("src.db.get_contacts_for_entity", return_value=db_contacts),
+    ):
+        result = await execute(
+            {
+                "entity_id": "123e4567-e89b-12d3-a456-426614174000",
+                "entity_name": "Test EPC",
+            }
+        )
 
     assert result["cached"] is True
     assert result["contacts"] == db_contacts
@@ -74,14 +80,18 @@ async def test_runs_discovery_on_cache_miss():
 
     discovered = [{"full_name": "New Person", "title": "VP Solar"}]
 
-    with patch("src.tools.find_contacts.cache_get", return_value=None), \
-         patch("src.tools.find_contacts.cache_set"), \
-         patch("src.db.get_contacts_for_entity", return_value=[]), \
-         patch("src.contact_discovery.discover_contacts", return_value=discovered):
-        result = await execute({
-            "entity_id": "123e4567-e89b-12d3-a456-426614174000",
-            "entity_name": "Test EPC",
-        })
+    with (
+        patch("src.tools.find_contacts.cache_get", return_value=None),
+        patch("src.tools.find_contacts.cache_set"),
+        patch("src.db.get_contacts_for_entity", return_value=[]),
+        patch("src.contact_discovery.discover_contacts", return_value=discovered),
+    ):
+        result = await execute(
+            {
+                "entity_id": "123e4567-e89b-12d3-a456-426614174000",
+                "entity_name": "Test EPC",
+            }
+        )
 
     assert result["cached"] is False
     assert result["count"] == 1

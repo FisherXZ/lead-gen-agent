@@ -16,9 +16,15 @@ import re
 
 # Top 10 EPC domains for portfolio check detection
 _EPC_DOMAINS = {
-    "mccarthybuilding.com", "mortenson.com", "blattnerenergy.com",
-    "signalenergy.com", "rosendin.com", "solvenergyus.com",
-    "stratacleane.com", "sundtconstruction.com", "primoris.com",
+    "mccarthybuilding.com",
+    "mortenson.com",
+    "blattnerenergy.com",
+    "signalenergy.com",
+    "rosendin.com",
+    "solvenergyus.com",
+    "stratacleane.com",
+    "sundtconstruction.com",
+    "primoris.com",
     "maborenewables.com",
 }
 
@@ -93,10 +99,7 @@ def evaluate_completeness(
     new_signals = _has_new_signals(recent)
 
     # --- Error rate ---
-    error_count = sum(
-        1 for r in recent_tool_outputs
-        if isinstance(r, dict) and "error" in r
-    )
+    error_count = sum(1 for r in recent_tool_outputs if isinstance(r, dict) and "error" in r)
     error_rate = error_count / max(len(recent_tool_outputs), 1)
 
     # --- Determine recommendation ---
@@ -191,9 +194,7 @@ def _build_recommendation(
                 f"Portfolio checks: {portfolio_checks} | KB consulted: {kb_consulted}\n"
                 "You are still finding new information. You may continue, but "
                 "you SHOULD call report_findings soon with your best assessment. "
-                "You have used {:.0f}% of your iteration budget.".format(
-                    (iteration + 1) / 25 * 100
-                )
+                "You have used {:.0f}% of your iteration budget.".format((iteration + 1) / 25 * 100)
             )
 
         # No new signals — firm wrap-up

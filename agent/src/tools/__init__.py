@@ -21,8 +21,6 @@ from typing import Any
 
 import httpx
 
-_logger = logging.getLogger(__name__)
-
 from . import (
     approve_discovery,
     batch_research_epc,
@@ -37,8 +35,8 @@ from . import (
     get_discoveries,
     lookup_hubspot_contacts,
     manage_todo,
-    push_to_hubspot,
     notify_progress,
+    push_to_hubspot,
     query_kb,
     recall,
     remember,
@@ -61,6 +59,8 @@ from . import (
     think,
     web_search,
 )
+
+_logger = logging.getLogger(__name__)
 
 # Registry: name -> module
 _REGISTRY: dict[str, Any] = {}
@@ -117,6 +117,7 @@ _register(manage_todo)
 _register(think)
 # Sub-agent tools
 from . import run_research
+
 _register(run_research)
 
 
@@ -158,6 +159,7 @@ async def execute_tool(name: str, tool_input: dict) -> dict:
     if hasattr(mod, "Input"):
         try:
             from pydantic import ValidationError
+
             validated = mod.Input(**tool_input)
             tool_input = validated.model_dump()
         except ValidationError as exc:

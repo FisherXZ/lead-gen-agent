@@ -125,8 +125,8 @@ class Compactor:
         if len(messages) <= self.preserve_recent:
             return messages  # nothing to compact
 
-        older = messages[:-self.preserve_recent]
-        recent = messages[-self.preserve_recent:]
+        older = messages[: -self.preserve_recent]
+        recent = messages[-self.preserve_recent :]
 
         existing_summary = _detect_existing_summary(older)
         summary = await self._summarize(older, existing_summary=existing_summary)

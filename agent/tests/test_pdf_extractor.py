@@ -1,7 +1,6 @@
 """Tests for PDF text extraction skill."""
 
 import pymupdf
-import pytest
 
 from src.skills.pdf.extractor import extract_text
 
@@ -59,7 +58,9 @@ class TestExtractText:
 
     def test_epc_keywords_in_pdf(self):
         """Ensure EPC-relevant text survives extraction."""
-        pdf = _make_pdf(["McCarthy Building Companies awarded EPC contract for 200 MW solar project"])
+        pdf = _make_pdf(
+            ["McCarthy Building Companies awarded EPC contract for 200 MW solar project"]
+        )
         result = extract_text(pdf)
         assert "McCarthy" in result["text"]
         assert "EPC" in result["text"]

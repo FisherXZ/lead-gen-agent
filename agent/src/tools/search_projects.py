@@ -24,7 +24,10 @@ DEFINITION = {
         "properties": {
             "state": {
                 "type": "string",
-                "description": "Two-letter state abbreviation (e.g. 'TX', 'CA', 'IL'). Use abbreviations, not full names.",
+                "description": (
+                    "Two-letter state abbreviation (e.g. 'TX', 'CA', 'IL'). "
+                    "Use abbreviations, not full names."
+                ),
             },
             "iso_region": {
                 "type": "string",
@@ -49,7 +52,10 @@ DEFINITION = {
             },
             "needs_research": {
                 "type": "boolean",
-                "description": "If true, only return projects that don't have an EPC contractor identified yet.",
+                "description": (
+                    "If true, only return projects that don't have an "
+                    "EPC contractor identified yet."
+                ),
             },
             "has_epc": {
                 "type": "boolean",
@@ -57,24 +63,36 @@ DEFINITION = {
             },
             "search": {
                 "type": "string",
-                "description": "Free text search across project name, developer, and queue ID.",
+                "description": ("Free text search across project name, developer, and queue ID."),
             },
             "cod_min": {
                 "type": "string",
-                "description": "Earliest expected COD (YYYY-MM-DD). Default '2025-01-01'. Set to null to remove lower bound.",
+                "description": (
+                    "Earliest expected COD (YYYY-MM-DD). Default '2025-01-01'. "
+                    "Set to null to remove lower bound."
+                ),
             },
             "cod_max": {
                 "type": "string",
-                "description": "Latest expected COD (YYYY-MM-DD). Default '2028-12-31'. Set to null to remove upper bound.",
+                "description": (
+                    "Latest expected COD (YYYY-MM-DD). Default '2028-12-31'. "
+                    "Set to null to remove upper bound."
+                ),
             },
             "min_lead_score": {
                 "type": "integer",
-                "description": "Minimum lead score (0-100). Higher scores = larger, nearer-term, solar+storage projects. Use 70+ for strong leads, 90+ for top-tier.",
+                "description": (
+                    "Minimum lead score (0-100). Higher scores = larger, "
+                    "nearer-term, solar+storage projects. Use 70+ for "
+                    "strong leads, 90+ for top-tier."
+                ),
             },
             "sort_by": {
                 "type": "string",
                 "enum": ["capacity", "lead_score"],
-                "description": "Sort results by 'capacity' (default) or 'lead_score' (highest score first).",
+                "description": (
+                    "Sort results by 'capacity' (default) or 'lead_score' (highest score first)."
+                ),
             },
             "limit": {
                 "type": "integer",

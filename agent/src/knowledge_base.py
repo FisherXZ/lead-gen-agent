@@ -13,7 +13,7 @@ Profile management:
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from .db import get_client
 from .models import AgentResult
@@ -25,18 +25,13 @@ logger = logging.getLogger(__name__)
 # Entity Resolution
 # ---------------------------------------------------------------------------
 
+
 def resolve_entity(name: str) -> dict | None:
     """Look up an entity by name (case-insensitive). Returns dict or None."""
     if not name:
         return None
     client = get_client()
-    resp = (
-        client.table("entities")
-        .select("*")
-        .ilike("name", name)
-        .limit(1)
-        .execute()
-    )
+    resp = client.table("entities").select("*").ilike("name", name).limit(1).execute()
     if resp.data:
         return resp.data[0]
     return None
@@ -56,9 +51,9 @@ def resolve_or_create_entity(name: str, entity_type: str) -> dict:
         types = existing.get("entity_type", [])
         if entity_type not in types:
             client = get_client()
-            client.table("entities").update(
-                {"entity_type": types + [entity_type]}
-            ).eq("id", existing["id"]).execute()
+            client.table("entities").update({"entity_type": types + [entity_type]}).eq(
+                "id", existing["id"]
+            ).execute()
             existing["entity_type"] = types + [entity_type]
         return existing
 
@@ -66,10 +61,12 @@ def resolve_or_create_entity(name: str, entity_type: str) -> dict:
     client = get_client()
     resp = (
         client.table("entities")
-        .insert({
-            "name": name,
-            "entity_type": [entity_type],
-        })
+        .insert(
+            {
+                "name": name,
+                "entity_type": [entity_type],
+            }
+        )
         .execute()
     )
     return resp.data[0]
@@ -79,12 +76,15 @@ def resolve_or_create_entity(name: str, entity_type: str) -> dict:
 # Read Path — called BEFORE agent research
 # ---------------------------------------------------------------------------
 
+
 def get_developer_engagements(entity_id: str) -> list[dict]:
     """Get all known EPC engagements for a developer entity."""
     client = get_client()
     resp = (
         client.table("epc_engagements")
-        .select("*, epc:epc_entity_id(id, name), project:project_id(project_name, mw_capacity, state)")
+        .select(
+            "*, epc:epc_entity_id(id, name), project:project_id(project_name, mw_capacity, state)"
+        )
         .eq("developer_entity_id", entity_id)
         .order("created_at", desc=True)
         .execute()
@@ -156,7 +156,11 @@ def build_knowledge_context(project: dict) -> str | None:
                 # Group by EPC name
                 by_epc: dict[str, list[dict]] = {}
                 for eng in engagements:
-                    epc_name = eng.get("epc", {}).get("name", "Unknown EPC") if isinstance(eng.get("epc"), dict) else "Unknown EPC"
+                    epc_name = (
+                        eng.get("epc", {}).get("name", "Unknown EPC")
+                        if isinstance(eng.get("epc"), dict)
+                        else "Unknown EPC"
+                    )
                     by_epc.setdefault(epc_name, []).append(eng)
 
                 num_epcs = len(by_epc)
@@ -171,7 +175,9 @@ def build_knowledge_context(project: dict) -> str | None:
                     pct = round(100 * count / total) if total else 0
                     states = sorted({e.get("state", "?") for e in engs})
                     state_str = ", ".join(states)
-                    lines.append(f"- {epc_name}: {count} of {total} projects ({pct}%) — {state_str}")
+                    lines.append(
+                        f"- {epc_name}: {count} of {total} projects ({pct}%) — {state_str}"
+                    )
 
                     if pct > strongest_pct:
                         strongest_pct = pct
@@ -179,7 +185,10 @@ def build_knowledge_context(project: dict) -> str | None:
                         strongest_states = state_str
 
                 if strongest_epc and strongest_pct > 50:
-                    lines.append(f"\nStrongest signal: This developer has a repeated relationship with {strongest_epc} in {strongest_states}.")
+                    lines.append(
+                        f"\nStrongest signal: This developer has a repeated "
+                        f"relationship with {strongest_epc} in {strongest_states}."
+                    )
 
                 sections.append("\n".join(lines))
 
@@ -199,7 +208,10 @@ def build_knowledge_context(project: dict) -> str | None:
                     lines.append("  Searches already tried (do NOT repeat):")
                     for s in searches[:8]:
                         lines.append(f'  - "{s}"')
-                    lines.append("  Try different angles: developer website, EPC portfolio pages, regulatory filings.")
+                    lines.append(
+                        "  Try different angles: developer website, "
+                        "EPC portfolio pages, regulatory filings."
+                    )
                 neg_evidence = att.get("negative_evidence", [])
                 if neg_evidence:
                     lines.append("  Negative evidence from prior research:")
@@ -217,14 +229,21 @@ def build_knowledge_context(project: dict) -> str | None:
             # Group by EPC for aggregate stats
             by_epc: dict[str, list[dict]] = {}
             for eng in state_epcs:
-                epc_name = eng.get("epc", {}).get("name", "Unknown") if isinstance(eng.get("epc"), dict) else "Unknown"
+                epc_name = (
+                    eng.get("epc", {}).get("name", "Unknown")
+                    if isinstance(eng.get("epc"), dict)
+                    else "Unknown"
+                )
                 by_epc.setdefault(epc_name, []).append(eng)
 
             lines = [f"### EPCs Active in {state} (from {total_engagements} known engagements)"]
             for epc_name, engs in sorted(by_epc.items(), key=lambda x: -len(x[1])):
                 num_projects = len(engs)
                 total_mw = sum(
-                    (eng.get("project", {}) if isinstance(eng.get("project"), dict) else {}).get("mw_capacity", 0) or 0
+                    (eng.get("project", {}) if isinstance(eng.get("project"), dict) else {}).get(
+                        "mw_capacity", 0
+                    )
+                    or 0
                     for eng in engs
                 )
                 # Format MW: use GW if >= 1000
@@ -234,8 +253,14 @@ def build_knowledge_context(project: dict) -> str | None:
                 most_recent = max(dates) if dates else "?"
                 # Best confidence
                 conf_rank = {"confirmed": 3, "likely": 2, "possible": 1}
-                best_conf = max((e.get("confidence", "possible") for e in engs), key=lambda c: conf_rank.get(c, 0))
-                lines.append(f"- **{epc_name}**: {num_projects} projects, {mw_str} total, most recent {most_recent} ({best_conf})")
+                best_conf = max(
+                    (e.get("confidence", "possible") for e in engs),
+                    key=lambda c: conf_rank.get(c, 0),
+                )
+                lines.append(
+                    f"- **{epc_name}**: {num_projects} projects, "
+                    f"{mw_str} total, most recent {most_recent} ({best_conf})"
+                )
             sections.append("\n".join(lines))
 
     if not sections:
@@ -247,6 +272,7 @@ def build_knowledge_context(project: dict) -> str | None:
 # ---------------------------------------------------------------------------
 # Write Path — called AFTER agent research
 # ---------------------------------------------------------------------------
+
 
 def process_discovery_into_kb(
     project_id: str,
@@ -272,12 +298,16 @@ def process_discovery_into_kb(
 
     # 2. Always insert research_attempt
     outcome = _classify_outcome(result)
-    negative_evidence_data = [ne.model_dump() for ne in result.negative_evidence] if result.negative_evidence else []
+    negative_evidence_data = (
+        [ne.model_dump() for ne in result.negative_evidence] if result.negative_evidence else []
+    )
     attempt_data = {
         "project_id": project_id,
         "developer_entity_id": dev_entity["id"] if dev_entity else None,
         "outcome": outcome,
-        "epc_found": result.epc_contractor if result.epc_contractor and result.epc_contractor != "Unknown" else None,
+        "epc_found": result.epc_contractor
+        if result.epc_contractor and result.epc_contractor != "Unknown"
+        else None,
         "confidence": result.confidence,
         "searches_performed": result.searches_performed,
         "reasoning": result.reasoning,
@@ -293,9 +323,9 @@ def process_discovery_into_kb(
     # 3. Mark developer profile as stale
     if dev_entity:
         try:
-            client.table("entities").update(
-                {"profile_rebuilt_at": None}
-            ).eq("id", dev_entity["id"]).execute()
+            client.table("entities").update({"profile_rebuilt_at": None}).eq(
+                "id", dev_entity["id"]
+            ).execute()
         except Exception as e:
             logger.warning("Failed to mark profile stale: %s", e)
 
@@ -322,7 +352,11 @@ def promote_discovery_to_kb(
             logger.warning("Failed to resolve developer entity %s: %s", developer_name, e)
 
     # Create EPC engagement
-    if result.epc_contractor and result.confidence != "unknown" and result.epc_contractor != "Unknown":
+    if (
+        result.epc_contractor
+        and result.confidence != "unknown"
+        and result.epc_contractor != "Unknown"
+    ):
         try:
             epc_entity = resolve_or_create_entity(result.epc_contractor, "epc")
             if dev_entity:
@@ -348,9 +382,9 @@ def promote_discovery_to_kb(
     # Mark developer profile as stale (engagements changed)
     if dev_entity:
         try:
-            client.table("entities").update(
-                {"profile_rebuilt_at": None}
-            ).eq("id", dev_entity["id"]).execute()
+            client.table("entities").update({"profile_rebuilt_at": None}).eq(
+                "id", dev_entity["id"]
+            ).execute()
         except Exception as e:
             logger.warning("Failed to mark profile stale: %s", e)
 
@@ -372,7 +406,9 @@ def process_rejection_into_kb(
     # Find developer entity for this project
     dev_entity = None
     if project_id:
-        project = client.table("projects").select("developer").eq("id", project_id).limit(1).execute()
+        project = (
+            client.table("projects").select("developer").eq("id", project_id).limit(1).execute()
+        )
         if project.data and project.data[0].get("developer"):
             dev_entity = resolve_entity(project.data[0]["developer"])
 
@@ -400,20 +436,16 @@ def process_rejection_into_kb(
             try:
                 client.table("epc_engagements").delete().eq(
                     "developer_entity_id", dev_entity["id"]
-                ).eq(
-                    "epc_entity_id", epc_entity["id"]
-                ).eq(
-                    "project_id", project_id
-                ).execute()
+                ).eq("epc_entity_id", epc_entity["id"]).eq("project_id", project_id).execute()
             except Exception as e:
                 logger.warning("Failed to delete epc_engagement on rejection: %s", e)
 
     # Mark developer profile as stale
     if dev_entity:
         try:
-            client.table("entities").update(
-                {"profile_rebuilt_at": None}
-            ).eq("id", dev_entity["id"]).execute()
+            client.table("entities").update({"profile_rebuilt_at": None}).eq(
+                "id", dev_entity["id"]
+            ).execute()
         except Exception as e:
             logger.warning("Failed to mark profile stale: %s", e)
 
@@ -439,14 +471,16 @@ def _upsert_engagement(
 ) -> None:
     """Insert engagement, or update confidence/sources if it already exists."""
     try:
-        client.table("epc_engagements").insert({
-            "developer_entity_id": developer_entity_id,
-            "epc_entity_id": epc_entity_id,
-            "project_id": project_id,
-            "confidence": confidence,
-            "sources": sources,
-            "state": state,
-        }).execute()
+        client.table("epc_engagements").insert(
+            {
+                "developer_entity_id": developer_entity_id,
+                "epc_entity_id": epc_entity_id,
+                "project_id": project_id,
+                "confidence": confidence,
+                "sources": sources,
+                "state": state,
+            }
+        ).execute()
     except Exception:
         # Likely duplicate — update existing
         try:
@@ -464,10 +498,12 @@ def _upsert_engagement(
                 # Only upgrade confidence, never downgrade
                 rank = {"confirmed": 3, "likely": 2, "possible": 1}
                 if rank.get(confidence, 0) > rank.get(existing["confidence"], 0):
-                    client.table("epc_engagements").update({
-                        "confidence": confidence,
-                        "sources": sources,
-                    }).eq("id", existing["id"]).execute()
+                    client.table("epc_engagements").update(
+                        {
+                            "confidence": confidence,
+                            "sources": sources,
+                        }
+                    ).eq("id", existing["id"]).execute()
         except Exception as e:
             logger.error("Engagement upsert fallback failed: %s", e, exc_info=True)
             raise
@@ -508,6 +544,7 @@ def _process_related_lead(client, lead: dict, state: str | None) -> None:
 # Profile Rebuild (lazy, template-based)
 # ---------------------------------------------------------------------------
 
+
 def rebuild_profile_if_stale(entity_id: str) -> str:
     """Rebuild an entity's profile if stale. Returns the profile text."""
     client = get_client()
@@ -534,7 +571,9 @@ def rebuild_profile_if_stale(entity_id: str) -> str:
     if "developer" in entity_type:
         dev_engs = (
             client.table("epc_engagements")
-            .select("*, epc:epc_entity_id(name), project:project_id(project_name, mw_capacity, state)")
+            .select(
+                "*, epc:epc_entity_id(name), project:project_id(project_name, mw_capacity, state)"
+            )
             .eq("developer_entity_id", entity_id)
             .order("created_at", desc=True)
             .limit(50)
@@ -546,7 +585,11 @@ def rebuild_profile_if_stale(entity_id: str) -> str:
             # Group by EPC
             by_epc: dict[str, list[dict]] = {}
             for eng in dev_engs:
-                epc_name = eng.get("epc", {}).get("name", "Unknown") if isinstance(eng.get("epc"), dict) else "Unknown"
+                epc_name = (
+                    eng.get("epc", {}).get("name", "Unknown")
+                    if isinstance(eng.get("epc"), dict)
+                    else "Unknown"
+                )
                 by_epc.setdefault(epc_name, []).append(eng)
 
             for epc_name, engs in by_epc.items():
@@ -563,7 +606,10 @@ def rebuild_profile_if_stale(entity_id: str) -> str:
         # Research attempts
         attempts = (
             client.table("research_attempts")
-            .select("outcome, epc_found, confidence, searches_performed, created_at, project:project_id(project_name)")
+            .select(
+                "outcome, epc_found, confidence, searches_performed, "
+                "created_at, project:project_id(project_name)"
+            )
             .eq("developer_entity_id", entity_id)
             .order("created_at", desc=True)
             .limit(20)
@@ -573,7 +619,7 @@ def rebuild_profile_if_stale(entity_id: str) -> str:
         if attempts:
             found = sum(1 for a in attempts if a["outcome"] == "found")
             not_found = sum(1 for a in attempts if a["outcome"] == "not_found")
-            lines.append(f"## Research History")
+            lines.append("## Research History")
             lines.append(f"{len(attempts)} attempts: {found} found, {not_found} not found")
             lines.append("")
 
@@ -581,7 +627,10 @@ def rebuild_profile_if_stale(entity_id: str) -> str:
     if "epc" in entity_type:
         epc_engs = (
             client.table("epc_engagements")
-            .select("*, developer:developer_entity_id(name), project:project_id(project_name, mw_capacity, state)")
+            .select(
+                "*, developer:developer_entity_id(name), "
+                "project:project_id(project_name, mw_capacity, state)"
+            )
             .eq("epc_entity_id", entity_id)
             .order("created_at", desc=True)
             .limit(50)
@@ -591,22 +640,30 @@ def rebuild_profile_if_stale(entity_id: str) -> str:
         if epc_engs:
             lines.append("## Projects as EPC")
             for eng in epc_engs:
-                dev_name = eng.get("developer", {}).get("name", "Unknown") if isinstance(eng.get("developer"), dict) else "Unknown"
+                dev_name = (
+                    eng.get("developer", {}).get("name", "Unknown")
+                    if isinstance(eng.get("developer"), dict)
+                    else "Unknown"
+                )
                 proj = eng.get("project", {}) if isinstance(eng.get("project"), dict) else {}
                 pname = proj.get("project_name", "Unknown")
                 mw = proj.get("mw_capacity", "?")
                 st = eng.get("state", "?")
-                lines.append(f"- {pname} ({mw}MW, {st}) — developer: {dev_name} [{eng['confidence']}]")
+                lines.append(
+                    f"- {pname} ({mw}MW, {st}) — developer: {dev_name} [{eng['confidence']}]"
+                )
             lines.append("")
 
     profile = "\n".join(lines)
 
     # Save profile
-    now = datetime.now(timezone.utc).isoformat()
-    client.table("entities").update({
-        "profile": profile,
-        "profile_rebuilt_at": now,
-    }).eq("id", entity_id).execute()
+    now = datetime.now(UTC).isoformat()
+    client.table("entities").update(
+        {
+            "profile": profile,
+            "profile_rebuilt_at": now,
+        }
+    ).eq("id", entity_id).execute()
 
     return profile
 
@@ -614,6 +671,7 @@ def rebuild_profile_if_stale(entity_id: str) -> str:
 # ---------------------------------------------------------------------------
 # Query helpers (for chat tool and API)
 # ---------------------------------------------------------------------------
+
 
 def get_entity_with_profile(entity_id: str) -> dict | None:
     """Get an entity by ID, rebuilding profile if stale."""
@@ -659,7 +717,11 @@ def query_knowledge_base(entity_name: str | None = None, state: str | None = Non
             seen: set[str] = set()
             lines = [f"## EPCs Active in {state}"]
             for eng in epcs:
-                epc_name = eng.get("epc", {}).get("name", "Unknown") if isinstance(eng.get("epc"), dict) else "Unknown"
+                epc_name = (
+                    eng.get("epc", {}).get("name", "Unknown")
+                    if isinstance(eng.get("epc"), dict)
+                    else "Unknown"
+                )
                 if epc_name in seen:
                     continue
                 seen.add(epc_name)

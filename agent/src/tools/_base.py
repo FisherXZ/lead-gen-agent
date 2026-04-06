@@ -17,9 +17,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, TypedDict
 
 logger = logging.getLogger(__name__)
@@ -66,6 +65,7 @@ def cache_get(tool_name: str, query_params: dict) -> Any | None:
 
     try:
         from ..db import get_client
+
         client = get_client()
         resp = (
             client.table("tool_cache")
@@ -77,7 +77,7 @@ def cache_get(tool_name: str, query_params: dict) -> Any | None:
         if resp.data:
             row = resp.data[0]
             expires_at = datetime.fromisoformat(row["expires_at"].replace("Z", "+00:00"))
-            if expires_at > datetime.now(timezone.utc):
+            if expires_at > datetime.now(UTC):
                 return row["data"]
             # Expired — clean up
             client.table("tool_cache").delete().eq("cache_key", key).execute()
@@ -85,6 +85,7 @@ def cache_get(tool_name: str, query_params: dict) -> Any | None:
         logger.debug("Cache DB read failed for %s, checking in-memory", key)
         # Fall back to in-memory
         import time
+
         if key in _memory_cache:
             cached_at, data = _memory_cache[key]
             if time.time() - cached_at < 3600:  # 1h fallback TTL
@@ -96,18 +97,22 @@ def cache_get(tool_name: str, query_params: dict) -> Any | None:
 def cache_set(tool_name: str, query_params: dict, data: Any, ttl_hours: int = 24) -> None:
     """Write to Supabase cache. Falls back to in-memory on DB error."""
     key = _make_cache_key(tool_name, query_params)
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=ttl_hours)
+    expires_at = datetime.now(UTC) + timedelta(hours=ttl_hours)
 
     try:
         from ..db import get_client
+
         client = get_client()
-        client.table("tool_cache").upsert({
-            "cache_key": key,
-            "tool_name": tool_name,
-            "data": data,
-            "expires_at": expires_at.isoformat(),
-        }).execute()
+        client.table("tool_cache").upsert(
+            {
+                "cache_key": key,
+                "tool_name": tool_name,
+                "data": data,
+                "expires_at": expires_at.isoformat(),
+            }
+        ).execute()
     except Exception:
         logger.debug("Cache DB write failed for %s, using in-memory", key)
         import time
+
         _memory_cache[key] = (time.time(), data)

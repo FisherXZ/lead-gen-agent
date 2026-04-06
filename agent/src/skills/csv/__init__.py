@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .processor import parse_csv, export_csv, summarize_csv
+from .processor import export_csv, parse_csv, summarize_csv
 
 SKILL_META = {
     "name": "csv",

@@ -1,7 +1,8 @@
 """Tests for the manage_todo tool."""
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from src.tools.manage_todo import execute
 
@@ -9,12 +10,15 @@ from src.tools.manage_todo import execute
 @pytest.fixture
 def mock_db():
     """Mock DB calls for manage_todo."""
-    with patch("src.tools.manage_todo.upsert_scratch") as mock_upsert, \
-         patch("src.tools.manage_todo.read_scratch") as mock_read:
+    with (
+        patch("src.tools.manage_todo.upsert_scratch") as mock_upsert,
+        patch("src.tools.manage_todo.read_scratch") as mock_read,
+    ):
         yield mock_upsert, mock_read
 
 
 # --- CREATE ---
+
 
 @pytest.mark.asyncio
 async def test_create_basic(mock_db):
@@ -61,17 +65,31 @@ async def test_create_defaults_status_to_pending(mock_db):
 
 # --- UPDATE ---
 
+
 @pytest.mark.asyncio
 async def test_update_existing_task(mock_db):
     mock_upsert, mock_read = mock_db
-    mock_read.return_value = [{"value": {"tasks": [
-        {"id": 1, "description": "Search SEC EDGAR", "status": "pending", "result_summary": ""},
-    ]}}]
-    result = await execute({
-        "operation": "update",
-        "session_id": "s1",
-        "tasks": [{"id": 1, "status": "done", "result_summary": "Found 3 filings"}],
-    })
+    mock_read.return_value = [
+        {
+            "value": {
+                "tasks": [
+                    {
+                        "id": 1,
+                        "description": "Search SEC EDGAR",
+                        "status": "pending",
+                        "result_summary": "",
+                    },
+                ]
+            }
+        }
+    ]
+    result = await execute(
+        {
+            "operation": "update",
+            "session_id": "s1",
+            "tasks": [{"id": 1, "status": "done", "result_summary": "Found 3 filings"}],
+        }
+    )
     assert result["status"] == "updated"
     assert 1 in result["updated_ids"]
 
@@ -80,11 +98,13 @@ async def test_update_existing_task(mock_db):
 async def test_update_before_create(mock_db):
     _, mock_read = mock_db
     mock_read.return_value = []
-    result = await execute({
-        "operation": "update",
-        "session_id": "s1",
-        "tasks": [{"id": 1, "status": "done"}],
-    })
+    result = await execute(
+        {
+            "operation": "update",
+            "session_id": "s1",
+            "tasks": [{"id": 1, "status": "done"}],
+        }
+    )
     assert "error" in result
     assert "create" in result["error"].lower()
 
@@ -92,14 +112,27 @@ async def test_update_before_create(mock_db):
 @pytest.mark.asyncio
 async def test_update_adds_new_task(mock_db):
     mock_upsert, mock_read = mock_db
-    mock_read.return_value = [{"value": {"tasks": [
-        {"id": 1, "description": "Existing task", "status": "done", "result_summary": "Done"},
-    ]}}]
-    result = await execute({
-        "operation": "update",
-        "session_id": "s1",
-        "tasks": [{"id": 2, "description": "New task"}],
-    })
+    mock_read.return_value = [
+        {
+            "value": {
+                "tasks": [
+                    {
+                        "id": 1,
+                        "description": "Existing task",
+                        "status": "done",
+                        "result_summary": "Done",
+                    },
+                ]
+            }
+        }
+    ]
+    result = await execute(
+        {
+            "operation": "update",
+            "session_id": "s1",
+            "tasks": [{"id": 2, "description": "New task"}],
+        }
+    )
     assert result["status"] == "updated"
     assert 2 in result["added_ids"]
     assert result["total_tasks"] == 2
@@ -107,13 +140,25 @@ async def test_update_adds_new_task(mock_db):
 
 # --- READ ---
 
+
 @pytest.mark.asyncio
 async def test_read_existing_todo(mock_db):
     _, mock_read = mock_db
-    mock_read.return_value = [{"value": {"tasks": [
-        {"id": 1, "description": "Task A", "status": "done", "result_summary": "Found it"},
-        {"id": 2, "description": "Task B", "status": "pending", "result_summary": ""},
-    ]}}]
+    mock_read.return_value = [
+        {
+            "value": {
+                "tasks": [
+                    {
+                        "id": 1,
+                        "description": "Task A",
+                        "status": "done",
+                        "result_summary": "Found it",
+                    },
+                    {"id": 2, "description": "Task B", "status": "pending", "result_summary": ""},
+                ]
+            }
+        }
+    ]
     result = await execute({"operation": "read", "session_id": "s1"})
     assert len(result["tasks"]) == 2
     assert result["summary"]["total"] == 2
@@ -132,6 +177,7 @@ async def test_read_no_todo(mock_db):
 
 
 # --- UNKNOWN OPERATION ---
+
 
 @pytest.mark.asyncio
 async def test_unknown_operation(mock_db):

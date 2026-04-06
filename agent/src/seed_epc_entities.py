@@ -26,12 +26,11 @@ Flow:
 from __future__ import annotations
 
 import argparse
-import json
 import logging
-import sys
 from difflib import SequenceMatcher
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 import httpx
@@ -61,7 +60,9 @@ KNOWN_ALIASES: dict[str, list[str]] = {
 # ---------------------------------------------------------------------------
 
 # Latest known Wiki-Solar top EPC PDF URL (November 2024 edition)
-WIKI_SOLAR_PDF_URL = "https://www.wiki-solar.org/library/public/2411_Top-list_Utility-scale_solar_EPCs_O+Ms.pdf"
+WIKI_SOLAR_PDF_URL = (
+    "https://www.wiki-solar.org/library/public/2411_Top-list_Utility-scale_solar_EPCs_O+Ms.pdf"
+)
 
 # Hardcoded fallback rankings from the November 2024 PDF
 # (in case the PDF URL changes or parsing fails)
@@ -102,6 +103,7 @@ def fetch_wiki_solar_pdf() -> list[dict]:
             pdf_bytes = resp.content
 
         import pymupdf
+
         doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
         text = ""
         for page in doc:
@@ -159,7 +161,7 @@ def _parse_wiki_solar_text(text: str) -> list[dict]:
         company_match = company_pattern.match(line)
         if company_match:
             raw_name = company_match.group(1).strip()
-            country = company_match.group(2)
+            company_match.group(2)
 
             # Clean up name: remove "(Inc ...)" suffixes for canonical name
             clean_name = re.sub(r"\s*\(Inc\s+.*", "", raw_name).strip()
@@ -191,11 +193,13 @@ def _parse_wiki_solar_text(text: str) -> list[dict]:
                 current_rank = rank
 
             if clean_name and len(clean_name) > 2:
-                rankings.append({
-                    "name": clean_name,
-                    "mw_installed": mw,
-                    "rank": rank,
-                })
+                rankings.append(
+                    {
+                        "name": clean_name,
+                        "mw_installed": mw,
+                        "rank": rank,
+                    }
+                )
 
         i += 1
 
@@ -214,21 +218,111 @@ SPW_URLS = [
 
 # Hardcoded fallback from SPW 2024 list
 _SPW_FALLBACK: list[dict] = [
-    {"name": "SOLV Energy", "spw_rank": 1, "spw_kw_installed": 15000000, "spw_markets": ["utility"], "spw_service_type": "EPC"},
-    {"name": "McCarthy Building Companies", "spw_rank": 2, "spw_kw_installed": 8500000, "spw_markets": ["utility"], "spw_service_type": "EPC"},
-    {"name": "Blattner Energy", "spw_rank": 3, "spw_kw_installed": 7200000, "spw_markets": ["utility"], "spw_service_type": "EPC"},
-    {"name": "Mortenson", "spw_rank": 4, "spw_kw_installed": 6800000, "spw_markets": ["utility"], "spw_service_type": "EPC"},
-    {"name": "Signal Energy", "spw_rank": 5, "spw_kw_installed": 5500000, "spw_markets": ["utility"], "spw_service_type": "EPC"},
-    {"name": "Primoris Services", "spw_rank": 6, "spw_kw_installed": 4800000, "spw_markets": ["utility"], "spw_service_type": "EPC"},
-    {"name": "Rosendin Electric", "spw_rank": 7, "spw_kw_installed": 4200000, "spw_markets": ["utility", "C&I"], "spw_service_type": "EPC"},
-    {"name": "Strata Clean Energy", "spw_rank": 8, "spw_kw_installed": 3800000, "spw_markets": ["utility"], "spw_service_type": "EPC"},
-    {"name": "Sundt Construction", "spw_rank": 9, "spw_kw_installed": 3200000, "spw_markets": ["utility"], "spw_service_type": "EPC"},
-    {"name": "Moss & Associates", "spw_rank": 10, "spw_kw_installed": 2800000, "spw_markets": ["utility"], "spw_service_type": "EPC"},
-    {"name": "First Solar", "spw_rank": 11, "spw_kw_installed": 2500000, "spw_markets": ["utility"], "spw_service_type": "EPC"},
-    {"name": "RES Group", "spw_rank": 12, "spw_kw_installed": 2200000, "spw_markets": ["utility"], "spw_service_type": "EPC"},
-    {"name": "Burns & McDonnell", "spw_rank": 13, "spw_kw_installed": 1800000, "spw_markets": ["utility"], "spw_service_type": "EPC"},
-    {"name": "Bechtel", "spw_rank": 14, "spw_kw_installed": 1500000, "spw_markets": ["utility"], "spw_service_type": "EPC"},
-    {"name": "Wanzek Construction", "spw_rank": 15, "spw_kw_installed": 1200000, "spw_markets": ["utility"], "spw_service_type": "EPC"},
+    {
+        "name": "SOLV Energy",
+        "spw_rank": 1,
+        "spw_kw_installed": 15000000,
+        "spw_markets": ["utility"],
+        "spw_service_type": "EPC",
+    },
+    {
+        "name": "McCarthy Building Companies",
+        "spw_rank": 2,
+        "spw_kw_installed": 8500000,
+        "spw_markets": ["utility"],
+        "spw_service_type": "EPC",
+    },
+    {
+        "name": "Blattner Energy",
+        "spw_rank": 3,
+        "spw_kw_installed": 7200000,
+        "spw_markets": ["utility"],
+        "spw_service_type": "EPC",
+    },
+    {
+        "name": "Mortenson",
+        "spw_rank": 4,
+        "spw_kw_installed": 6800000,
+        "spw_markets": ["utility"],
+        "spw_service_type": "EPC",
+    },
+    {
+        "name": "Signal Energy",
+        "spw_rank": 5,
+        "spw_kw_installed": 5500000,
+        "spw_markets": ["utility"],
+        "spw_service_type": "EPC",
+    },
+    {
+        "name": "Primoris Services",
+        "spw_rank": 6,
+        "spw_kw_installed": 4800000,
+        "spw_markets": ["utility"],
+        "spw_service_type": "EPC",
+    },
+    {
+        "name": "Rosendin Electric",
+        "spw_rank": 7,
+        "spw_kw_installed": 4200000,
+        "spw_markets": ["utility", "C&I"],
+        "spw_service_type": "EPC",
+    },
+    {
+        "name": "Strata Clean Energy",
+        "spw_rank": 8,
+        "spw_kw_installed": 3800000,
+        "spw_markets": ["utility"],
+        "spw_service_type": "EPC",
+    },
+    {
+        "name": "Sundt Construction",
+        "spw_rank": 9,
+        "spw_kw_installed": 3200000,
+        "spw_markets": ["utility"],
+        "spw_service_type": "EPC",
+    },
+    {
+        "name": "Moss & Associates",
+        "spw_rank": 10,
+        "spw_kw_installed": 2800000,
+        "spw_markets": ["utility"],
+        "spw_service_type": "EPC",
+    },
+    {
+        "name": "First Solar",
+        "spw_rank": 11,
+        "spw_kw_installed": 2500000,
+        "spw_markets": ["utility"],
+        "spw_service_type": "EPC",
+    },
+    {
+        "name": "RES Group",
+        "spw_rank": 12,
+        "spw_kw_installed": 2200000,
+        "spw_markets": ["utility"],
+        "spw_service_type": "EPC",
+    },
+    {
+        "name": "Burns & McDonnell",
+        "spw_rank": 13,
+        "spw_kw_installed": 1800000,
+        "spw_markets": ["utility"],
+        "spw_service_type": "EPC",
+    },
+    {
+        "name": "Bechtel",
+        "spw_rank": 14,
+        "spw_kw_installed": 1500000,
+        "spw_markets": ["utility"],
+        "spw_service_type": "EPC",
+    },
+    {
+        "name": "Wanzek Construction",
+        "spw_rank": 15,
+        "spw_kw_installed": 1200000,
+        "spw_markets": ["utility"],
+        "spw_service_type": "EPC",
+    },
 ]
 
 
@@ -242,9 +336,14 @@ def fetch_spw_rankings() -> list[dict]:
     for url in SPW_URLS:
         try:
             logger.info("Fetching SPW rankings from %s", url)
-            with httpx.Client(timeout=20.0, headers={
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
-            }) as client:
+            with httpx.Client(
+                timeout=20.0,
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+                    )
+                },
+            ) as client:
                 resp = client.get(url, follow_redirects=True)
                 resp.raise_for_status()
 
@@ -278,13 +377,15 @@ def _parse_spw_text(text: str) -> list[dict]:
             name = match.group(2).strip()
             kw = int(match.group(3).replace(",", "")) if match.group(3) else 0
             if rank <= 50 and len(name) > 2:
-                rankings.append({
-                    "name": name,
-                    "spw_rank": rank,
-                    "spw_kw_installed": kw,
-                    "spw_markets": ["utility"],  # default for top list
-                    "spw_service_type": "EPC",
-                })
+                rankings.append(
+                    {
+                        "name": name,
+                        "spw_rank": rank,
+                        "spw_kw_installed": kw,
+                        "spw_markets": ["utility"],  # default for top list
+                        "spw_service_type": "EPC",
+                    }
+                )
 
     return rankings
 
@@ -368,14 +469,16 @@ def merge_rankings(
     # Add unmatched SPW entries
     for i, sp in enumerate(spw):
         if i not in spw_matched:
-            merged.append({
-                "name": sp["name"],
-                "spw_rank": sp.get("spw_rank"),
-                "spw_kw_installed": sp.get("spw_kw_installed"),
-                "spw_markets": sp.get("spw_markets", []),
-                "spw_service_type": sp.get("spw_service_type"),
-                "ranking_source": "spw-2024",
-            })
+            merged.append(
+                {
+                    "name": sp["name"],
+                    "spw_rank": sp.get("spw_rank"),
+                    "spw_kw_installed": sp.get("spw_kw_installed"),
+                    "spw_markets": sp.get("spw_markets", []),
+                    "spw_service_type": sp.get("spw_service_type"),
+                    "ranking_source": "spw-2024",
+                }
+            )
 
     return merged
 
@@ -394,8 +497,8 @@ def seed_entities(
 
     Returns summary: {created: int, updated: int, skipped: int}.
     """
-    from .knowledge_base import resolve_or_create_entity, resolve_entity
     from .db import get_client
+    from .knowledge_base import resolve_entity, resolve_or_create_entity
 
     summary = {"created": 0, "updated": 0, "skipped": 0}
 
@@ -410,19 +513,29 @@ def seed_entities(
                 existing = None
 
             if existing:
-                has_metadata = bool((existing.get("metadata") or {}).get("wiki_solar_rank") or
-                                    (existing.get("metadata") or {}).get("spw_rank"))
+                has_metadata = bool(
+                    (existing.get("metadata") or {}).get("wiki_solar_rank")
+                    or (existing.get("metadata") or {}).get("spw_rank")
+                )
                 if has_metadata and not force:
                     logger.info("[DRY RUN] SKIP: %s (already has ranking metadata)", name)
                     summary["skipped"] += 1
                 else:
-                    logger.info("[DRY RUN] UPDATE: %s (wiki_solar_rank=%s, mw=%s)",
-                                name, entry.get("wiki_solar_rank", "?"), entry.get("mw_installed", "?"))
+                    logger.info(
+                        "[DRY RUN] UPDATE: %s (wiki_solar_rank=%s, mw=%s)",
+                        name,
+                        entry.get("wiki_solar_rank", "?"),
+                        entry.get("mw_installed", "?"),
+                    )
                     summary["updated"] += 1
             else:
-                logger.info("[DRY RUN] CREATE: %s (wiki_solar_rank=%s, spw_rank=%s, mw=%s)",
-                            name, entry.get("wiki_solar_rank", "?"), entry.get("spw_rank", "?"),
-                            entry.get("mw_installed", "?"))
+                logger.info(
+                    "[DRY RUN] CREATE: %s (wiki_solar_rank=%s, spw_rank=%s, mw=%s)",
+                    name,
+                    entry.get("wiki_solar_rank", "?"),
+                    entry.get("spw_rank", "?"),
+                    entry.get("mw_installed", "?"),
+                )
                 summary["created"] += 1
             continue
 
@@ -432,7 +545,9 @@ def seed_entities(
 
         # Check if already seeded (skip unless --force)
         existing_metadata = entity.get("metadata") or {}
-        has_ranking = bool(existing_metadata.get("wiki_solar_rank") or existing_metadata.get("spw_rank"))
+        has_ranking = bool(
+            existing_metadata.get("wiki_solar_rank") or existing_metadata.get("spw_rank")
+        )
         if has_ranking and not force:
             logger.info("SKIP: %s (already seeded, use --force to overwrite)", name)
             summary["skipped"] += 1
@@ -440,8 +555,15 @@ def seed_entities(
 
         # Build metadata — merge with existing, don't clobber unrelated fields
         metadata = dict(existing_metadata)
-        for key in ("wiki_solar_rank", "mw_installed", "ranking_source",
-                     "spw_rank", "spw_kw_installed", "spw_markets", "spw_service_type"):
+        for key in (
+            "wiki_solar_rank",
+            "mw_installed",
+            "ranking_source",
+            "spw_rank",
+            "spw_kw_installed",
+            "spw_markets",
+            "spw_service_type",
+        ):
             if key in entry and entry[key] is not None:
                 metadata[key] = entry[key]
 
@@ -452,19 +574,29 @@ def seed_entities(
 
         # Update entity
         client = get_client()
-        client.table("entities").update({
-            "metadata": metadata,
-            "aliases": new_aliases,
-        }).eq("id", entity_id).execute()
+        client.table("entities").update(
+            {
+                "metadata": metadata,
+                "aliases": new_aliases,
+            }
+        ).eq("id", entity_id).execute()
 
         was_new = entity.get("name") != name  # crude check — resolve_or_create returns the entity
         if was_new:
-            logger.info("CREATED: %s (rank: wiki=%s, spw=%s)",
-                        name, entry.get("wiki_solar_rank", "?"), entry.get("spw_rank", "?"))
+            logger.info(
+                "CREATED: %s (rank: wiki=%s, spw=%s)",
+                name,
+                entry.get("wiki_solar_rank", "?"),
+                entry.get("spw_rank", "?"),
+            )
             summary["created"] += 1
         else:
-            logger.info("UPDATED: %s (rank: wiki=%s, spw=%s)",
-                        name, entry.get("wiki_solar_rank", "?"), entry.get("spw_rank", "?"))
+            logger.info(
+                "UPDATED: %s (rank: wiki=%s, spw=%s)",
+                name,
+                entry.get("wiki_solar_rank", "?"),
+                entry.get("spw_rank", "?"),
+            )
             summary["updated"] += 1
 
     return summary
@@ -477,9 +609,13 @@ def seed_entities(
 
 def main():
     parser = argparse.ArgumentParser(description="Seed EPC entities from industry rankings")
-    parser.add_argument("--dry-run", action="store_true", help="Print what would be created without writing to DB")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Print what would be created without writing to DB"
+    )
     parser.add_argument("--force", action="store_true", help="Overwrite existing ranking metadata")
-    parser.add_argument("--skip-fetch", action="store_true", help="Use hardcoded fallback data (skip HTTP fetches)")
+    parser.add_argument(
+        "--skip-fetch", action="store_true", help="Use hardcoded fallback data (skip HTTP fetches)"
+    )
     args = parser.parse_args()
 
     logger.info("=== EPC Entity Seeding ===")
@@ -507,7 +643,12 @@ def main():
     summary = seed_entities(merged, dry_run=args.dry_run, force=args.force)
 
     logger.info("=== Done ===")
-    logger.info("Created: %d, Updated: %d, Skipped: %d", summary["created"], summary["updated"], summary["skipped"])
+    logger.info(
+        "Created: %d, Updated: %d, Skipped: %d",
+        summary["created"],
+        summary["updated"],
+        summary["skipped"],
+    )
 
 
 if __name__ == "__main__":

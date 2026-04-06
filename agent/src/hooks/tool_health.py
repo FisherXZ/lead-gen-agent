@@ -1,6 +1,9 @@
 """ToolHealthHook — track consecutive tool failures."""
+
 from __future__ import annotations
+
 from ..runtime import Hook, HookAction, RunContext
+
 
 class ToolHealthHook(Hook):
     def __init__(self, error_threshold: int = 3):
@@ -14,11 +17,16 @@ class ToolHealthHook(Hook):
     async def pre_tool(self, tool_name: str, tool_input: dict, context: RunContext) -> HookAction:
         return HookAction.continue_with(tool_input)
 
-    async def post_tool(self, tool_name: str, tool_input: dict, result: dict, context: RunContext) -> dict:
+    async def post_tool(
+        self, tool_name: str, tool_input: dict, result: dict, context: RunContext
+    ) -> dict:
         if isinstance(result, dict) and "error" in result:
             self._consecutive_errors += 1
             if self._consecutive_errors >= self.error_threshold:
-                result["_guidance"] = f"{self._consecutive_errors} consecutive tool errors. Consider switching to a different tool or approach."
+                result["_guidance"] = (
+                    f"{self._consecutive_errors} consecutive tool errors. "
+                    "Consider switching to a different tool or approach."
+                )
         else:
             self._consecutive_errors = 0
         return result

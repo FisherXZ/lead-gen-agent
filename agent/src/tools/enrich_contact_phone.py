@@ -18,8 +18,8 @@ import os
 import httpx
 from pydantic import BaseModel, Field
 
-from ._base import validate_uuid
 from ..db import get_client
+from ._base import validate_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -57,9 +57,7 @@ class Input(BaseModel):
 # call_fn(client, linkedin_url, api_key) -> str | None
 
 
-async def _call_leadmagic(
-    client: httpx.AsyncClient, linkedin_url: str, api_key: str
-) -> str | None:
+async def _call_leadmagic(client: httpx.AsyncClient, linkedin_url: str, api_key: str) -> str | None:
     resp = await client.post(
         "https://api.leadmagic.io/v1/phone",
         json={"linkedin_url": linkedin_url},
@@ -71,9 +69,7 @@ async def _call_leadmagic(
     return data.get("phone") or data.get("data", {}).get("phone")
 
 
-async def _call_prospeo(
-    client: httpx.AsyncClient, linkedin_url: str, api_key: str
-) -> str | None:
+async def _call_prospeo(client: httpx.AsyncClient, linkedin_url: str, api_key: str) -> str | None:
     resp = await client.post(
         "https://api.prospeo.io/api/v1/linkedin-phone",
         json={"url": linkedin_url},
@@ -99,9 +95,7 @@ async def _call_contactout(
     return data.get("phone") or data.get("data", {}).get("phone")
 
 
-async def _call_pdl(
-    client: httpx.AsyncClient, linkedin_url: str, api_key: str
-) -> str | None:
+async def _call_pdl(client: httpx.AsyncClient, linkedin_url: str, api_key: str) -> str | None:
     resp = await client.post(
         "https://api.peopledatalabs.com/v5/person/enrich",
         json={"profile": linkedin_url},
@@ -166,9 +160,9 @@ async def execute(tool_input: dict) -> dict:
     if phone:
         try:
             db = get_client()
-            db.table("contacts").update(
-                {"phone": phone, "phone_source": source}
-            ).eq("id", inp.contact_id).execute()
+            db.table("contacts").update({"phone": phone, "phone_source": source}).eq(
+                "id", inp.contact_id
+            ).execute()
         except Exception as exc:
             logger.warning("DB update failed for contact %s: %s", inp.contact_id, exc)
 

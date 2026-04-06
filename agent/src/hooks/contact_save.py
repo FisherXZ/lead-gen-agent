@@ -30,9 +30,10 @@ class ContactSaveHook:
         if entity_id:
             try:
                 from ..db import get_client
-                get_client().table("entities").update({
-                    "contact_discovery_status": "in_progress"
-                }).eq("id", entity_id).execute()
+
+                get_client().table("entities").update(
+                    {"contact_discovery_status": "in_progress"}
+                ).eq("id", entity_id).execute()
             except Exception:
                 logger.warning("Failed to update entity contact_discovery_status", exc_info=True)
 

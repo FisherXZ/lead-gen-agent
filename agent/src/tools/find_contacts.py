@@ -66,6 +66,7 @@ async def execute(tool_input: dict) -> dict:
 
     # Check if contacts already exist in DB
     from ..db import get_contacts_for_entity
+
     existing = get_contacts_for_entity(entity_id)
     if existing:
         cache_set("find_contacts", cache_params, existing, ttl_hours=_CACHE_TTL_HOURS)
@@ -73,6 +74,7 @@ async def execute(tool_input: dict) -> dict:
 
     # Run contact discovery agent
     from ..contact_discovery import discover_contacts
+
     try:
         contacts = await discover_contacts(entity_id, entity_name)
     except Exception as exc:

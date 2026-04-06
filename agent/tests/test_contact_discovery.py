@@ -13,10 +13,20 @@ async def test_parse_contacts_json_array():
     """Parse a clean JSON array response."""
     from src.contact_discovery import _parse_contacts
 
-    text = json.dumps([
-        {"full_name": "John Smith", "title": "VP Procurement", "linkedin_url": "https://linkedin.com/in/jsmith"},
-        {"full_name": "Jane Doe", "title": "Director Solar", "source_url": "https://epc.com/team"},
-    ])
+    text = json.dumps(
+        [
+            {
+                "full_name": "John Smith",
+                "title": "VP Procurement",
+                "linkedin_url": "https://linkedin.com/in/jsmith",
+            },
+            {
+                "full_name": "Jane Doe",
+                "title": "Director Solar",
+                "source_url": "https://epc.com/team",
+            },
+        ]
+    )
     contacts = _parse_contacts(text)
     assert len(contacts) == 2
     assert contacts[0]["full_name"] == "John Smith"
@@ -84,19 +94,23 @@ async def test_discover_contacts_sets_status():
     """Verify status tracking: pending → completed."""
     from src.contact_discovery import discover_contacts
 
-    mock_update = MagicMock()
+    MagicMock()
     mock_table = MagicMock()
     mock_table.update.return_value.eq.return_value.execute.return_value = MagicMock()
     mock_client = MagicMock()
     mock_client.table.return_value = mock_table
 
-    with patch("src.contact_discovery.get_client", return_value=mock_client), \
-         patch("src.contact_discovery._run_contact_agent", return_value=[
-             {"full_name": "Test Person", "title": "VP"}
-         ]), \
-         patch("src.db.store_contacts", return_value=[
-             {"id": "123", "full_name": "Test Person", "title": "VP"}
-         ]):
+    with (
+        patch("src.contact_discovery.get_client", return_value=mock_client),
+        patch(
+            "src.contact_discovery._run_contact_agent",
+            return_value=[{"full_name": "Test Person", "title": "VP"}],
+        ),
+        patch(
+            "src.db.store_contacts",
+            return_value=[{"id": "123", "full_name": "Test Person", "title": "VP"}],
+        ),
+    ):
         result = await discover_contacts("entity-123", "Test Corp")
 
     assert len(result) == 1
@@ -120,8 +134,10 @@ async def test_discover_contacts_sets_failed_on_error():
     mock_client = MagicMock()
     mock_client.table.return_value = mock_table
 
-    with patch("src.contact_discovery.get_client", return_value=mock_client), \
-         patch("src.contact_discovery._run_contact_agent", side_effect=RuntimeError("API crash")):
+    with (
+        patch("src.contact_discovery.get_client", return_value=mock_client),
+        patch("src.contact_discovery._run_contact_agent", side_effect=RuntimeError("API crash")),
+    ):
         result = await discover_contacts("entity-123", "Test Corp")
 
     assert result == []
@@ -148,7 +164,12 @@ async def test_generate_outreach_context_success():
 
     with patch("src.contact_discovery.get_anthropic_client", return_value=mock_client):
         result = await generate_outreach_context(
-            project={"project_name": "Samson Solar", "mw_capacity": 400, "state": "TX", "expected_cod": "2026-Q3"},
+            project={
+                "project_name": "Samson Solar",
+                "mw_capacity": 400,
+                "state": "TX",
+                "expected_cod": "2026-Q3",
+            },
             entity={"name": "McCarthy", "profile": "Top 10 EPC"},
             contact={"full_name": "John Smith", "title": "VP Procurement"},
         )

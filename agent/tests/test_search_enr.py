@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -20,8 +20,10 @@ async def test_known_epc_found_in_fallback():
     """Known EPCs should match even when live fetch fails."""
     from src.tools.search_enr import execute
 
-    with patch("src.tools.search_enr.cache_get", return_value=None), \
-         patch("src.tools.search_enr._fetch_live_rankings", return_value=None):
+    with (
+        patch("src.tools.search_enr.cache_get", return_value=None),
+        patch("src.tools.search_enr._fetch_live_rankings", return_value=None),
+    ):
         result = await execute({"company_name": "SOLV Energy"})
 
     assert result["matched"] is True
@@ -34,8 +36,10 @@ async def test_known_epc_found_in_fallback():
 async def test_unknown_company_returns_not_found():
     from src.tools.search_enr import execute
 
-    with patch("src.tools.search_enr.cache_get", return_value=None), \
-         patch("src.tools.search_enr._fetch_live_rankings", return_value=None):
+    with (
+        patch("src.tools.search_enr.cache_get", return_value=None),
+        patch("src.tools.search_enr._fetch_live_rankings", return_value=None),
+    ):
         result = await execute({"company_name": "Totally Unknown Corp"})
 
     assert result["matched"] is False
@@ -48,8 +52,10 @@ async def test_partial_name_match():
     """'McCarthy' should match 'McCarthy Building Companies'."""
     from src.tools.search_enr import execute
 
-    with patch("src.tools.search_enr.cache_get", return_value=None), \
-         patch("src.tools.search_enr._fetch_live_rankings", return_value=None):
+    with (
+        patch("src.tools.search_enr.cache_get", return_value=None),
+        patch("src.tools.search_enr._fetch_live_rankings", return_value=None),
+    ):
         result = await execute({"company_name": "McCarthy"})
 
     assert result["matched"] is True

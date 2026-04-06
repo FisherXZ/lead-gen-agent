@@ -4,18 +4,24 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-
 # ---------------------------------------------------------------------------
 # merge_rankings tests
 # ---------------------------------------------------------------------------
+
 
 def test_merge_exact_name_match():
     from src.seed_epc_entities import merge_rankings
 
     ws = [{"name": "SOLV Energy", "mw_installed": 13200, "rank": 1}]
-    spw = [{"name": "SOLV Energy", "spw_rank": 1, "spw_kw_installed": 15000000, "spw_markets": ["utility"], "spw_service_type": "EPC"}]
+    spw = [
+        {
+            "name": "SOLV Energy",
+            "spw_rank": 1,
+            "spw_kw_installed": 15000000,
+            "spw_markets": ["utility"],
+            "spw_service_type": "EPC",
+        }
+    ]
 
     merged = merge_rankings(ws, spw)
     assert len(merged) == 1
@@ -30,7 +36,15 @@ def test_merge_alias_match():
     from src.seed_epc_entities import merge_rankings
 
     ws = [{"name": "SOLV Energy", "mw_installed": 13200, "rank": 1}]
-    spw = [{"name": "Swinerton Renewable Energy", "spw_rank": 1, "spw_kw_installed": 15000000, "spw_markets": ["utility"], "spw_service_type": "EPC"}]
+    spw = [
+        {
+            "name": "Swinerton Renewable Energy",
+            "spw_rank": 1,
+            "spw_kw_installed": 15000000,
+            "spw_markets": ["utility"],
+            "spw_service_type": "EPC",
+        }
+    ]
 
     merged = merge_rankings(ws, spw)
     assert len(merged) == 1
@@ -43,7 +57,15 @@ def test_merge_fuzzy_match():
     from src.seed_epc_entities import merge_rankings
 
     ws = [{"name": "McCarthy Building Companies", "mw_installed": 6200, "rank": 7}]
-    spw = [{"name": "McCarthy Building Companies", "spw_rank": 2, "spw_kw_installed": 8500000, "spw_markets": ["utility"], "spw_service_type": "EPC"}]
+    spw = [
+        {
+            "name": "McCarthy Building Companies",
+            "spw_rank": 2,
+            "spw_kw_installed": 8500000,
+            "spw_markets": ["utility"],
+            "spw_service_type": "EPC",
+        }
+    ]
 
     merged = merge_rankings(ws, spw)
     assert len(merged) == 1
@@ -55,7 +77,15 @@ def test_merge_unmatched_kept():
     from src.seed_epc_entities import merge_rankings
 
     ws = [{"name": "Acme Solar Builders", "mw_installed": 1000, "rank": 50}]
-    spw = [{"name": "Zenith Renewable Construction", "spw_rank": 50, "spw_kw_installed": 500000, "spw_markets": ["utility"], "spw_service_type": "EPC"}]
+    spw = [
+        {
+            "name": "Zenith Renewable Construction",
+            "spw_rank": 50,
+            "spw_kw_installed": 500000,
+            "spw_markets": ["utility"],
+            "spw_service_type": "EPC",
+        }
+    ]
 
     merged = merge_rankings(ws, spw)
     assert len(merged) == 2
@@ -73,7 +103,13 @@ def test_merge_no_double_matching():
         {"name": "Signal Energy", "mw_installed": 4800, "rank": 11},
     ]
     spw = [
-        {"name": "SOLV Energy", "spw_rank": 1, "spw_kw_installed": 15000000, "spw_markets": ["utility"], "spw_service_type": "EPC"},
+        {
+            "name": "SOLV Energy",
+            "spw_rank": 1,
+            "spw_kw_installed": 15000000,
+            "spw_markets": ["utility"],
+            "spw_service_type": "EPC",
+        },
     ]
 
     merged = merge_rankings(ws, spw)
@@ -88,14 +124,19 @@ def test_merge_no_double_matching():
 # seed_entities tests
 # ---------------------------------------------------------------------------
 
+
 def test_seed_dry_run_no_writes():
     """Dry run should not write to DB."""
     from src.seed_epc_entities import seed_entities
 
-    merged = [{"name": "Test EPC", "wiki_solar_rank": 1, "mw_installed": 5000, "ranking_source": "test"}]
+    merged = [
+        {"name": "Test EPC", "wiki_solar_rank": 1, "mw_installed": 5000, "ranking_source": "test"}
+    ]
 
-    with patch("src.knowledge_base.resolve_entity", return_value=None), \
-         patch("src.knowledge_base.resolve_or_create_entity") as mock_create:
+    with (
+        patch("src.knowledge_base.resolve_entity", return_value=None),
+        patch("src.knowledge_base.resolve_or_create_entity") as mock_create,
+    ):
         summary = seed_entities(merged, dry_run=True)
 
     mock_create.assert_not_called()
@@ -115,10 +156,19 @@ def test_seed_skips_already_seeded():
         "aliases": [],
     }
 
-    merged = [{"name": "SOLV Energy", "wiki_solar_rank": 1, "mw_installed": 13200, "ranking_source": "test"}]
+    merged = [
+        {
+            "name": "SOLV Energy",
+            "wiki_solar_rank": 1,
+            "mw_installed": 13200,
+            "ranking_source": "test",
+        }
+    ]
 
-    with patch("src.knowledge_base.resolve_or_create_entity", return_value=existing_entity), \
-         patch("src.db.get_client") as mock_get_client:
+    with (
+        patch("src.knowledge_base.resolve_or_create_entity", return_value=existing_entity),
+        patch("src.db.get_client") as mock_get_client,
+    ):
         summary = seed_entities(merged, dry_run=False, force=False)
 
     assert summary["skipped"] == 1
@@ -137,11 +187,20 @@ def test_seed_force_overwrites():
         "aliases": [],
     }
 
-    merged = [{"name": "SOLV Energy", "wiki_solar_rank": 1, "mw_installed": 13200, "ranking_source": "test"}]
+    merged = [
+        {
+            "name": "SOLV Energy",
+            "wiki_solar_rank": 1,
+            "mw_installed": 13200,
+            "ranking_source": "test",
+        }
+    ]
 
     mock_client = MagicMock()
-    with patch("src.knowledge_base.resolve_or_create_entity", return_value=existing_entity), \
-         patch("src.db.get_client", return_value=mock_client):
+    with (
+        patch("src.knowledge_base.resolve_or_create_entity", return_value=existing_entity),
+        patch("src.db.get_client", return_value=mock_client),
+    ):
         summary = seed_entities(merged, dry_run=False, force=True)
 
     assert summary["updated"] == 1
@@ -163,11 +222,20 @@ def test_seed_adds_known_aliases():
         "aliases": [],
     }
 
-    merged = [{"name": "SOLV Energy", "wiki_solar_rank": 1, "mw_installed": 13200, "ranking_source": "test"}]
+    merged = [
+        {
+            "name": "SOLV Energy",
+            "wiki_solar_rank": 1,
+            "mw_installed": 13200,
+            "ranking_source": "test",
+        }
+    ]
 
     mock_client = MagicMock()
-    with patch("src.knowledge_base.resolve_or_create_entity", return_value=new_entity), \
-         patch("src.db.get_client", return_value=mock_client):
+    with (
+        patch("src.knowledge_base.resolve_or_create_entity", return_value=new_entity),
+        patch("src.db.get_client", return_value=mock_client),
+    ):
         seed_entities(merged, dry_run=False, force=True)
 
     update_call = mock_client.table.return_value.update.call_args[0][0]
@@ -179,6 +247,7 @@ def test_seed_adds_known_aliases():
 # ---------------------------------------------------------------------------
 # Fallback data tests
 # ---------------------------------------------------------------------------
+
 
 def test_wiki_solar_fallback_has_data():
     from src.seed_epc_entities import _WIKI_SOLAR_FALLBACK
@@ -199,6 +268,7 @@ def test_spw_fallback_has_data():
 # ---------------------------------------------------------------------------
 # Alias matching
 # ---------------------------------------------------------------------------
+
 
 def test_is_alias_positive():
     from src.seed_epc_entities import _is_alias

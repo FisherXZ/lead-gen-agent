@@ -10,14 +10,15 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import anthropic
 
 from .compactor import Compactor
 from .escalation import EscalationPolicy
-from .hooks import Hook, run_pre_hooks, run_post_hooks
-from .types import Action, HookAction, RunContext, TurnResult
+from .hooks import Hook, run_post_hooks, run_pre_hooks
+from .types import RunContext, TurnResult
 
 _logger = logging.getLogger(__name__)
 
@@ -51,14 +52,19 @@ class AgentRuntime:
         self._client: anthropic.AsyncAnthropic | None = None
 
         # Pre-compute cached system prompt and tools (immutable per runtime)
-        self._cached_system = [{
-            "type": "text",
-            "text": self.system_prompt,
-            "cache_control": {"type": "ephemeral"},
-        }]
+        self._cached_system = [
+            {
+                "type": "text",
+                "text": self.system_prompt,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
         self._cached_tools = list(self.tools)
         if self._cached_tools:
-            self._cached_tools[-1] = {**self._cached_tools[-1], "cache_control": {"type": "ephemeral"}}
+            self._cached_tools[-1] = {
+                **self._cached_tools[-1],
+                "cache_control": {"type": "ephemeral"},
+            }
 
     async def run_turn(
         self,
@@ -74,7 +80,7 @@ class AgentRuntime:
         for hook in self.hooks:
             if hasattr(hook, "reset"):
                 hook.reset()
-        if hasattr(self.escalation, '_seen_signals'):
+        if hasattr(self.escalation, "_seen_signals"):
             self.escalation._seen_signals.clear()
 
         # Compact context if needed
@@ -98,31 +104,36 @@ class AgentRuntime:
             # If no tool calls, we're done
             if response.stop_reason == "end_turn":
                 # Append assistant message
-                messages.append({
-                    "role": "assistant",
-                    "content": self._extract_content_blocks(response),
-                })
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": self._extract_content_blocks(response),
+                    }
+                )
                 break
 
             # Extract tool calls
             tool_uses = [
-                block for block in response.content
-                if getattr(block, "type", None) == "tool_use"
+                block for block in response.content if getattr(block, "type", None) == "tool_use"
             ]
 
             if not tool_uses:
                 # No tool calls despite stop_reason != end_turn — treat as done
-                messages.append({
-                    "role": "assistant",
-                    "content": self._extract_content_blocks(response),
-                })
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": self._extract_content_blocks(response),
+                    }
+                )
                 break
 
             # Append assistant message with tool_use blocks
-            messages.append({
-                "role": "assistant",
-                "content": response.content,
-            })
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": response.content,
+                }
+            )
 
             # Execute each tool call
             context = RunContext(
@@ -156,17 +167,29 @@ class AgentRuntime:
                     result = await self._execute_tool(tool_name, effective_input)
 
                 # Post-hooks (use effective_input so hooks see enriched input from pre-hooks)
-                result = await run_post_hooks(self.hooks, tool_name, effective_input, result, context)
+                result = await run_post_hooks(
+                    self.hooks, tool_name, effective_input, result, context
+                )
 
                 tool_history.append(tool_name)
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": tool_id,
-                    "content": json.dumps(result, default=str),
-                })
+                tool_results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tool_id,
+                        "content": json.dumps(result, default=str),
+                    }
+                )
 
                 # Emit event
-                on_event({"type": "tool_result", "tool_name": tool_name, "tool_id": tool_id, "input": effective_input, "result": result})
+                on_event(
+                    {
+                        "type": "tool_result",
+                        "tool_name": tool_name,
+                        "tool_id": tool_id,
+                        "input": effective_input,
+                        "result": result,
+                    }
+                )
 
             # Append tool results as user message
             messages.append({"role": "user", "content": tool_results})
@@ -178,18 +201,22 @@ class AgentRuntime:
                 on_event({"type": "hard_stop", "reason": action.reason})
                 break
             elif action.kind == "escalate_to_user":
-                on_event({
-                    "type": "escalation",
-                    "tried": action.tried,
-                    "suggestion": action.suggestion,
-                })
+                on_event(
+                    {
+                        "type": "escalation",
+                        "tried": action.tried,
+                        "suggestion": action.suggestion,
+                    }
+                )
                 break
             elif action.kind == "inject_guidance":
                 # Inject as a plain user message (not a synthetic tool_result)
-                messages.append({
-                    "role": "user",
-                    "content": f"[System guidance: {action.message}]",
-                })
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": f"[System guidance: {action.message}]",
+                    }
+                )
 
             # Compact again if context grew
             messages = await self.compactor.maybe_compact(messages)
@@ -227,11 +254,13 @@ class AgentRuntime:
                         on_event({"type": "text_start"})
                     elif event.content_block.type == "tool_use":
                         current_tool_input = ""
-                        on_event({
-                            "type": "tool_input_start",
-                            "tool_name": event.content_block.name,
-                            "tool_id": event.content_block.id,
-                        })
+                        on_event(
+                            {
+                                "type": "tool_input_start",
+                                "tool_name": event.content_block.name,
+                                "tool_id": event.content_block.id,
+                            }
+                        )
 
                 elif event.type == "content_block_delta":
                     if event.delta.type == "text_delta":
@@ -245,10 +274,12 @@ class AgentRuntime:
                             parsed = json.loads(current_tool_input)
                         except json.JSONDecodeError:
                             parsed = {}
-                        on_event({
-                            "type": "tool_input_available",
-                            "input": parsed,
-                        })
+                        on_event(
+                            {
+                                "type": "tool_input_available",
+                                "input": parsed,
+                            }
+                        )
                         current_tool_input = ""
 
             response = await stream.get_final_message()
@@ -258,6 +289,7 @@ class AgentRuntime:
     async def _execute_tool(self, name: str, tool_input: dict) -> dict:
         """Dispatch to the tool registry. Separated for testability."""
         from ..tools import execute_tool
+
         return await execute_tool(name, tool_input)
 
     def _extract_content_blocks(self, response) -> list[dict]:
@@ -267,10 +299,12 @@ class AgentRuntime:
             if getattr(block, "type", None) == "text":
                 blocks.append({"type": "text", "text": block.text})
             elif getattr(block, "type", None) == "tool_use":
-                blocks.append({
-                    "type": "tool_use",
-                    "id": block.id,
-                    "name": block.name,
-                    "input": block.input,
-                })
+                blocks.append(
+                    {
+                        "type": "tool_use",
+                        "id": block.id,
+                        "name": block.name,
+                        "input": block.input,
+                    }
+                )
         return blocks

@@ -70,7 +70,9 @@ async def extract_text_from_url(
             response.raise_for_status()
 
             if len(response.content) > max_bytes:
-                return {"error": f"PDF too large ({len(response.content):,} bytes, limit {max_bytes:,})"}
+                return {
+                    "error": f"PDF too large ({len(response.content):,} bytes, limit {max_bytes:,})"
+                }
 
             result = extract_text(response.content)
             result["url"] = url

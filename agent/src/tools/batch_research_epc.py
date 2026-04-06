@@ -45,7 +45,10 @@ async def execute(tool_input: dict) -> dict:
     project_ids = tool_input["project_ids"]
     if len(project_ids) > 50:
         return {
-            "error": f"Too many projects ({len(project_ids)}). Maximum is 50 per batch. Narrow your search or split into multiple batches.",
+            "error": (
+                f"Too many projects ({len(project_ids)}). Maximum is 50 per batch. "
+                "Narrow your search or split into multiple batches."
+            ),
             "results": [],
             "total": 0,
             "completed": 0,
@@ -77,7 +80,9 @@ async def execute(tool_input: dict) -> dict:
         if progress_callback:
             await progress_callback(update)
 
-    batch_results = await run_batch(projects, on_progress, concurrency=concurrency, cancel_event=cancel_event)
+    batch_results = await run_batch(
+        projects, on_progress, concurrency=concurrency, cancel_event=cancel_event
+    )
 
     completed = sum(1 for r in batch_results if r.get("status") == "completed")
     errors = sum(1 for r in batch_results if r.get("status") == "error")

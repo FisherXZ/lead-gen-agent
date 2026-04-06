@@ -42,13 +42,18 @@ async def test_no_accepted_discovery():
     mock_project = {"id": "proj-1", "project_name": "Test"}
 
     mock_table = MagicMock()
-    mock_table.select.return_value.eq.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value = MagicMock(data=[])
+    eq_chain = mock_table.select.return_value.eq.return_value
+    eq_chain.eq.return_value.order.return_value.limit.return_value.execute.return_value = MagicMock(
+        data=[]
+    )
     mock_client = MagicMock()
     mock_client.table.return_value = mock_table
 
-    with patch("src.hubspot.get_settings", return_value=mock_settings), \
-         patch("src.db.get_project", return_value=mock_project), \
-         patch("src.db.get_client", return_value=mock_client):
+    with (
+        patch("src.hubspot.get_settings", return_value=mock_settings),
+        patch("src.db.get_project", return_value=mock_project),
+        patch("src.db.get_client", return_value=mock_client),
+    ):
         result = await execute({"project_id": "123e4567-e89b-12d3-a456-426614174000"})
 
     assert "error" in result

@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 import traceback
 import uuid
 
@@ -14,12 +13,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import anthropic
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from . import db
-from .auth import get_user_id, require_admin
 from .agent_jobs import (
     cancel_job,
     cancel_job_for_conversation,
@@ -29,14 +27,34 @@ from .agent_jobs import (
     mark_job_done,
     set_task,
 )
+from .agents import build_chat_runtime
+from .auth import get_user_id, require_admin
 from .batch import run_batch
 from .batch_progress import cancel_batch, cancel_batch_for_conversation, get_batch
-from .knowledge_base import build_knowledge_context, promote_discovery_to_kb, process_rejection_into_kb, resolve_entity
-from .research import run_research, run_research_plan
 from .chat_agent import run_chat_agent  # legacy — kept for fallback
-from .agents import build_chat_runtime
-from .knowledge_base import get_entity_with_profile, list_entities, rebuild_profile_if_stale
-from .models import AgentResult, BatchDiscoverRequest, ChatRequest, ContactDiscoverRequest, DiscoverPlanRequest, DiscoverRequest, EpcSource, HubSpotConnectRequest, HubSpotPushRequest, NegativeEvidence, ReviewRequest
+from .knowledge_base import (
+    build_knowledge_context,
+    get_entity_with_profile,
+    list_entities,
+    process_rejection_into_kb,
+    promote_discovery_to_kb,
+    rebuild_profile_if_stale,
+    resolve_entity,
+)
+from .models import (
+    AgentResult,
+    BatchDiscoverRequest,
+    ChatRequest,
+    ContactDiscoverRequest,
+    DiscoverPlanRequest,
+    DiscoverRequest,
+    EpcSource,
+    HubSpotConnectRequest,
+    HubSpotPushRequest,
+    NegativeEvidence,
+    ReviewRequest,
+)
+from .research import run_research, run_research_plan
 from .sse import StreamWriter
 
 logger = logging.getLogger(__name__)
@@ -52,6 +70,7 @@ def _parse_reasoning(raw):
         except (json.JSONDecodeError, ValueError):
             pass
     return raw
+
 
 def require_auth(request: Request) -> str:
     """FastAPI dependency: extract JWT, verify, return user_id."""
@@ -95,7 +114,9 @@ async def validate_key(request: Request, _user_id: str = Depends(require_auth)):
 
 
 @app.post("/api/discover/plan")
-async def discover_plan(req: DiscoverPlanRequest, request: Request, _user_id: str = Depends(require_auth)):
+async def discover_plan(
+    req: DiscoverPlanRequest, request: Request, _user_id: str = Depends(require_auth)
+):
     """Generate a research plan for a project (without executing research).
 
     Returns the plan text for user review. The user can approve it and
@@ -112,10 +133,10 @@ async def discover_plan(req: DiscoverPlanRequest, request: Request, _user_id: st
             project, knowledge_context, api_key=api_key
         )
     except KeyError as exc:
-        raise HTTPException(status_code=503, detail=f"Missing configuration: {exc}")
+        raise HTTPException(status_code=503, detail=f"Missing configuration: {exc}") from exc
     except Exception:
         tb = db.sanitize_key_from_string(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Planning error: {tb[:500]}")
+        raise HTTPException(status_code=500, detail=f"Planning error: {tb[:500]}") from None
 
     return {
         "project_id": req.project_id,
@@ -154,13 +175,13 @@ async def discover(req: DiscoverRequest, request: Request, _user_id: str = Depen
         raise HTTPException(
             status_code=503,
             detail=f"Missing configuration: {exc}",
-        )
+        ) from exc
     except Exception:
         tb = db.sanitize_key_from_string(traceback.format_exc())
         raise HTTPException(
             status_code=500,
             detail=f"Agent error: {tb[:500]}",
-        )
+        ) from None
 
     # Check for fatal API errors — don't store garbage data
     if result.error:
@@ -178,7 +199,11 @@ async def discover(req: DiscoverRequest, request: Request, _user_id: str = Depen
     # Store discovery for successful results or partial failures worth saving
     # (max_iterations, no_report, search_tool_error still have useful partial data)
     discovery = db.store_discovery(
-        req.project_id, result, agent_log, total_tokens, project=project,
+        req.project_id,
+        result,
+        agent_log,
+        total_tokens,
+        project=project,
     )
 
     # Include error info in response if present (partial success)
@@ -193,7 +218,9 @@ async def discover(req: DiscoverRequest, request: Request, _user_id: str = Depen
 
 
 @app.post("/api/discover/handoff")
-async def discover_handoff(discovery_id: str = None, project_id: str = None, _user_id: str = Depends(require_auth)):
+async def discover_handoff(
+    discovery_id: str = None, project_id: str = None, _user_id: str = Depends(require_auth)
+):
     """Create a new chat conversation pre-loaded with research context.
 
     Provide either discovery_id or project_id. Returns the conversation_id
@@ -254,7 +281,8 @@ async def discover_handoff(discovery_id: str = None, project_id: str = None, _us
 
 Discovery ID: `{discovery.get("id", "unknown")}`
 
-You can ask me questions about this research, request more investigation, or approve/reject the finding."""
+You can ask me questions about this research, request more investigation, \
+or approve/reject the finding."""
 
     # Create conversation and pre-populate
     conv = db.create_conversation(title=f"Review: {epc} for {project_name}", user_id=_user_id)
@@ -269,7 +297,9 @@ You can ask me questions about this research, request more investigation, or app
 
 
 @app.post("/api/discover/batch")
-async def discover_batch(req: BatchDiscoverRequest, request: Request, _user_id: str = Depends(require_auth)):
+async def discover_batch(
+    req: BatchDiscoverRequest, request: Request, _user_id: str = Depends(require_auth)
+):
     """Run EPC discovery on multiple projects, streaming progress via SSE."""
     api_key = request.headers.get("x-anthropic-api-key")
     if not req.project_ids:
@@ -304,7 +334,8 @@ async def discover_batch(req: BatchDiscoverRequest, request: Request, _user_id: 
             update = await queue.get()
             if update is None:
                 # Send final done event
-                yield f"data: {json.dumps({'type': 'done', 'completed': completed, 'total': total})}\n\n"
+                done = {"type": "done", "completed": completed, "total": total}
+                yield f"data: {json.dumps(done)}\n\n"
                 break
 
             status = update.get("status")
@@ -354,7 +385,9 @@ async def discover_batch(req: BatchDiscoverRequest, request: Request, _user_id: 
 
 
 @app.patch("/api/discover/{discovery_id}/review")
-async def review_discovery(discovery_id: str, req: ReviewRequest, request: Request, _user_id: str = Depends(require_auth)):
+async def review_discovery(
+    discovery_id: str, req: ReviewRequest, request: Request, _user_id: str = Depends(require_auth)
+):
     """Accept or reject an EPC discovery."""
     if req.action not in ("accepted", "rejected"):
         raise HTTPException(status_code=400, detail="Action must be 'accepted' or 'rejected'")
@@ -396,19 +429,21 @@ async def review_discovery(discovery_id: str, req: ReviewRequest, request: Reque
                         if epc_entity:
                             api_key = request.headers.get("x-anthropic-api-key")
                             from .contact_discovery import discover_contacts
+
                             asyncio.create_task(
-                                discover_contacts(epc_entity["id"], epc_name, api_key, project=project)
+                                discover_contacts(
+                                    epc_entity["id"], epc_name, api_key, project=project
+                                )
                             )
                             logger.info("Auto-triggered contact discovery for %s", epc_name)
                     except Exception:
                         logger.warning(
-                            "Failed to auto-trigger contact discovery for %s", epc_name,
+                            "Failed to auto-trigger contact discovery for %s",
+                            epc_name,
                             exc_info=True,
                         )
             except Exception:
-                logger.error(
-                    "KB promotion failed for discovery %s", discovery_id, exc_info=True
-                )
+                logger.error("KB promotion failed for discovery %s", discovery_id, exc_info=True)
     else:
         # Rejected
         update_data = {"review_status": req.action}
@@ -468,6 +503,7 @@ async def discover_contacts_endpoint(
     api_key = request.headers.get("x-anthropic-api-key")
 
     from .contact_discovery import discover_contacts
+
     contacts = await discover_contacts(entity_id, entity["name"], api_key)
 
     return {"contacts": contacts, "entity_id": entity_id, "entity_name": entity["name"]}
@@ -498,16 +534,17 @@ def hubspot_connect(req: HubSpotConnectRequest, _user_id: str = Depends(require_
         )
         return {"connected": True, "portal_id": settings.get("portal_id")}
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error("HubSpot connect failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to save HubSpot settings")
+        raise HTTPException(status_code=500, detail="Failed to save HubSpot settings") from e
 
 
 @app.get("/api/hubspot/status")
 def hubspot_status(_user_id: str = Depends(require_auth)):
     """Check HubSpot connection status."""
     from .hubspot import get_settings
+
     settings = get_settings()
     if settings and settings.get("enabled"):
         return {"connected": True, "portal_id": settings.get("portal_id")}
@@ -520,9 +557,12 @@ def hubspot_push(req: HubSpotPushRequest, _user_id: str = Depends(require_admin)
     project_id = req.project_id
 
     from .hubspot import get_settings, push_discovery
+
     settings = get_settings()
     if not settings:
-        raise HTTPException(status_code=400, detail="HubSpot is not connected. Configure in Settings.")
+        raise HTTPException(
+            status_code=400, detail="HubSpot is not connected. Configure in Settings."
+        )
 
     token = settings.get("api_key")
     if not token:
@@ -565,7 +605,7 @@ def hubspot_push(req: HubSpotPushRequest, _user_id: str = Depends(require_admin)
         return result
     except Exception as e:
         logger.error("HubSpot push failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"HubSpot push failed: {str(e)[:200]}")
+        raise HTTPException(status_code=500, detail=f"HubSpot push failed: {str(e)[:200]}") from e
 
 
 @app.get("/api/hubspot/sync-log")
@@ -601,7 +641,8 @@ def get_actions(_user_id: str = Depends(require_auth)):
         client.table("epc_discoveries")
         .select(
             "id, epc_contractor, confidence, source_count, created_at, "
-            "project:project_id(id, project_name, developer, mw_capacity, state, expected_cod, lead_score)"
+            "project:project_id(id, project_name, developer, "
+            "mw_capacity, state, expected_cod, lead_score)"
         )
         .eq("review_status", "accepted")
         .order("created_at", desc=True)
@@ -610,7 +651,9 @@ def get_actions(_user_id: str = Depends(require_auth)):
     )
 
     # Batch: resolve entities once per unique EPC name
-    epc_names = {disc.get("epc_contractor", "") for disc in disc_resp.data if disc.get("epc_contractor")}
+    epc_names = {
+        disc.get("epc_contractor", "") for disc in disc_resp.data if disc.get("epc_contractor")
+    }
     entity_cache: dict[str, dict | None] = {}
     for name in epc_names:
         entity_cache[name] = resolve_entity(name)
@@ -653,23 +696,25 @@ def get_actions(_user_id: str = Depends(require_auth)):
         has_hubspot_sync = entity_id in synced_entity_ids if entity_id else False
         contact_status = entity.get("contact_discovery_status") if entity else None
 
-        actions.append({
-            "discovery_id": disc["id"],
-            "project_id": proj.get("id"),
-            "project_name": proj.get("project_name"),
-            "developer": proj.get("developer"),
-            "mw_capacity": proj.get("mw_capacity"),
-            "state": proj.get("state"),
-            "expected_cod": proj.get("expected_cod"),
-            "lead_score": proj.get("lead_score"),
-            "epc_contractor": epc_name,
-            "confidence": disc.get("confidence"),
-            "entity_id": entity_id,
-            "contacts": contacts,
-            "contact_count": len(contacts),
-            "contact_discovery_status": contact_status,
-            "has_hubspot_sync": has_hubspot_sync,
-        })
+        actions.append(
+            {
+                "discovery_id": disc["id"],
+                "project_id": proj.get("id"),
+                "project_name": proj.get("project_name"),
+                "developer": proj.get("developer"),
+                "mw_capacity": proj.get("mw_capacity"),
+                "state": proj.get("state"),
+                "expected_cod": proj.get("expected_cod"),
+                "lead_score": proj.get("lead_score"),
+                "epc_contractor": epc_name,
+                "confidence": disc.get("confidence"),
+                "entity_id": entity_id,
+                "contacts": contacts,
+                "contact_count": len(contacts),
+                "contact_discovery_status": contact_status,
+                "has_hubspot_sync": has_hubspot_sync,
+            }
+        )
 
     # Sort by lead_score descending
     actions.sort(key=lambda a: a.get("lead_score") or 0, reverse=True)
@@ -706,9 +751,7 @@ def rebuild_entity_profile(entity_id: str, _user_id: str = Depends(require_auth)
         raise HTTPException(status_code=404, detail="Entity not found")
 
     # Clear profile_rebuilt_at to force rebuild, then rebuild
-    client.table("entities").update(
-        {"profile_rebuilt_at": None}
-    ).eq("id", entity_id).execute()
+    client.table("entities").update({"profile_rebuilt_at": None}).eq("id", entity_id).execute()
 
     profile = rebuild_profile_if_stale(entity_id)
     return {"entity_id": entity_id, "profile": profile}
@@ -743,32 +786,39 @@ async def reverse_sweep(request: Request, _user_id: str = Depends(require_auth))
         queue: asyncio.Queue[dict | None] = asyncio.Queue()
 
         async def on_progress(update):
-            await queue.put({
-                "epc_name": update.epc_name,
-                "status": update.status,
-                "candidates_found": update.candidates_found,
-                "matches_found": update.matches_found,
-                "message": update.message,
-            })
+            await queue.put(
+                {
+                    "epc_name": update.epc_name,
+                    "status": update.status,
+                    "candidates_found": update.candidates_found,
+                    "matches_found": update.matches_found,
+                    "message": update.message,
+                }
+            )
 
         async def run():
             from .reverse_sweep import run_reverse_sweep
+
             try:
                 result = await run_reverse_sweep(on_progress=on_progress, api_key=api_key)
-                await queue.put({
-                    "status": "done",
-                    "epcs_processed": result.epcs_processed,
-                    "total_candidates": result.total_candidates,
-                    "total_matches": result.total_matches,
-                    "discoveries_created": result.discoveries_created,
-                    "errors": result.errors[:10],
-                })
+                await queue.put(
+                    {
+                        "status": "done",
+                        "epcs_processed": result.epcs_processed,
+                        "total_candidates": result.total_candidates,
+                        "total_matches": result.total_matches,
+                        "discoveries_created": result.discoveries_created,
+                        "errors": result.errors[:10],
+                    }
+                )
             except Exception as exc:
                 logger.exception("Reverse sweep failed")
-                await queue.put({
-                    "status": "error",
-                    "message": str(exc)[:500],
-                })
+                await queue.put(
+                    {
+                        "status": "error",
+                        "message": str(exc)[:500],
+                    }
+                )
             finally:
                 await queue.put(None)
 
@@ -902,13 +952,17 @@ async def chat(req: ChatRequest, request: Request, _user_id: str = Depends(requi
                 if p.type == "text":
                     persist_parts.append({"type": "text", "text": p.text})
                 elif p.type == "file":
-                    persist_parts.append({
-                        "type": "file",
-                        "mediaType": p.mediaType,
-                        "filename": p.filename,
-                        # Omit url (base64 data) to keep DB small
-                    })
-        db.save_message(conversation_id, "user", last.get_text(), parts=persist_parts, user_id=_user_id)
+                    persist_parts.append(
+                        {
+                            "type": "file",
+                            "mediaType": p.mediaType,
+                            "filename": p.filename,
+                            # Omit url (base64 data) to keep DB small
+                        }
+                    )
+        db.save_message(
+            conversation_id, "user", last.get_text(), parts=persist_parts, user_id=_user_id
+        )
 
     # Build message history for the agent (Anthropic API needs role + content)
     # Use get_content_blocks() to pass file attachments as native Claude content blocks
@@ -919,7 +973,11 @@ async def chat(req: ChatRequest, request: Request, _user_id: str = Depends(requi
     job = create_job(job_id, conversation_id)
 
     stream_writer = StreamWriter()
-    task = asyncio.create_task(_run_agent_job_v2(job, messages, conversation_id, stream_writer, api_key=api_key, user_id=_user_id))
+    task = asyncio.create_task(
+        _run_agent_job_v2(
+            job, messages, conversation_id, stream_writer, api_key=api_key, user_id=_user_id
+        )
+    )
     set_task(job_id, task)
 
     return StreamingResponse(
@@ -934,12 +992,17 @@ async def chat(req: ChatRequest, request: Request, _user_id: str = Depends(requi
 
 
 async def _run_agent_job(
-    job, messages: list[dict], conversation_id: str, stream_writer: StreamWriter,
+    job,
+    messages: list[dict],
+    conversation_id: str,
+    stream_writer: StreamWriter,
     api_key: str | None = None,
 ) -> None:
     """Background wrapper: consumes the chat agent generator, pushes events to job store."""
     try:
-        async for event in run_chat_agent(messages, conversation_id, stream_writer, api_key=api_key):
+        async for event in run_chat_agent(
+            messages, conversation_id, stream_writer, api_key=api_key
+        ):
             job.append_event(event)
         mark_job_done(job.job_id)
     except asyncio.CancelledError:
@@ -958,7 +1021,12 @@ async def _run_agent_job(
         )
     except anthropic.AuthenticationError:
         error_sw = StreamWriter()
-        job.append_event(error_sw.text("\n\n**Authentication failed.** Your API key is invalid or expired. Check Settings to update it."))
+        job.append_event(
+            error_sw.text(
+                "\n\n**Authentication failed.** Your API key is "
+                "invalid or expired. Check Settings to update it."
+            )
+        )
         job.append_event(error_sw.finish("error"))
         job.append_event(error_sw.done())
         mark_job_done(job.job_id, error="Authentication failed")
@@ -972,8 +1040,12 @@ async def _run_agent_job(
 
 
 async def _run_agent_job_v2(
-    job, messages: list[dict], conversation_id: str, stream_writer: StreamWriter,
-    api_key: str | None = None, user_id: str = "",
+    job,
+    messages: list[dict],
+    conversation_id: str,
+    stream_writer: StreamWriter,
+    api_key: str | None = None,
+    user_id: str = "",
 ) -> None:
     """Background wrapper using the new AgentRuntime."""
     try:
@@ -1014,37 +1086,43 @@ async def _run_agent_job_v2(
 
             elif etype == "tool_input_start":
                 had_tool_rounds = True
-                job.append_event(stream_writer.tool_input_start(
-                    event.get("tool_id", ""), event.get("tool_name", "")
-                ))
+                job.append_event(
+                    stream_writer.tool_input_start(
+                        event.get("tool_id", ""), event.get("tool_name", "")
+                    )
+                )
 
             elif etype == "tool_input_available":
                 # tool_input_available is emitted by _call_api when a tool block finishes
                 pass  # We emit tool_input_available after tool execution in the runtime loop
 
             elif etype == "tool_result":
-                job.append_event(stream_writer.tool_output_available(
-                    event.get("tool_id", ""),
-                    event.get("result", {}),
-                ))
+                job.append_event(
+                    stream_writer.tool_output_available(
+                        event.get("tool_id", ""),
+                        event.get("result", {}),
+                    )
+                )
                 # Build part for persistence
-                all_parts.append({
-                    "type": "tool-invocation",
-                    "toolCallId": event.get("tool_id", ""),
-                    "toolName": event.get("tool_name", ""),
-                    "input": event.get("input", {}),
-                    "output": event.get("result", {}),
-                })
+                all_parts.append(
+                    {
+                        "type": "tool-invocation",
+                        "toolCallId": event.get("tool_id", ""),
+                        "toolName": event.get("tool_name", ""),
+                        "input": event.get("input", {}),
+                        "output": event.get("result", {}),
+                    }
+                )
 
             elif etype == "escalation":
                 # Surface escalation as text to the user
                 suggestion = event.get("suggestion", "")
                 if suggestion:
-                    job.append_event(stream_writer.text_delta(
-                        str(len(all_parts)), f"\n\n{suggestion}"
-                    ))
+                    job.append_event(
+                        stream_writer.text_delta(str(len(all_parts)), f"\n\n{suggestion}")
+                    )
 
-        result = await runtime.run_turn(messages, on_event)
+        await runtime.run_turn(messages, on_event)
 
         # Capture final text
         if full_text:
@@ -1069,11 +1147,18 @@ async def _run_agent_job_v2(
         job.append_event(sw.finish("stop"))
         job.append_event(sw.done())
         mark_job_done(job.job_id)
-        db.save_message(conversation_id=conversation_id, role="assistant", content="[Stopped by user]")
+        db.save_message(
+            conversation_id=conversation_id, role="assistant", content="[Stopped by user]"
+        )
 
     except anthropic.AuthenticationError:
         error_sw = StreamWriter()
-        job.append_event(error_sw.text("\n\n**Authentication failed.** Your API key is invalid or expired. Check Settings to update it."))
+        job.append_event(
+            error_sw.text(
+                "\n\n**Authentication failed.** Your API key is "
+                "invalid or expired. Check Settings to update it."
+            )
+        )
         job.append_event(error_sw.finish("error"))
         job.append_event(error_sw.done())
         mark_job_done(job.job_id, error="Authentication failed")
@@ -1103,7 +1188,9 @@ async def _stream_from_job(job, cursor: int = 0):
 
 
 @app.get("/api/chat-stream/{job_id}")
-async def chat_stream(job_id: str, cursor: int = Query(default=0), _user_id: str = Depends(require_auth)):
+async def chat_stream(
+    job_id: str, cursor: int = Query(default=0), _user_id: str = Depends(require_auth)
+):
     """Reconnect to a running or completed agent job's SSE stream."""
     job = get_job(job_id)
     if not job:

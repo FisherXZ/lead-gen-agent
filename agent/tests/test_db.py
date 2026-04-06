@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch, MagicMock
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from src import db
 from src.models import AgentResult, EpcSource
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _mock_supabase_response(data):
     """Build a mock Supabase response with .data attribute."""
@@ -24,6 +22,7 @@ def _mock_supabase_response(data):
 # ---------------------------------------------------------------------------
 # reject_pending_discovery
 # ---------------------------------------------------------------------------
+
 
 class TestRejectPendingDiscovery:
     @patch.object(db, "update_discovery")
@@ -55,6 +54,7 @@ class TestRejectPendingDiscovery:
 # store_discovery
 # ---------------------------------------------------------------------------
 
+
 class TestStoreDiscovery:
     @patch.object(db, "insert_discovery")
     @patch.object(db, "reject_pending_discovery")
@@ -62,9 +62,7 @@ class TestStoreDiscovery:
         agent_result = AgentResult(
             epc_contractor="Blattner Energy",
             confidence="confirmed",
-            sources=[
-                EpcSource(channel="trade_publication", excerpt="Blattner awarded contract")
-            ],
+            sources=[EpcSource(channel="trade_publication", excerpt="Blattner awarded contract")],
             reasoning="Two independent sources confirm.",
             related_leads=[],
             searches_performed=["query 1"],
@@ -129,6 +127,7 @@ class TestStoreDiscovery:
 # get_active_discovery
 # ---------------------------------------------------------------------------
 
+
 class TestGetActiveDiscovery:
     @patch.object(db, "get_client")
     def test_returns_first_non_rejected(self, mock_client_fn):
@@ -158,6 +157,7 @@ class TestGetActiveDiscovery:
 # ---------------------------------------------------------------------------
 # get_project
 # ---------------------------------------------------------------------------
+
 
 class TestGetProject:
     @patch.object(db, "get_client")

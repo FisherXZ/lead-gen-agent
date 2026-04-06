@@ -13,8 +13,8 @@ from src.models import (
     ReviewRequest,
 )
 
-
 # -- DiscoverRequest ----------------------------------------------------------
+
 
 class TestDiscoverRequest:
     def test_valid(self):
@@ -27,6 +27,7 @@ class TestDiscoverRequest:
 
 
 # -- BatchDiscoverRequest -----------------------------------------------------
+
 
 class TestBatchDiscoverRequest:
     def test_valid_single(self):
@@ -50,6 +51,7 @@ class TestBatchDiscoverRequest:
 
 # -- ReviewRequest ------------------------------------------------------------
 
+
 class TestReviewRequest:
     def test_accepted(self):
         req = ReviewRequest(action="accepted")
@@ -66,6 +68,7 @@ class TestReviewRequest:
 
 
 # -- EpcSource ----------------------------------------------------------------
+
 
 class TestEpcSource:
     def test_required_fields(self):
@@ -95,6 +98,7 @@ class TestEpcSource:
 
 
 # -- AgentResult --------------------------------------------------------------
+
 
 class TestAgentResult:
     def test_defaults(self):

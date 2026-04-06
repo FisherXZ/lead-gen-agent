@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
-from datetime import datetime, timedelta, timezone
-
-import pytest
 
 
 def test_make_cache_key_deterministic():
@@ -36,7 +34,8 @@ def test_cache_get_returns_none_on_miss():
     mock_client = MagicMock()
     mock_resp = MagicMock()
     mock_resp.data = []
-    mock_client.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value = mock_resp
+    sel = mock_client.table.return_value.select.return_value
+    sel.eq.return_value.limit.return_value.execute.return_value = mock_resp
 
     with patch("src.db.get_client", return_value=mock_client):
         result = cache_get("test_tool", {"key": "value"})
@@ -48,11 +47,12 @@ def test_cache_get_returns_data_on_hit():
     """When cache entry exists and not expired, return data."""
     from src.tools._base import cache_get
 
-    future = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+    future = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
     mock_client = MagicMock()
     mock_resp = MagicMock()
     mock_resp.data = [{"data": {"results": ["cached"]}, "expires_at": future}]
-    mock_client.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value = mock_resp
+    sel = mock_client.table.return_value.select.return_value
+    sel.eq.return_value.limit.return_value.execute.return_value = mock_resp
 
     with patch("src.db.get_client", return_value=mock_client):
         result = cache_get("test_tool", {"key": "value"})
@@ -64,11 +64,12 @@ def test_cache_get_returns_none_on_expired():
     """When cache entry exists but is expired, return None and clean up."""
     from src.tools._base import cache_get
 
-    past = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    past = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
     mock_client = MagicMock()
     mock_resp = MagicMock()
     mock_resp.data = [{"data": {"results": ["old"]}, "expires_at": past}]
-    mock_client.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value = mock_resp
+    sel = mock_client.table.return_value.select.return_value
+    sel.eq.return_value.limit.return_value.execute.return_value = mock_resp
 
     with patch("src.db.get_client", return_value=mock_client):
         result = cache_get("test_tool", {"key": "value"})
@@ -80,8 +81,9 @@ def test_cache_get_returns_none_on_expired():
 
 def test_cache_get_falls_back_to_memory_on_db_error():
     """When DB is unreachable, fall back to in-memory cache."""
-    from src.tools._base import cache_get, _memory_cache, _make_cache_key
     import time
+
+    from src.tools._base import _make_cache_key, _memory_cache, cache_get
 
     # Seed memory cache
     key = _make_cache_key("test_tool", {"key": "fallback"})
@@ -111,7 +113,7 @@ def test_cache_set_writes_to_db():
 
 
 def test_cache_set_falls_back_to_memory_on_db_error():
-    from src.tools._base import cache_set, _memory_cache, _make_cache_key
+    from src.tools._base import _make_cache_key, _memory_cache, cache_set
 
     key = _make_cache_key("test_tool", {"key": "error-test"})
     _memory_cache.pop(key, None)

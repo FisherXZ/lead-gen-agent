@@ -2,24 +2,22 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch, MagicMock, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import anthropic
-import pytest
 
-from src.research import run_research
 from src.models import AgentResult
-
+from src.research import run_research
 from tests.conftest import (
     make_claude_response,
-    make_tool_use_block,
     make_text_block,
+    make_tool_use_block,
 )
-
 
 # ---------------------------------------------------------------------------
 # Immediate report_findings (search → report in one turn)
 # ---------------------------------------------------------------------------
+
 
 class TestReportFindings:
     @patch("src.research.execute_tool", new_callable=AsyncMock)
@@ -103,6 +101,7 @@ class TestReportFindings:
 # Web search → report_findings (multi-turn)
 # ---------------------------------------------------------------------------
 
+
 class TestMultiTurn:
     @patch("src.research.execute_tool", new_callable=AsyncMock)
     @patch("src.research.anthropic.AsyncAnthropic")
@@ -122,7 +121,12 @@ class TestMultiTurn:
         )
         mock_exec_tool.return_value = {
             "results": [
-                {"title": "Article", "url": "https://example.com", "content": "Blattner EPC", "score": 0.9}
+                {
+                    "title": "Article",
+                    "url": "https://example.com",
+                    "content": "Blattner EPC",
+                    "score": 0.9,
+                }
             ]
         }
 
@@ -164,6 +168,7 @@ class TestMultiTurn:
 # End turn (model finishes without report_findings)
 # ---------------------------------------------------------------------------
 
+
 class TestEndTurn:
     @patch("src.research.execute_tool", new_callable=AsyncMock)
     @patch("src.research.anthropic.AsyncAnthropic")
@@ -192,11 +197,14 @@ class TestEndTurn:
 # Max iterations
 # ---------------------------------------------------------------------------
 
+
 class TestMaxIterations:
     @patch("src.research.MAX_ITERATIONS", 2)
     @patch("src.research.execute_tool", new_callable=AsyncMock)
     @patch("src.research.anthropic.AsyncAnthropic")
-    async def test_max_iterations_returns_fallback(self, MockClient, mock_exec_tool, sample_project):
+    async def test_max_iterations_returns_fallback(
+        self, MockClient, mock_exec_tool, sample_project
+    ):
         """If agent hits max iterations without report_findings, return fallback."""
         search_block = make_tool_use_block(
             name="web_search",
@@ -225,6 +233,7 @@ class TestMaxIterations:
 # ---------------------------------------------------------------------------
 # Web search error handling
 # ---------------------------------------------------------------------------
+
 
 class TestSearchErrors:
     @patch("src.research.execute_tool", new_callable=AsyncMock)
@@ -274,26 +283,36 @@ class TestSearchErrors:
 # Token counting
 # ---------------------------------------------------------------------------
 
+
 class TestTokenCounting:
     @patch("src.research.execute_tool", new_callable=AsyncMock)
     @patch("src.research.anthropic.AsyncAnthropic")
-    async def test_tokens_accumulated_across_turns(self, MockClient, mock_exec_tool, sample_project):
+    async def test_tokens_accumulated_across_turns(
+        self, MockClient, mock_exec_tool, sample_project
+    ):
         search_block = make_tool_use_block(
-            name="web_search", block_id="ws-t", input_data={"query": "q"},
+            name="web_search",
+            block_id="ws-t",
+            input_data={"query": "q"},
         )
         turn1 = make_claude_response(
-            stop_reason="tool_use", content=[search_block],
-            input_tokens=500, output_tokens=200,
+            stop_reason="tool_use",
+            content=[search_block],
+            input_tokens=500,
+            output_tokens=200,
         )
         mock_exec_tool.return_value = {"results": []}
 
         report_block = make_tool_use_block(
-            name="report_findings", block_id="rf-t",
+            name="report_findings",
+            block_id="rf-t",
             input_data={"confidence": "unknown", "reasoning": "x", "searches_performed": ["q"]},
         )
         turn2 = make_claude_response(
-            stop_reason="tool_use", content=[report_block],
-            input_tokens=800, output_tokens=150,
+            stop_reason="tool_use",
+            content=[report_block],
+            input_tokens=800,
+            output_tokens=150,
         )
 
         mock_client = MagicMock()
@@ -310,6 +329,7 @@ class TestTokenCounting:
 # Compaction integration
 # ---------------------------------------------------------------------------
 
+
 class TestCompaction:
     @patch("src.research.estimate_context_size", return_value=400_000)
     @patch("src.research.compact_messages")
@@ -321,17 +341,20 @@ class TestCompaction:
         """compact_messages is called when context exceeds threshold."""
         # Turn 1: web_search
         search_block = make_tool_use_block(
-            name="web_search", block_id="ws-c1",
+            name="web_search",
+            block_id="ws-c1",
             input_data={"query": "test query"},
         )
         turn1 = make_claude_response(
-            stop_reason="tool_use", content=[search_block],
+            stop_reason="tool_use",
+            content=[search_block],
         )
         mock_exec_tool.return_value = {"results": []}
 
         # Turn 2: report_findings
         report_block = make_tool_use_block(
-            name="report_findings", block_id="rf-c1",
+            name="report_findings",
+            block_id="rf-c1",
             input_data={
                 "confidence": "unknown",
                 "reasoning": "Nothing found.",
@@ -339,7 +362,8 @@ class TestCompaction:
             },
         )
         turn2 = make_claude_response(
-            stop_reason="tool_use", content=[report_block],
+            stop_reason="tool_use",
+            content=[report_block],
         )
 
         mock_client = MagicMock()
@@ -363,6 +387,7 @@ class TestCompaction:
 # Tenacity retry behavior
 # ---------------------------------------------------------------------------
 
+
 class TestTenacityRetry:
     @patch("src.research.execute_tool", new_callable=AsyncMock)
     @patch("src.research.anthropic.AsyncAnthropic")
@@ -381,7 +406,8 @@ class TestTenacityRetry:
         )
 
         report_block = make_tool_use_block(
-            name="report_findings", block_id="rf-retry",
+            name="report_findings",
+            block_id="rf-retry",
             input_data={
                 "epc_contractor": "Blattner",
                 "confidence": "likely",
@@ -391,14 +417,13 @@ class TestTenacityRetry:
             },
         )
         success_resp = make_claude_response(
-            stop_reason="tool_use", content=[report_block],
+            stop_reason="tool_use",
+            content=[report_block],
         )
 
         mock_client = MagicMock()
         mock_client.messages = MagicMock()
-        mock_client.messages.create = AsyncMock(
-            side_effect=[rate_err, success_resp]
-        )
+        mock_client.messages.create = AsyncMock(side_effect=[rate_err, success_resp])
         MockClient.return_value = mock_client
 
         with patch("src.research._call_api.retry.wait", return_value=0):
@@ -409,9 +434,7 @@ class TestTenacityRetry:
 
     @patch("src.research.execute_tool", new_callable=AsyncMock)
     @patch("src.research.anthropic.AsyncAnthropic")
-    async def test_auth_error_fails_immediately(
-        self, MockClient, mock_exec_tool, sample_project
-    ):
+    async def test_auth_error_fails_immediately(self, MockClient, mock_exec_tool, sample_project):
         """AuthenticationError -> immediate failure, no retries."""
         mock_response = MagicMock()
         mock_response.status_code = 401
@@ -452,9 +475,7 @@ class TestTenacityRetry:
 
         mock_client = MagicMock()
         mock_client.messages = MagicMock()
-        mock_client.messages.create = AsyncMock(
-            side_effect=[rate_err, rate_err, rate_err]
-        )
+        mock_client.messages.create = AsyncMock(side_effect=[rate_err, rate_err, rate_err])
         MockClient.return_value = mock_client
 
         with patch("src.research._call_api.retry.wait", return_value=0):

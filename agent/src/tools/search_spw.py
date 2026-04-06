@@ -24,7 +24,9 @@ DEFINITION = {
         "properties": {
             "epc_name": {
                 "type": "string",
-                "description": "Company name to look up (e.g., 'SOLV Energy', 'McCarthy', 'Blattner').",
+                "description": (
+                    "Company name to look up (e.g., 'SOLV Energy', 'McCarthy', 'Blattner')."
+                ),
             },
         },
         "required": ["epc_name"],

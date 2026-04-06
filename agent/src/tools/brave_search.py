@@ -38,7 +38,10 @@ DEFINITION = {
         "properties": {
             "query": {
                 "type": "string",
-                "description": "The search query. Be specific: include developer name, project name, state, and 'EPC' or 'construction contractor'.",
+                "description": (
+                    "The search query. Be specific: include developer name, "
+                    "project name, state, and 'EPC' or 'construction contractor'."
+                ),
             },
             "max_results": {
                 "type": "integer",
@@ -61,7 +64,12 @@ async def execute(tool_input: dict) -> dict:
 
     api_key = os.environ.get("BRAVE_SEARCH_API_KEY")
     if not api_key:
-        return {"error": "BRAVE_SEARCH_API_KEY not set. Brave search is unavailable — use web_search instead."}
+        return {
+            "error": (
+                "BRAVE_SEARCH_API_KEY not set. "
+                "Brave search is unavailable — use web_search instead."
+            )
+        }
 
     # Check cache
     cache_key = (query.strip().lower(), max_results)
@@ -88,12 +96,14 @@ async def execute(tool_input: dict) -> dict:
 
     results = []
     for r in data.get("web", {}).get("results", []):
-        results.append({
-            "title": r.get("title", ""),
-            "url": r.get("url", ""),
-            "content": r.get("description", ""),
-            "score": r.get("relevancy_score", 0) or 0,
-        })
+        results.append(
+            {
+                "title": r.get("title", ""),
+                "url": r.get("url", ""),
+                "content": r.get("description", ""),
+                "score": r.get("relevancy_score", 0) or 0,
+            }
+        )
 
     _cache[cache_key] = (now, results)
     return {"results": results}
@@ -113,7 +123,9 @@ def _is_retryable(exc: BaseException) -> bool:
     wait=tenacity.wait_exponential(multiplier=1, min=2, max=8),
     reraise=True,
     before_sleep=lambda rs: logger.info(
-        "brave_search retry #%d: %s", rs.attempt_number, rs.outcome.exception(),
+        "brave_search retry #%d: %s",
+        rs.attempt_number,
+        rs.outcome.exception(),
     ),
 )
 async def _brave_request_with_retry(headers: dict, params: dict) -> dict:

@@ -3,7 +3,9 @@
 When the chat agent calls this tool, it spawns a focused research
 sub-runtime that runs autonomously and returns findings.
 """
+
 from __future__ import annotations
+
 import asyncio
 
 DEFINITION = {
@@ -23,11 +25,12 @@ DEFINITION = {
     },
 }
 
+
 async def execute(tool_input: dict) -> dict:
     # Lazy imports to avoid circular: tools -> agents -> tools
+    from .. import db
     from ..agents.research import build_research_runtime
     from ..knowledge_base import build_knowledge_context
-    from .. import db
     from ..prompts import build_user_message
 
     project_id = tool_input["project_id"]
@@ -65,7 +68,11 @@ async def execute(tool_input: dict) -> dict:
                     summary = content
                 break
 
-        return {"findings": summary, "iterations": result.iterations, "project_name": project.get("project_name", "")}
+        return {
+            "findings": summary,
+            "iterations": result.iterations,
+            "project_name": project.get("project_name", ""),
+        }
     except asyncio.CancelledError:
         raise  # Don't swallow task cancellation
     except Exception as exc:

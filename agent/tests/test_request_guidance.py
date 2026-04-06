@@ -6,10 +6,10 @@ import pytest
 
 from src.tools.request_guidance import DEFINITION, execute
 
-
 # ---------------------------------------------------------------------------
 # Tool definition
 # ---------------------------------------------------------------------------
+
 
 class TestDefinition:
     def test_name(self):
@@ -27,14 +27,17 @@ class TestDefinition:
 # execute() function
 # ---------------------------------------------------------------------------
 
+
 class TestExecute:
     @pytest.mark.asyncio
     async def test_echoes_input_back(self):
-        result = await execute({
-            "status_summary": "Found two possible EPCs.",
-            "question": "Which one seems more likely?",
-            "options": ["Blattner", "McCarthy"],
-        })
+        result = await execute(
+            {
+                "status_summary": "Found two possible EPCs.",
+                "question": "Which one seems more likely?",
+                "options": ["Blattner", "McCarthy"],
+            }
+        )
 
         assert result["status_summary"] == "Found two possible EPCs."
         assert result["question"] == "Which one seems more likely?"
@@ -43,10 +46,12 @@ class TestExecute:
 
     @pytest.mark.asyncio
     async def test_missing_options_defaults_to_empty(self):
-        result = await execute({
-            "status_summary": "Stuck.",
-            "question": "Any leads?",
-        })
+        result = await execute(
+            {
+                "status_summary": "Stuck.",
+                "question": "Any leads?",
+            }
+        )
 
         assert result["options"] == []
         assert result["awaiting_response"] is True
@@ -65,20 +70,25 @@ class TestExecute:
 # Registry integration
 # ---------------------------------------------------------------------------
 
+
 class TestRegistryIntegration:
     def test_registered_in_all_tools(self):
         from src.tools import get_tool_names
+
         assert "request_guidance" in get_tool_names()
 
     @pytest.mark.asyncio
     async def test_execute_via_registry(self):
         from src.tools import execute_tool
 
-        result = await execute_tool("request_guidance", {
-            "status_summary": "Found conflicting info.",
-            "question": "Should I trust the trade pub or the PR?",
-            "options": ["Trade publication", "Press release"],
-        })
+        result = await execute_tool(
+            "request_guidance",
+            {
+                "status_summary": "Found conflicting info.",
+                "question": "Should I trust the trade pub or the PR?",
+                "options": ["Trade publication", "Press release"],
+            },
+        )
 
         assert result["awaiting_response"] is True
         assert result["question"] == "Should I trust the trade pub or the PR?"
@@ -86,4 +96,5 @@ class TestRegistryIntegration:
     def test_not_in_research_tools(self):
         """request_guidance should NOT be available in batch research."""
         from src.research import RESEARCH_TOOLS
+
         assert "request_guidance" not in RESEARCH_TOOLS
