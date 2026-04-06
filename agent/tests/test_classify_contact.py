@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -138,10 +138,10 @@ async def test_successful_classification():
 
     mock_anthropic_response = _make_anthropic_response(ai_scores)
     mock_anthropic_client = MagicMock()
-    mock_anthropic_client.messages.create.return_value = mock_anthropic_response
+    mock_anthropic_client.messages.create = AsyncMock(return_value=mock_anthropic_response)
 
     with patch("src.tools.classify_contact.get_client", return_value=mock_client), \
-         patch("src.tools.classify_contact.anthropic.Anthropic", return_value=mock_anthropic_client):
+         patch("src.tools.classify_contact.get_anthropic_client", return_value=mock_anthropic_client):
         result = await execute({"contact_id": VALID_UUID})
 
     assert result["status"] == "success"
@@ -206,10 +206,10 @@ async def test_partial_match_score():
     mock_client.table.side_effect = table_side_effect
 
     mock_anthropic_client = MagicMock()
-    mock_anthropic_client.messages.create.return_value = _make_anthropic_response(ai_scores)
+    mock_anthropic_client.messages.create = AsyncMock(return_value=_make_anthropic_response(ai_scores))
 
     with patch("src.tools.classify_contact.get_client", return_value=mock_client), \
-         patch("src.tools.classify_contact.anthropic.Anthropic", return_value=mock_anthropic_client):
+         patch("src.tools.classify_contact.get_anthropic_client", return_value=mock_anthropic_client):
         result = await execute({"contact_id": VALID_UUID})
 
     assert result["status"] == "success"

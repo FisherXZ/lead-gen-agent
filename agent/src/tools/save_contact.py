@@ -124,7 +124,7 @@ async def execute(tool_input: dict) -> dict:
     try:
         resp = (
             client.table("contacts")
-            .upsert(contact_data, on_conflict="entity_id,full_name")
+            .upsert(contact_data, on_conflict="entity_id,lower(full_name)")
             .execute()
         )
         contact_row = resp.data[0] if resp.data else {}

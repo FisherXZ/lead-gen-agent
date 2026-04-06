@@ -7,12 +7,11 @@ then writes results to the contact_persona_scores table.
 from __future__ import annotations
 
 import logging
-import os
+from datetime import datetime, timezone
 
-import anthropic
 from pydantic import BaseModel, Field
 
-from ..db import get_client
+from ..db import get_anthropic_client, get_client
 from ._base import validate_uuid
 
 logger = logging.getLogger(__name__)
@@ -143,7 +142,7 @@ async def execute(tool_input: dict) -> dict:
     contact_id = tool_input.get("contact_id", "").strip()
 
     if not validate_uuid(contact_id):
-        return {"error": f"Invalid contact_id: {contact_id!r}"}
+        return {"status": "error", "error": f"Invalid contact_id: {contact_id!r}", "error_category": "validation_error"}
 
     client = get_client()
 
@@ -156,7 +155,7 @@ async def execute(tool_input: dict) -> dict:
         .execute()
     )
     if not contact_resp.data:
-        return {"error": f"Contact not found: {contact_id}"}
+        return {"status": "error", "error": f"Contact not found: {contact_id}", "error_category": "not_found"}
 
     contact = contact_resp.data[0]
     entity_id = contact.get("entity_id")
@@ -177,10 +176,8 @@ async def execute(tool_input: dict) -> dict:
     # 3. Call Claude Haiku for structured scoring
     prompt = _build_prompt(contact, entity_name)
 
-    anthropic_client = anthropic.Anthropic(
-        api_key=os.environ.get("ANTHROPIC_API_KEY")
-    )
-    response = anthropic_client.messages.create(
+    anthropic_client = get_anthropic_client()
+    response = await anthropic_client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=1024,
         messages=[{"role": "user", "content": prompt}],
@@ -217,7 +214,7 @@ async def execute(tool_input: dict) -> dict:
         "ai_project_relevant": project_relevant,
         "ai_persona_fit": persona_fit,
         "ai_reasoning": reasoning,
-        "ai_classified_at": "now()",
+        "ai_classified_at": datetime.now(timezone.utc).isoformat(),
     }
     try:
         client.table("contact_persona_scores").upsert(

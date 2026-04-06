@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from src.tools import fetch_page
+from . import fetch_page
 
 
 class Input(BaseModel):

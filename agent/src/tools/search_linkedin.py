@@ -98,9 +98,11 @@ async def execute(tool_input: dict) -> dict:
     # Build queries and search
     queries = _build_search_queries(inp.company_name, inp.role_keywords, inp.location)
 
+    import asyncio
+    search_tasks = [_run_web_search(q, max_results=inp.max_results) for q in queries]
+    search_results = await asyncio.gather(*search_tasks)
     all_search_results: list[dict] = []
-    for query in queries:
-        result = await _run_web_search(query, max_results=inp.max_results)
+    for result in search_results:
         all_search_results.extend(result.get("results", []))
 
     # Extract LinkedIn URLs from search hits

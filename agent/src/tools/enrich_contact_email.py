@@ -53,12 +53,13 @@ class Input(BaseModel):
 
 async def execute(tool_input: dict) -> dict:
     """Run the email enrichment waterfall."""
-    inp = Input(**tool_input)
+    contact_id = tool_input.get("contact_id", "")
+    linkedin_url = tool_input.get("linkedin_url", "")
 
-    if not validate_uuid(inp.contact_id):
+    if not validate_uuid(contact_id):
         return {
             "status": "error",
-            "error": f"Invalid contact_id: {inp.contact_id!r} is not a valid UUID.",
+            "error": f"Invalid contact_id: {contact_id!r} is not a valid UUID.",
             "error_category": "validation_error",
         }
 
@@ -75,44 +76,41 @@ async def execute(tool_input: dict) -> dict:
     email: str | None = None
     source: str | None = None
 
-    # ---- Provider 1: EnrichmentAPI ----
-    if enrichment_api_key:
-        try:
-            async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        # ---- Provider 1: EnrichmentAPI ----
+        if enrichment_api_key:
+            try:
                 resp = await client.post(
                     "https://api.enrichmentapi.io/v1/email",
-                    json={"linkedin_url": inp.linkedin_url},
+                    json={"linkedin_url": linkedin_url},
                     headers={"Authorization": f"Bearer {enrichment_api_key}"},
-                    timeout=15.0,
                 )
-            resp.raise_for_status()
-            data = resp.json()
-            found = data.get("email") or data.get("data", {}).get("email")
-            if found:
-                email = found
-                source = "enrichment_api"
-        except Exception as exc:
-            logger.debug("EnrichmentAPI failed for %s: %s", inp.contact_id, exc)
+                resp.raise_for_status()
+                data = resp.json()
+                found = data.get("email") or data.get("data", {}).get("email")
+                if found:
+                    email = found
+                    source = "enrichment_api"
+            except Exception as exc:
+                logger.debug("EnrichmentAPI failed for %s: %s", contact_id, exc)
 
-    # ---- Provider 2: Apollo ----
-    if email is None and apollo_api_key:
-        try:
-            async with httpx.AsyncClient() as client:
+        # ---- Provider 2: Apollo ----
+        if email is None and apollo_api_key:
+            try:
                 resp = await client.post(
                     "https://api.apollo.io/v1/people/match",
-                    json={"linkedin_url": inp.linkedin_url},
+                    json={"linkedin_url": linkedin_url},
                     headers={"x-api-key": apollo_api_key},
-                    timeout=15.0,
                 )
-            resp.raise_for_status()
-            data = resp.json()
-            person = data.get("person") or {}
-            found = person.get("email") or data.get("email")
-            if found:
-                email = found
-                source = "apollo"
-        except Exception as exc:
-            logger.debug("Apollo failed for %s: %s", inp.contact_id, exc)
+                resp.raise_for_status()
+                data = resp.json()
+                person = data.get("person") or {}
+                found = person.get("email") or data.get("email")
+                if found:
+                    email = found
+                    source = "apollo"
+            except Exception as exc:
+                logger.debug("Apollo failed for %s: %s", contact_id, exc)
 
     # ---- Update DB if email found ----
     if email:
@@ -120,14 +118,14 @@ async def execute(tool_input: dict) -> dict:
             db = get_client()
             db.table("contacts").update(
                 {"email": email, "email_source": source}
-            ).eq("id", inp.contact_id).execute()
+            ).eq("id", contact_id).execute()
         except Exception as exc:
-            logger.warning("DB update failed for contact %s: %s", inp.contact_id, exc)
+            logger.warning("DB update failed for contact %s: %s", contact_id, exc)
 
     return {
         "status": "success",
         "data": {
-            "contact_id": inp.contact_id,
+            "contact_id": contact_id,
             "email": email,
             "source": source,
         },
