@@ -2,7 +2,7 @@
 
 import json
 
-from agent.src.runtime.escalation import EscalationPolicy
+from src.runtime.escalation import EscalationPolicy
 
 
 def _tool_result_msg(name, content):

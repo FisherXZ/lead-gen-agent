@@ -1,6 +1,6 @@
 import pytest
-from agent.src.hooks.tool_health import ToolHealthHook
-from agent.src.runtime import RunContext
+from src.hooks.tool_health import ToolHealthHook
+from src.runtime import RunContext
 
 
 def _ctx(**kw):

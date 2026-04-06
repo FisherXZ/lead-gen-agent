@@ -4,8 +4,8 @@ from unittest.mock import MagicMock
 # Stub supabase before any imports
 sys.modules.setdefault("supabase", MagicMock())
 
-from agent.src.agents.chat import build_chat_runtime
-from agent.src.runtime import AgentRuntime
+from src.agents.chat import build_chat_runtime
+from src.runtime import AgentRuntime
 
 
 def test_build_chat_runtime():

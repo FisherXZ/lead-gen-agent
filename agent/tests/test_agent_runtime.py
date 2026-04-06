@@ -3,11 +3,11 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from agent.src.runtime.agent_runtime import AgentRuntime
-from agent.src.runtime.compactor import Compactor
-from agent.src.runtime.escalation import EscalationPolicy
-from agent.src.runtime.hooks import Hook
-from agent.src.runtime.types import HookAction
+from src.runtime.agent_runtime import AgentRuntime
+from src.runtime.compactor import Compactor
+from src.runtime.escalation import EscalationPolicy
+from src.runtime.hooks import Hook
+from src.runtime.types import HookAction
 
 
 class MockContentBlock:

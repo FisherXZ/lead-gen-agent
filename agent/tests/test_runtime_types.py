@@ -1,6 +1,6 @@
 """Tests for runtime type definitions."""
 
-from agent.src.runtime.types import Action, HookAction, RunContext, TurnResult
+from src.runtime.types import Action, HookAction, RunContext, TurnResult
 
 
 def test_turn_result_creation():

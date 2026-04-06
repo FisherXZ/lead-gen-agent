@@ -3,7 +3,7 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from agent.src.runtime.compactor import Compactor, _build_summary_message, estimate_tokens
+from src.runtime.compactor import Compactor, _build_summary_message, estimate_tokens
 
 
 def _make_messages(count, content_size=100):

@@ -1,6 +1,6 @@
 import pytest
-from agent.src.hooks.rate_limit import RateLimitHook
-from agent.src.runtime import RunContext
+from src.hooks.rate_limit import RateLimitHook
+from src.runtime import RunContext
 
 
 def _ctx(**kw):

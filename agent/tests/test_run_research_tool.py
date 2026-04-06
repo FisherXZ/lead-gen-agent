@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 sys.modules.setdefault("supabase", MagicMock())
-from agent.src.tools.run_research import DEFINITION, execute
+from src.tools.run_research import DEFINITION, execute
 
 
 def test_definition():
