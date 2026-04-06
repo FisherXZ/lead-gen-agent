@@ -74,6 +74,8 @@ class AgentRuntime:
         for hook in self.hooks:
             if hasattr(hook, "reset"):
                 hook.reset()
+        if hasattr(self.escalation, '_seen_signals'):
+            self.escalation._seen_signals.clear()
 
         # Compact context if needed
         messages = await self.compactor.maybe_compact(messages)
@@ -142,8 +144,10 @@ class AgentRuntime:
                 hook_action = await run_pre_hooks(self.hooks, tool_name, tool_input, context)
 
                 if hook_action.kind == "deny":
+                    effective_input = tool_input
                     result = {"error": hook_action.reason, "_denied_by_hook": True}
                 elif hook_action.kind == "escalate":
+                    effective_input = tool_input
                     on_event({"type": "escalation", "message": hook_action.message})
                     result = {"_escalated": True, "message": hook_action.message}
                 else:
@@ -151,8 +155,8 @@ class AgentRuntime:
                     effective_input = hook_action.modified_input or tool_input
                     result = await self._execute_tool(tool_name, effective_input)
 
-                # Post-hooks
-                result = await run_post_hooks(self.hooks, tool_name, tool_input, result, context)
+                # Post-hooks (use effective_input so hooks see enriched input from pre-hooks)
+                result = await run_post_hooks(self.hooks, tool_name, effective_input, result, context)
 
                 tool_history.append(tool_name)
                 tool_results.append({
@@ -162,7 +166,7 @@ class AgentRuntime:
                 })
 
                 # Emit event
-                on_event({"type": "tool_result", "tool_name": tool_name, "result": result})
+                on_event({"type": "tool_result", "tool_name": tool_name, "tool_id": tool_id, "input": effective_input, "result": result})
 
             # Append tool results as user message
             messages.append({"role": "user", "content": tool_results})
@@ -181,12 +185,10 @@ class AgentRuntime:
                 })
                 break
             elif action.kind == "inject_guidance":
-                # Inject guidance as a separate user message (not a synthetic
-                # tool_result, which would violate the API contract requiring
-                # every tool_result to reference a real tool_use_id).
+                # Inject as a plain user message (not a synthetic tool_result)
                 messages.append({
                     "role": "user",
-                    "content": f"[Runtime guidance]: {action.message}",
+                    "content": f"[System guidance: {action.message}]",
                 })
 
             # Compact again if context grew

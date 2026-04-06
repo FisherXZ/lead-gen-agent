@@ -37,10 +37,9 @@ async def test_injects_batch_id():
 @pytest.mark.asyncio
 async def test_post_marks_done():
     hook = BatchTrackingHook()
-    hook._active_batch_id = "batch-42"
     mock_bp_mod = MagicMock()
     with patch.dict(sys.modules, {"agent.src.batch_progress": mock_bp_mod}):
-        await hook.post_tool("batch_research_epc", {}, {"results": []}, _ctx())
+        await hook.post_tool("batch_research_epc", {"_batch_id": "batch-42"}, {"results": []}, _ctx())
     mock_bp_mod.mark_done.assert_called_once_with("batch-42")
 
 @pytest.mark.asyncio

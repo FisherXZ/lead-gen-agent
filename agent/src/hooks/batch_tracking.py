@@ -4,16 +4,12 @@ import uuid
 from ..runtime import Hook, HookAction, RunContext
 
 class BatchTrackingHook(Hook):
-    def __init__(self):
-        self._active_batch_id: str | None = None
-
     async def pre_tool(self, tool_name: str, tool_input: dict, context: RunContext) -> HookAction:
         if tool_name != "batch_research_epc":
             return HookAction.continue_with(tool_input)
         from .. import db
         from ..batch_progress import create_batch, get_cancel_event, update_project, mark_done
         batch_id = str(uuid.uuid4())
-        self._active_batch_id = batch_id
         batch_projects = []
         for pid in tool_input.get("project_ids", []):
             p = db.get_project(pid)
