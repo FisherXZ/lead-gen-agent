@@ -42,6 +42,7 @@ from . import (
     request_discovery_review,
     request_guidance,
     research_scratchpad,
+    save_contact,
     search_enr,
     search_exa_people,
     search_linkedin,
@@ -100,6 +101,8 @@ _register(enrich_contact_email)
 _register(enrich_contact_phone)
 # Contact scoring
 _register(classify_contact)
+# Contact persistence
+_register(save_contact)
 # Agent self-management tools
 _register(manage_todo)
 _register(think)
