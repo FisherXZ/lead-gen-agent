@@ -7,6 +7,7 @@ import { agentFetch, agentHeaders, AGENT_API_URL } from "@/lib/agent-fetch";
 import ChatMessage from "./ChatMessage";
 import FileAttachment from "./FileAttachment";
 import SuggestedPrompts from "./SuggestedPrompts";
+import WaitingIndicator from "./WaitingIndicator";
 
 const ACCEPTED_FILE_TYPES = [
   "image/png", "image/jpeg", "image/gif", "image/webp",
@@ -590,16 +591,9 @@ export default function ChatInterface({ initialContext }: ChatInterfaceProps) {
                   }
                 />
               ))}
-              {/* Thinking indicator */}
+              {/* Waiting indicator */}
               {(status === "submitted" || (reconnecting && messages.length > 0 && messages[messages.length - 1]?.role !== "assistant")) && (
-                <div className="flex items-center gap-2 py-2">
-                  <div className="flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-tertiary" style={{ animationDelay: "0ms" }} />
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-tertiary" style={{ animationDelay: "150ms" }} />
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-text-tertiary" style={{ animationDelay: "300ms" }} />
-                  </div>
-                  <span className="text-[13px] text-text-tertiary">Thinking...</span>
-                </div>
+                <WaitingIndicator />
               )}
               <div ref={messagesEndRef} />
             </div>
