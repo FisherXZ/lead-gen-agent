@@ -60,6 +60,11 @@ class AgentRuntime:
         The loop continues until the model stops calling tools, the escalation
         policy intervenes, or max iterations is reached.
         """
+        # Reset stateful hooks at turn start
+        for hook in self.hooks:
+            if hasattr(hook, "reset"):
+                hook.reset()
+
         # Compact context if needed
         messages = await self.compactor.maybe_compact(messages)
 

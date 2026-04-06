@@ -4,6 +4,7 @@ When the chat agent calls this tool, it spawns a focused research
 sub-runtime that runs autonomously and returns findings.
 """
 from __future__ import annotations
+import asyncio
 
 DEFINITION = {
     "name": "run_research",
@@ -38,7 +39,7 @@ async def execute(tool_input: dict) -> dict:
         return {"error": f"Project {project_id} not found"}
 
     kb_context = build_knowledge_context(project)
-    runtime = build_research_runtime(project=project, kb_context=kb_context, api_key=api_key)
+    runtime = build_research_runtime(project=project, api_key=api_key)
 
     user_msg = build_user_message(project, kb_context)
     if focus:
@@ -65,5 +66,7 @@ async def execute(tool_input: dict) -> dict:
                 break
 
         return {"findings": summary, "iterations": result.iterations, "project_name": project.get("project_name", "")}
+    except asyncio.CancelledError:
+        raise  # Don't swallow task cancellation
     except Exception as exc:
         return {"error": f"Research failed: {type(exc).__name__}: {exc}"}

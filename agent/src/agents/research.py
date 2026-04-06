@@ -16,7 +16,6 @@ RESEARCH_TOOL_NAMES = [
 
 def build_research_runtime(
     project: dict,
-    kb_context: str | None = None,
     api_key: str | None = None,
     model: str | None = None,
 ) -> AgentRuntime:
