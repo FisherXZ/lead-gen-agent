@@ -146,6 +146,137 @@ export default function ChatInterface({ initialContext }: ChatInterfaceProps) {
 
   const isLoading = status === "submitted" || status === "streaming" || reconnecting;
 
+  // Reconnect to a running agent job's SSE stream
+  const reconnectToJob = useCallback(async (jobId: string, cursor: number = 0) => {
+    jobIdRef.current = jobId;
+    const abort = new AbortController();
+    reconnectAbortRef.current = abort;
+    setReconnecting(true);
+
+    try {
+      const res = await agentFetch(
+        `/api/chat-stream/${jobId}?cursor=${cursor}`,
+        { signal: abort.signal }
+      );
+      if (!res.ok || !res.body) {
+        setReconnecting(false);
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let textAccum = "";
+      const parts: Array<{ type: string; [key: string]: unknown }> = [];
+      const msgId = `reconnect-${jobId}`;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const payload = line.slice(6).trim();
+          if (payload === "[DONE]") continue;
+
+          try {
+            const evt = JSON.parse(payload);
+            if ((evt.type === "text-delta" || evt.type === "thinking-delta") && evt.delta) {
+              textAccum += evt.delta;
+            } else if (evt.type === "tool-input-available") {
+              const existingPart = parts.find(
+                (p) => p.type === "tool-invocation" && p.toolCallId === evt.toolCallId
+              );
+              if (existingPart) {
+                // Re-emitted with enriched input (e.g. _batch_id) — update in place
+                existingPart.input = evt.input;
+              } else {
+                parts.push({
+                  type: "tool-invocation",
+                  toolCallId: evt.toolCallId,
+                  toolName: evt.toolName,
+                  state: "partial-call",
+                  input: evt.input,
+                });
+              }
+            } else if (evt.type === "tool-output-available") {
+              const existing = parts.find(
+                (p) =>
+                  p.type === "tool-invocation" &&
+                  p.toolCallId === evt.toolCallId
+              );
+              if (existing) {
+                existing.state = "result";
+                existing.output = evt.output;
+              }
+            }
+          } catch {
+            // Ignore unparseable lines
+          }
+        }
+
+        // Build a live UIMessage from accumulated events
+        const liveParts: Array<{ type: string; [key: string]: unknown }> = [];
+        if (textAccum) liveParts.push({ type: "text", text: textAccum });
+        liveParts.push(...parts);
+
+        if (liveParts.length > 0) {
+          setMessages((prev) => {
+            const withoutReconnect = prev.filter((m) => m.id !== msgId);
+            return [
+              ...withoutReconnect,
+              {
+                id: msgId,
+                role: "assistant" as const,
+                parts: liveParts,
+              } as UIMessage,
+            ];
+          });
+        }
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+    } finally {
+      setReconnecting(false);
+      reconnectAbortRef.current = null;
+      // Reload messages from DB to get the final persisted version
+      try {
+        const convId = conversationIdRef.current;
+        if (convId) {
+          const res = await agentFetch(
+            `/api/conversations/${convId}/messages`
+          );
+          if (res.ok) {
+            const data = await res.json();
+            const loaded: UIMessage[] = data.map(
+              (m: {
+                id: string;
+                role: string;
+                content: string;
+                parts?: unknown[];
+              }) => ({
+                id: m.id,
+                role: m.role as "user" | "assistant",
+                parts:
+                  m.parts && m.parts.length > 0
+                    ? m.parts
+                    : [{ type: "text" as const, text: m.content }],
+              })
+            );
+            setMessages(loaded);
+          }
+        }
+      } catch {
+        // Best effort reload
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Auto-retry when useChat stream drops mid-flight
   const prevStatusRef = useRef(status);
   useEffect(() => {
@@ -283,137 +414,6 @@ export default function ChatInterface({ initialContext }: ChatInterfaceProps) {
       // silently fail
     }
   }
-
-  // Reconnect to a running agent job's SSE stream
-  const reconnectToJob = useCallback(async (jobId: string, cursor: number = 0) => {
-    jobIdRef.current = jobId;
-    const abort = new AbortController();
-    reconnectAbortRef.current = abort;
-    setReconnecting(true);
-
-    try {
-      const res = await agentFetch(
-        `/api/chat-stream/${jobId}?cursor=${cursor}`,
-        { signal: abort.signal }
-      );
-      if (!res.ok || !res.body) {
-        setReconnecting(false);
-        return;
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let textAccum = "";
-      const parts: Array<{ type: string; [key: string]: unknown }> = [];
-      const msgId = `reconnect-${jobId}`;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const payload = line.slice(6).trim();
-          if (payload === "[DONE]") continue;
-
-          try {
-            const evt = JSON.parse(payload);
-            if ((evt.type === "text-delta" || evt.type === "thinking-delta") && evt.delta) {
-              textAccum += evt.delta;
-            } else if (evt.type === "tool-input-available") {
-              const existingPart = parts.find(
-                (p) => p.type === "tool-invocation" && p.toolCallId === evt.toolCallId
-              );
-              if (existingPart) {
-                // Re-emitted with enriched input (e.g. _batch_id) — update in place
-                existingPart.input = evt.input;
-              } else {
-                parts.push({
-                  type: "tool-invocation",
-                  toolCallId: evt.toolCallId,
-                  toolName: evt.toolName,
-                  state: "partial-call",
-                  input: evt.input,
-                });
-              }
-            } else if (evt.type === "tool-output-available") {
-              const existing = parts.find(
-                (p) =>
-                  p.type === "tool-invocation" &&
-                  p.toolCallId === evt.toolCallId
-              );
-              if (existing) {
-                existing.state = "result";
-                existing.output = evt.output;
-              }
-            }
-          } catch {
-            // Ignore unparseable lines
-          }
-        }
-
-        // Build a live UIMessage from accumulated events
-        const liveParts: Array<{ type: string; [key: string]: unknown }> = [];
-        if (textAccum) liveParts.push({ type: "text", text: textAccum });
-        liveParts.push(...parts);
-
-        if (liveParts.length > 0) {
-          setMessages((prev) => {
-            const withoutReconnect = prev.filter((m) => m.id !== msgId);
-            return [
-              ...withoutReconnect,
-              {
-                id: msgId,
-                role: "assistant" as const,
-                parts: liveParts,
-              } as UIMessage,
-            ];
-          });
-        }
-      }
-    } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") return;
-    } finally {
-      setReconnecting(false);
-      reconnectAbortRef.current = null;
-      // Reload messages from DB to get the final persisted version
-      try {
-        const convId = conversationIdRef.current;
-        if (convId) {
-          const res = await agentFetch(
-            `/api/conversations/${convId}/messages`
-          );
-          if (res.ok) {
-            const data = await res.json();
-            const loaded: UIMessage[] = data.map(
-              (m: {
-                id: string;
-                role: string;
-                content: string;
-                parts?: unknown[];
-              }) => ({
-                id: m.id,
-                role: m.role as "user" | "assistant",
-                parts:
-                  m.parts && m.parts.length > 0
-                    ? m.parts
-                    : [{ type: "text" as const, text: m.content }],
-              })
-            );
-            setMessages(loaded);
-          }
-        }
-      } catch {
-        // Best effort reload
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Start a new conversation
   function handleNewConversation() {
