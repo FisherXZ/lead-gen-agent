@@ -2,14 +2,14 @@ import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
-from agent.src.runtime import RunContext
+from src.runtime import RunContext
 
 # Stub out db module before importing hook
 mock_db = MagicMock()
 mock_parsing = MagicMock()
 sys.modules.setdefault("agent.src.db", mock_db)
 
-from agent.src.hooks.discovery import DiscoveryHook
+from src.hooks.discovery import DiscoveryHook
 
 
 def _ctx(**kw):

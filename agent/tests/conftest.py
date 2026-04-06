@@ -3,6 +3,14 @@
 from __future__ import annotations
 
 import os
+import sys
+import pathlib
+
+# Ensure the worktree's own src/ takes precedence over any installed package
+# (the editable-install .pth file points at the main agent/src, not this worktree).
+_worktree_src = str(pathlib.Path(__file__).parent.parent / "src")
+if _worktree_src not in sys.path:
+    sys.path.insert(0, _worktree_src)
 from unittest.mock import MagicMock
 
 import pytest

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from ..hooks import DiscoveryHook, ToolHealthHook
 from ..prompts import RESEARCH_SYSTEM_PROMPT
-from ..runtime import AgentRuntime, Compactor, EscalationPolicy
+from ..runtime import AgentRuntime, EscalationPolicy
+from ..runtime.compactor import HeuristicCompactor
 from ..tools import get_tools
 
 RESEARCH_TOOL_NAMES = [
@@ -37,7 +38,7 @@ def build_research_runtime(
         system_prompt=RESEARCH_SYSTEM_PROMPT,
         tools=get_tools(RESEARCH_TOOL_NAMES),
         hooks=[DiscoveryHook(), ToolHealthHook()],
-        compactor=Compactor(max_tokens=60_000, preserve_recent=4, api_key=api_key),
+        compactor=HeuristicCompactor(max_tokens=60_000, preserve_recent=4),
         escalation=EscalationPolicy(
             max_iterations=30, escalation_mode="autonomous", min_iterations_before_stagnation=6
         ),

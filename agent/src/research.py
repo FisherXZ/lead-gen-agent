@@ -19,7 +19,6 @@ from uuid import uuid4
 import anthropic
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from .compaction import compact_messages, estimate_context_size
 from .completeness import CHECKPOINTS, evaluate_completeness
 from .models import AgentResult, ResearchError
 from .parsing import parse_report_findings
@@ -315,17 +314,7 @@ async def run_research(
         messages.append({"role": "assistant", "content": response.content})
         messages.append({"role": "user", "content": tool_results})
 
-        # Only compact when actually approaching context limits — not every
-        # iteration.  Compacting rewrites old messages which breaks KV-cache
-        # prefix matching, so each unnecessary compaction costs ~10x more on
-        # the conversation portion.  300K chars ≈ 75K tokens, well within
-        # Opus's 200K-token window while leaving room for response + next tool.
-        if estimate_context_size(messages) > 300_000:
-            messages = compact_messages(
-                messages,
-                max_context_chars=300_000,
-                keep_recent_turns=4,
-            )
+        # Context compaction is handled by the AgentRuntime in src/agents/research.py.
 
     # 3c: Max iterations reached
     return (

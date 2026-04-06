@@ -3,8 +3,8 @@ from unittest.mock import MagicMock
 
 sys.modules.setdefault("supabase", MagicMock())
 
-from agent.src.agents.research import RESEARCH_TOOL_NAMES, build_research_runtime
-from agent.src.runtime import AgentRuntime
+from src.agents.research import RESEARCH_TOOL_NAMES, build_research_runtime
+from src.runtime import AgentRuntime
 
 
 def test_build_research_runtime():
@@ -25,7 +25,7 @@ def test_research_autonomous():
 
 
 def test_research_tool_names_valid():
-    from agent.src.tools import get_tool_names
+    from src.tools import get_tool_names
 
     registered = get_tool_names()
     for name in RESEARCH_TOOL_NAMES:

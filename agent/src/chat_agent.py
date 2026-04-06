@@ -158,11 +158,7 @@ async def run_chat_agent(
     full_text = ""
     all_parts: list[dict] = []
 
-    # Compact old tool outputs if conversation history is large
-    from .compaction import compact_messages
-
-    api_messages = compact_messages(api_messages)
-
+    # Context compaction is handled by the AgentRuntime in src/agents/chat.py.
     remember_count = 0
 
     had_tool_rounds = False  # Track if prior rounds used tools

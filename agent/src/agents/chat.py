@@ -10,7 +10,8 @@ from ..hooks import (
     ToolHealthHook,
 )
 from ..prompts import CHAT_SYSTEM_PROMPT
-from ..runtime import AgentRuntime, Compactor, EscalationPolicy
+from ..runtime import AgentRuntime, EscalationPolicy
+from ..runtime.compactor import HeuristicCompactor
 from ..tools import get_all_tools
 
 
@@ -30,7 +31,7 @@ def build_chat_runtime(
             ToolHealthHook(),
             BatchTrackingHook(),
         ],
-        compactor=Compactor(max_tokens=80_000, preserve_recent=6, api_key=api_key),
+        compactor=HeuristicCompactor(max_tokens=80_000, preserve_recent=6),
         escalation=EscalationPolicy(max_iterations=50, escalation_mode="user"),
         api_key=api_key,
         model=model,

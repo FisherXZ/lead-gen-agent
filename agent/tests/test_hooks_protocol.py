@@ -1,8 +1,8 @@
 """Tests for Hook protocol and runners."""
 
 import pytest
-from agent.src.runtime.hooks import Hook, run_post_hooks, run_pre_hooks
-from agent.src.runtime.types import HookAction, RunContext
+from src.runtime.hooks import Hook, run_post_hooks, run_pre_hooks
+from src.runtime.types import HookAction, RunContext
 
 
 class AllowAllHook(Hook):
