@@ -148,7 +148,6 @@ async def run_chat_agent(
                 ],
             }
 
-    full_text = ""
     all_parts: list[dict] = []
 
     # Compact old tool outputs if conversation history is large
@@ -157,16 +156,16 @@ async def run_chat_agent(
     api_messages = compact_messages(api_messages)
 
     remember_count = 0
+    iteration = 0
 
-    had_tool_rounds = False  # Track if prior rounds used tools
+    while iteration < MAX_TOOL_ROUNDS:
+        iteration += 1
 
-    for _round in range(MAX_TOOL_ROUNDS):
-        # Stream the response
+        # --- Per-round state (fresh each iteration) ---
         tool_calls: list[dict] = []
+        full_text = ""
         current_tool_input = ""
         current_text_part_id: str | None = None
-        # In rounds after a tool round, text is "thinking" (reasoning between tools)
-        is_thinking_round = had_tool_rounds
 
         async with client.messages.stream(
             model=MODEL,
@@ -180,10 +179,7 @@ async def run_chat_agent(
                 if event.type == "content_block_start":
                     if event.content_block.type == "text":
                         current_text_part_id = str(len(all_parts))
-                        if is_thinking_round:
-                            yield stream_writer.thinking_start(current_text_part_id)
-                        else:
-                            yield stream_writer.text_start(current_text_part_id)
+                        yield stream_writer.text_start(current_text_part_id)
 
                     elif event.content_block.type == "tool_use":
                         tool_calls.append(
@@ -202,22 +198,14 @@ async def run_chat_agent(
                 elif event.type == "content_block_delta":
                     if event.delta.type == "text_delta" and current_text_part_id is not None:
                         full_text += event.delta.text
-                        if is_thinking_round:
-                            yield stream_writer.thinking_delta(
-                                current_text_part_id, event.delta.text
-                            )
-                        else:
-                            yield stream_writer.text_delta(current_text_part_id, event.delta.text)
+                        yield stream_writer.text_delta(current_text_part_id, event.delta.text)
 
                     elif event.delta.type == "input_json_delta":
                         current_tool_input += event.delta.partial_json
 
                 elif event.type == "content_block_stop":
                     if current_text_part_id is not None:
-                        if is_thinking_round:
-                            yield stream_writer.thinking_end(current_text_part_id)
-                        else:
-                            yield stream_writer.text_end(current_text_part_id)
+                        yield stream_writer.text_end(current_text_part_id)
                         all_parts.append({"type": "text", "text": full_text})
                         current_text_part_id = None
 
@@ -236,142 +224,136 @@ async def run_chat_agent(
             # Get the final message for stop_reason
             response = await stream.get_final_message()
 
-        # Execute any tool calls
-        if response.stop_reason == "tool_use" and tool_calls:
-            had_tool_rounds = True
-            tool_results = []
-            for tc in tool_calls:
-                # Special-case report_findings to store discoveries in DB
-                if tc["name"] == "report_findings":
-                    output = await _handle_report_findings(tc["input"])
-                elif tc["name"] == "remember":
-                    remember_count += 1
-                    if remember_count > 5:
-                        output = {"error": "Rate limit: max 5 memories per conversation turn."}
-                    else:
-                        tc["input"]["_conversation_id"] = conversation_id
-                        output = await execute_tool(tc["name"], tc["input"])
-                elif tc["name"] == "batch_research_epc":
-                    # Generate batch_id and register with progress store
-                    batch_id = str(uuid.uuid4())
+        # Exit condition: no tool calls → done (mirrors claw-code-2's pending_tool_uses.is_empty())
+        if not tool_calls:
+            break
 
-                    # Fetch project records to populate the progress store
-                    batch_projects = []
-                    for pid in tc["input"].get("project_ids", []):
-                        p = db.get_project(pid)
-                        if p:
-                            batch_projects.append(p)
-
-                    batch_state = create_batch(
-                        batch_id, batch_projects, conversation_id=conversation_id
-                    )
-
-                    # Inject batch_id into tool input so frontend knows
-                    # which progress endpoint to connect to
-                    tc["input"]["_batch_id"] = batch_id
-                    tc["input"]["_project_names"] = {
-                        p["id"]: p.get("project_name") or p.get("queue_id", p["id"])
-                        for p in batch_projects
-                    }
-
-                    # Progress callback updates the in-memory store
-                    # Default arg captures batch_id by value (not reference)
-                    async def _on_progress(update: dict, _bid: str = batch_id):
-                        update_project(_bid, update)
-
-                    tc["input"]["_progress_callback"] = _on_progress
-                    tc["input"]["_cancel_event"] = get_cancel_event(batch_id)
-
-                    # Re-emit tool-input-available with enriched input
-                    # (so frontend gets _batch_id before tool completes)
-                    # Strip non-serializable internal objects before SSE emission
-                    sse_input = {
-                        k: v
-                        for k, v in tc["input"].items()
-                        if k not in ("_progress_callback", "_cancel_event")
-                    }
-                    yield stream_writer.tool_input_available(tc["id"], tc["name"], sse_input)
-
-                    try:
-                        output = await execute_tool(tc["name"], tc["input"])
-                    except Exception as exc:
-                        output = {"error": f"{type(exc).__name__}: {exc}"}
-                    finally:
-                        # If cancelled, build partial results from batch state
-                        if batch_state.cancelled:
-                            completed_projects = [
-                                p
-                                for p in batch_state.projects
-                                if p.status in ("completed", "skipped", "error")
-                            ]
-                            output = {
-                                "cancelled": True,
-                                "message": "Batch stopped by user",
-                                "results": [
-                                    {
-                                        "project_id": p.project_id,
-                                        "project_name": p.project_name,
-                                        "status": p.status,
-                                        **(
-                                            {"epc_contractor": p.epc_contractor}
-                                            if p.epc_contractor
-                                            else {}
-                                        ),
-                                        **({"confidence": p.confidence} if p.confidence else {}),
-                                    }
-                                    for p in completed_projects
-                                ],
-                                "total": batch_state.total,
-                                "completed": len(completed_projects),
-                            }
-                        mark_done(batch_id)
+        # Execute tool calls
+        tool_results = []
+        for tc in tool_calls:
+            # Special-case report_findings to store discoveries in DB
+            if tc["name"] == "report_findings":
+                output = await _handle_report_findings(tc["input"])
+            elif tc["name"] == "remember":
+                remember_count += 1
+                if remember_count > 5:
+                    output = {"error": "Rate limit: max 5 memories per conversation turn."}
                 else:
-                    try:
-                        output = await execute_tool(tc["name"], tc["input"])
-                    except Exception as exc:
-                        output = {"error": f"{type(exc).__name__}: {exc}"}
+                    tc["input"]["_conversation_id"] = conversation_id
+                    output = await execute_tool(tc["name"], tc["input"])
+            elif tc["name"] == "batch_research_epc":
+                # Generate batch_id and register with progress store
+                batch_id = str(uuid.uuid4())
 
-                yield stream_writer.tool_output_available(tc["id"], output)
+                # Fetch project records to populate the progress store
+                batch_projects = []
+                for pid in tc["input"].get("project_ids", []):
+                    p = db.get_project(pid)
+                    if p:
+                        batch_projects.append(p)
 
-                # Strip non-serializable internal objects from persisted input
-                serializable_input = {
+                batch_state = create_batch(
+                    batch_id, batch_projects, conversation_id=conversation_id
+                )
+
+                # Inject batch_id into tool input so frontend knows
+                # which progress endpoint to connect to
+                tc["input"]["_batch_id"] = batch_id
+                tc["input"]["_project_names"] = {
+                    p["id"]: p.get("project_name") or p.get("queue_id", p["id"])
+                    for p in batch_projects
+                }
+
+                # Progress callback updates the in-memory store
+                # Default arg captures batch_id by value (not reference)
+                async def _on_progress(update: dict, _bid: str = batch_id):
+                    update_project(_bid, update)
+
+                tc["input"]["_progress_callback"] = _on_progress
+                tc["input"]["_cancel_event"] = get_cancel_event(batch_id)
+
+                # Re-emit tool-input-available with enriched input
+                # (so frontend gets _batch_id before tool completes)
+                # Strip non-serializable internal objects before SSE emission
+                sse_input = {
                     k: v
                     for k, v in tc["input"].items()
-                    if not callable(v) and not isinstance(v, asyncio.Event)
+                    if k not in ("_progress_callback", "_cancel_event")
                 }
-                all_parts.append(
-                    {
-                        "type": "tool-invocation",
-                        "toolCallId": tc["id"],
-                        "toolName": tc["name"],
-                        "input": serializable_input,
-                        "output": output,
-                    }
-                )
+                yield stream_writer.tool_input_available(tc["id"], tc["name"], sse_input)
 
-                tool_results.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": tc["id"],
-                        "content": json.dumps(output, default=str),
-                    }
-                )
+                try:
+                    output = await execute_tool(tc["name"], tc["input"])
+                except Exception as exc:
+                    output = {"error": f"{type(exc).__name__}: {exc}"}
+                finally:
+                    # If cancelled, build partial results from batch state
+                    if batch_state.cancelled:
+                        completed_projects = [
+                            p
+                            for p in batch_state.projects
+                            if p.status in ("completed", "skipped", "error")
+                        ]
+                        output = {
+                            "cancelled": True,
+                            "message": "Batch stopped by user",
+                            "results": [
+                                {
+                                    "project_id": p.project_id,
+                                    "project_name": p.project_name,
+                                    "status": p.status,
+                                    **(
+                                        {"epc_contractor": p.epc_contractor}
+                                        if p.epc_contractor
+                                        else {}
+                                    ),
+                                    **({"confidence": p.confidence} if p.confidence else {}),
+                                }
+                                for p in completed_projects
+                            ],
+                            "total": batch_state.total,
+                            "completed": len(completed_projects),
+                        }
+                    mark_done(batch_id)
+            else:
+                try:
+                    output = await execute_tool(tc["name"], tc["input"])
+                except Exception as exc:
+                    output = {"error": f"{type(exc).__name__}: {exc}"}
+
+            yield stream_writer.tool_output_available(tc["id"], output)
+
+            # Strip non-serializable internal objects from persisted input
+            serializable_input = {
+                k: v
+                for k, v in tc["input"].items()
+                if not callable(v) and not isinstance(v, asyncio.Event)
+            }
+            all_parts.append(
+                {
+                    "type": "tool-invocation",
+                    "toolCallId": tc["id"],
+                    "toolName": tc["name"],
+                    "input": serializable_input,
+                    "output": output,
+                }
+            )
+
+            tool_results.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": tc["id"],
+                    "content": json.dumps(output, default=str),
+                }
+            )
 
             # Feed results back and loop
             api_messages.append({"role": "assistant", "content": response.content})
             api_messages.append({"role": "user", "content": tool_results})
 
-            # Start a new step for the next round
+            # Step boundary for the next round
             yield stream_writer.finish_step()
             yield stream_writer.start_step()
-
-            # Reset for next round
-            tool_calls = []
-            full_text = ""
-            continue
-
-        # No more tool calls — we're done
-        break
 
     yield stream_writer.finish_step()
     yield stream_writer.finish()

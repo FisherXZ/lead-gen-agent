@@ -84,6 +84,7 @@ function getProgressLabel(toolName: string, input?: Record<string, unknown>): st
       return ids ? `Researching ${ids.length} projects...` : "Running batch research...";
     },
     export_csv: "Generating CSV...",
+    think: "Thinking...",
   };
 
   const entry = labels[toolName];
@@ -173,6 +174,8 @@ function getDoneLabel(
       const rowCount = data.row_count ?? "?";
       return `Exported ${rowCount} rows to ${data.filename || "CSV"}`;
     }
+    case "think":
+      return "Reasoning complete";
     default:
       return `Completed: ${toolName}`;
   }
@@ -193,6 +196,7 @@ const EXPAND_WHEN_DONE = new Set([
   "web_search",
   "web_search_broad",
   "fetch_page",
+  "think",
 ]);
 
 /** Tools that should show expanded body while running (live progress) */
@@ -297,6 +301,16 @@ function renderToolBody(
         return <PagePreview data={data} input={input} />;
       }
       return null;
+    }
+
+    case "think": {
+      const thought = input?.thought as string | undefined;
+      if (!thought) return null;
+      return (
+        <div className="px-3 py-2 text-sm text-text-secondary italic whitespace-pre-wrap leading-relaxed">
+          {thought}
+        </div>
+      );
     }
 
     // These tools have no expanded body
