@@ -1,6 +1,6 @@
 """InjectContextHook — auto-inject conversation/session IDs into tools."""
 from __future__ import annotations
-from ._protocol_stub import Hook, HookAction, RunContext
+from ..runtime import Hook, HookAction, RunContext
 
 _NEEDS_CONVERSATION_ID = {"remember", "recall"}
 _NEEDS_SESSION_ID = {"manage_todo", "research_scratchpad"}

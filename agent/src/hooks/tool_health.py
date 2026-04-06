@@ -1,6 +1,6 @@
 """ToolHealthHook — track consecutive tool failures."""
 from __future__ import annotations
-from ._protocol_stub import Hook, HookAction, RunContext
+from ..runtime import Hook, HookAction, RunContext
 
 class ToolHealthHook(Hook):
     def __init__(self, error_threshold: int = 3):

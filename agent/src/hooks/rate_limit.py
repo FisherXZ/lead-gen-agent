@@ -1,6 +1,6 @@
 """RateLimitHook — per-tool call limits within a turn."""
 from __future__ import annotations
-from ._protocol_stub import Hook, HookAction, RunContext
+from ..runtime import Hook, HookAction, RunContext
 
 _DEFAULT_LIMITS = {"remember": 5}
 

@@ -1,7 +1,7 @@
 """DiscoveryHook — persist EPC discoveries when report_findings is called."""
 from __future__ import annotations
 import logging
-from ._protocol_stub import Hook, HookAction, RunContext
+from ..runtime import Hook, HookAction, RunContext
 
 _logger = logging.getLogger(__name__)
 

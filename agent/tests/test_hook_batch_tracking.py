@@ -7,7 +7,7 @@ mock_bp = MagicMock()
 sys.modules.setdefault("agent.src.db", mock_db)
 sys.modules.setdefault("agent.src.batch_progress", mock_bp)
 
-from agent.src.hooks._protocol_stub import RunContext
+from agent.src.runtime import RunContext
 from agent.src.hooks.batch_tracking import BatchTrackingHook
 
 def _ctx(**kw):

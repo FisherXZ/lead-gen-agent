@@ -1,6 +1,6 @@
 import sys, pytest
 from unittest.mock import patch, MagicMock, AsyncMock
-from agent.src.hooks._protocol_stub import RunContext
+from agent.src.runtime import RunContext
 
 # Stub out db module before importing hook
 mock_db = MagicMock()

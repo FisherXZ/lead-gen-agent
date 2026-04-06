@@ -1,7 +1,7 @@
 """BatchTrackingHook — batch progress setup for batch_research_epc."""
 from __future__ import annotations
 import uuid
-from ._protocol_stub import Hook, HookAction, RunContext
+from ..runtime import Hook, HookAction, RunContext
 
 class BatchTrackingHook(Hook):
     def __init__(self):

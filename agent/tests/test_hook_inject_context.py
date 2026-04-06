@@ -1,6 +1,6 @@
 """Tests for InjectContextHook."""
 import pytest
-from agent.src.hooks._protocol_stub import RunContext
+from agent.src.runtime import RunContext
 from agent.src.hooks.inject_context import InjectContextHook
 
 def _ctx(**kw):
