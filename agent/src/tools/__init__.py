@@ -28,6 +28,7 @@ from . import (
     fetch_sec_filing,
     find_contacts,
     get_discoveries,
+    lookup_hubspot_contacts,
     manage_todo,
     push_to_hubspot,
     notify_progress,
@@ -39,6 +40,7 @@ from . import (
     request_guidance,
     research_scratchpad,
     search_enr,
+    search_exa_people,
     search_osha,
     search_projects,
     search_projects_with_epc,
@@ -85,6 +87,9 @@ _register(search_osha)
 _register(search_enr)
 _register(search_wiki_solar)
 _register(search_spw)
+# Contact discovery tools
+_register(search_exa_people)
+_register(lookup_hubspot_contacts)
 # Agent self-management tools
 _register(manage_todo)
 _register(think)
