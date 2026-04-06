@@ -142,7 +142,7 @@ def test_push_discovery_full_success():
     from src.hubspot import push_discovery
 
     mock_table = MagicMock()
-    mock_table.select.return_value.eq.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value = MagicMock(data=[])
+    mock_table.select.return_value.eq.return_value.eq.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value = MagicMock(data=[])
     mock_table.insert.return_value.execute.return_value = MagicMock(data=[{}])
     mock_db = MagicMock()
     mock_db.table.return_value = mock_table
@@ -172,7 +172,7 @@ def test_push_discovery_partial_failure():
     from src.hubspot import push_discovery
 
     mock_table = MagicMock()
-    mock_table.select.return_value.eq.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value = MagicMock(data=[])
+    mock_table.select.return_value.eq.return_value.eq.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value = MagicMock(data=[])
     mock_table.insert.return_value.execute.return_value = MagicMock(data=[{}])
     mock_db = MagicMock()
     mock_db.table.return_value = mock_table

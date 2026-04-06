@@ -36,13 +36,13 @@ DEFINITION = {
 
 async def execute(tool_input: dict) -> dict:
     """Push a discovery to HubSpot."""
-    project_id = tool_input.get("project_id", "").strip()
+    project_id = str(tool_input.get("project_id") or "").strip()
 
     if not project_id:
         return {"error": "project_id is required."}
 
     if not validate_uuid(project_id):
-        return {"error": f"Invalid project_id: {project_id}"}
+        return {"error": "Invalid project_id format."}
 
     # Check HubSpot settings
     from ..hubspot import get_settings, push_discovery
@@ -71,6 +71,7 @@ async def execute(tool_input: dict) -> dict:
         .select("*")
         .eq("project_id", project_id)
         .eq("review_status", "accepted")
+        .order("created_at", desc=True)
         .limit(1)
         .execute()
     )
@@ -103,7 +104,8 @@ async def execute(tool_input: dict) -> dict:
             deal_stage_id=settings.get("deal_stage_id"),
         )
     except Exception as exc:
-        return {"error": f"HubSpot push failed: {exc}"}
+        logger.error("HubSpot push failed for project %s: %s", project_id, exc, exc_info=True)
+        return {"error": f"HubSpot push failed: {type(exc).__name__}"}
 
     # Build summary
     summary_parts = []

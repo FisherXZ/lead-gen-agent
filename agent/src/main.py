@@ -14,12 +14,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import anthropic
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from . import db
-from .auth import get_user_id
+from .auth import get_user_id, require_admin
 from .agent_jobs import (
     cancel_job,
     cancel_job_for_conversation,
@@ -31,7 +31,7 @@ from .agent_jobs import (
 )
 from .batch import run_batch
 from .batch_progress import cancel_batch, cancel_batch_for_conversation, get_batch
-from .knowledge_base import build_knowledge_context, promote_discovery_to_kb, process_rejection_into_kb
+from .knowledge_base import build_knowledge_context, promote_discovery_to_kb, process_rejection_into_kb, resolve_entity
 from .research import run_research, run_research_plan
 from .chat_agent import run_chat_agent
 from .knowledge_base import get_entity_with_profile, list_entities, rebuild_profile_if_stale
@@ -257,7 +257,7 @@ You can ask me questions about this research, request more investigation, or app
 
     # Create conversation and pre-populate
     conv = db.create_conversation(title=f"Review: {epc} for {project_name}", user_id=_user_id)
-    db.save_message(conv["id"], "assistant", context_msg)
+    db.save_message(conv["id"], "assistant", context_msg, user_id=_user_id)
 
     return {
         "conversation_id": conv["id"],
@@ -353,7 +353,7 @@ async def discover_batch(req: BatchDiscoverRequest, request: Request, _user_id: 
 
 
 @app.patch("/api/discover/{discovery_id}/review")
-def review_discovery(discovery_id: str, req: ReviewRequest, request: Request, _user_id: str = Depends(require_auth)):
+async def review_discovery(discovery_id: str, req: ReviewRequest, request: Request, _user_id: str = Depends(require_auth)):
     """Accept or reject an EPC discovery."""
     if req.action not in ("accepted", "rejected"):
         raise HTTPException(status_code=400, detail="Action must be 'accepted' or 'rejected'")
@@ -391,7 +391,6 @@ def review_discovery(discovery_id: str, req: ReviewRequest, request: Request, _u
                 epc_name = discovery.get("epc_contractor")
                 if epc_name and epc_name != "Unknown":
                     try:
-                        from .knowledge_base import resolve_entity
                         epc_entity = resolve_entity(epc_name)
                         if epc_entity:
                             api_key = request.headers.get("x-anthropic-api-key")
@@ -486,7 +485,7 @@ def get_contacts(entity_id: str, _user_id: str = Depends(require_auth)):
 
 
 @app.post("/api/hubspot/connect")
-def hubspot_connect(req: HubSpotConnectRequest, _user_id: str = Depends(require_auth)):
+def hubspot_connect(req: HubSpotConnectRequest, _user_id: str = Depends(require_admin)):
     """Validate and save HubSpot Private App token."""
     from .hubspot import save_settings
 
@@ -515,7 +514,7 @@ def hubspot_status(_user_id: str = Depends(require_auth)):
 
 
 @app.post("/api/hubspot/push")
-def hubspot_push(req: HubSpotPushRequest, _user_id: str = Depends(require_auth)):
+def hubspot_push(req: HubSpotPushRequest, _user_id: str = Depends(require_admin)):
     """Push a discovery to HubSpot (Company + Deal + Contacts)."""
     project_id = req.project_id
 
@@ -539,6 +538,7 @@ def hubspot_push(req: HubSpotPushRequest, _user_id: str = Depends(require_auth))
         .select("*")
         .eq("project_id", project_id)
         .eq("review_status", "accepted")
+        .order("created_at", desc=True)
         .limit(1)
         .execute()
     )
@@ -546,7 +546,6 @@ def hubspot_push(req: HubSpotPushRequest, _user_id: str = Depends(require_auth))
         raise HTTPException(status_code=400, detail="No accepted discovery for this project")
 
     epc_name = disc_resp.data[0].get("epc_contractor")
-    from .knowledge_base import resolve_entity
     entity = resolve_entity(epc_name) if epc_name else None
     if not entity:
         raise HTTPException(status_code=400, detail=f"EPC entity '{epc_name}' not found")
@@ -609,31 +608,48 @@ def get_actions(_user_id: str = Depends(require_auth)):
         .execute()
     )
 
+    # Batch: resolve entities once per unique EPC name
+    epc_names = {disc.get("epc_contractor", "") for disc in disc_resp.data if disc.get("epc_contractor")}
+    entity_cache: dict[str, dict | None] = {}
+    for name in epc_names:
+        entity_cache[name] = resolve_entity(name)
+
+    # Batch: collect all entity IDs and fetch contacts + sync flags in bulk
+    entity_ids = [e["id"] for e in entity_cache.values() if e]
+    contacts_by_entity: dict[str, list] = {}
+    synced_entity_ids: set[str] = set()
+    if entity_ids:
+        # Fetch all contacts for these entities in one query
+        contacts_resp = (
+            client.table("contacts")
+            .select("*")
+            .in_("entity_id", entity_ids)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        for c in contacts_resp.data:
+            contacts_by_entity.setdefault(c["entity_id"], []).append(c)
+
+        # Fetch HubSpot sync flags in one query
+        sync_resp = (
+            client.table("hubspot_sync_log")
+            .select("entity_id")
+            .in_("entity_id", entity_ids)
+            .eq("sync_status", "success")
+            .eq("hubspot_object_type", "company")
+            .execute()
+        )
+        synced_entity_ids = {r["entity_id"] for r in sync_resp.data}
+
     actions = []
     for disc in disc_resp.data:
         proj = disc.get("project") or {}
         epc_name = disc.get("epc_contractor", "")
 
-        # Look up entity + contacts
-        entity = resolve_entity(epc_name) if epc_name else None
+        entity = entity_cache.get(epc_name)
         entity_id = entity["id"] if entity else None
-        contacts = db.get_contacts_for_entity(entity_id) if entity_id else []
-
-        # Check HubSpot sync status
-        has_hubspot_sync = False
-        if entity_id:
-            sync_resp = (
-                client.table("hubspot_sync_log")
-                .select("id")
-                .eq("entity_id", entity_id)
-                .eq("sync_status", "success")
-                .eq("hubspot_object_type", "company")
-                .limit(1)
-                .execute()
-            )
-            has_hubspot_sync = bool(sync_resp.data)
-
-        # Contact discovery status
+        contacts = contacts_by_entity.get(entity_id, []) if entity_id else []
+        has_hubspot_sync = entity_id in synced_entity_ids if entity_id else False
         contact_status = entity.get("contact_discovery_status") if entity else None
 
         actions.append({
@@ -891,7 +907,7 @@ async def chat(req: ChatRequest, request: Request, _user_id: str = Depends(requi
                         "filename": p.filename,
                         # Omit url (base64 data) to keep DB small
                     })
-        db.save_message(conversation_id, "user", last.get_text(), parts=persist_parts)
+        db.save_message(conversation_id, "user", last.get_text(), parts=persist_parts, user_id=_user_id)
 
     # Build message history for the agent (Anthropic API needs role + content)
     # Use get_content_blocks() to pass file attachments as native Claude content blocks

@@ -15,9 +15,12 @@ Usage:
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import httpx
+
+_logger = logging.getLogger(__name__)
 
 from . import (
     approve_discovery,
@@ -179,8 +182,7 @@ async def execute_tool(name: str, tool_input: dict) -> dict:
             "error_category": "search_tool_error",
         }
     except Exception as exc:
-        import logging
-        logging.getLogger(__name__).exception("Unexpected error in tool %s", name)
+        _logger.exception("Unexpected error in tool %s", name)
         return {
             "error": f"Unexpected error in {name}: {type(exc).__name__}",
             "error_category": "tool_error",

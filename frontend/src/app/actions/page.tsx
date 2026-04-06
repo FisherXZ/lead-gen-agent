@@ -42,7 +42,11 @@ export default function ActionsPage() {
   const [discovering, setDiscovering] = useState<string | null>(null);
 
   useEffect(() => {
-    if (authLoading || !user) return;
+    if (authLoading) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
 
     Promise.all([
       agentFetch("/api/actions").then((r) => (r.ok ? r.json() : [])),
@@ -150,11 +154,19 @@ export default function ActionsPage() {
                 className="rounded-lg border border-border-subtle bg-surface-raised transition-colors hover:border-border-default"
               >
                 {/* Row header */}
-                <button
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() =>
                     setExpandedId(expanded ? null : action.discovery_id)
                   }
-                  className="flex w-full items-center gap-4 px-5 py-4 text-left"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setExpandedId(expanded ? null : action.discovery_id);
+                    }
+                  }}
+                  className="flex w-full cursor-pointer items-center gap-4 px-5 py-4 text-left"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -226,7 +238,7 @@ export default function ActionsPage() {
                       d="M19.5 8.25l-7.5 7.5-7.5-7.5"
                     />
                   </svg>
-                </button>
+                </div>
 
                 {/* Expanded details */}
                 {expanded && (

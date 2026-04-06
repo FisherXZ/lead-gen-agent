@@ -1,0 +1,945 @@
+  ---                                                                                                                              
+  The Real Gaps: What Your Agent Doesn't Do That It Should                                                                         
+                                                                                                                                   
+  Based on how the best sales intel platforms work, what your codebase actually does today, and the pain points you described      
+  (noisy results, no priority, missing context, lots of "unknown"), here are the gaps that would transform this from a research    
+  tool into a sales weapon.
+                                                                                                                                   
+  Gap 1: No Target List Mode — The Agent Doesn't Know Who Matters                                                                  
+                                                                                                                                   
+  The problem: Your agent treats every EPC equally. It discovers "ABC Solar Services" with the same weight as "Blattner Energy."   
+  But you told me there are ~20-50 EPCs that actually matter, and you already know who they are.
+                                                                                                                                   
+  What exists today: A hardcoded Top 10 list in prompts.py (line 207-209) and seeded Wiki-Solar/SPW rankings. No dynamic target    
+  list. No way to say "watch these 30 companies."
+                                                                                                                                   
+  What Clay/6sense do: Account-based intelligence. You define your target accounts, the system monitors them continuously, and new 
+  activity on those accounts gets flagged immediately. Everything else is secondary.
+                                                                                                                                   
+  What this means for you: If the agent finds that a known target EPC (say Primoris) just filed a new 300MW project, that should be
+   a Tier 1 alert — not buried in a list of 50 discoveries. If it finds an unknown company, that's Tier 3 — log it but don't make
+  Fisher review it at the same priority.                                                                                           
+                  
+  Concrete change: A target_epcs table with company name, tier (strategic/monitor/discover), and the agent's research logic        
+  weighted by tier. Strategic accounts get deeper research, more verification passes, and immediate alerts. Unknown companies get
+  basic research and lower priority.                                                                                               
+                  
+  ---
+  Gap 2: Confidence Is Source-Counting, Not Evidence-Based
+                                                                                                                                   
+  The problem: Your confidence system (confidence.py) upgrades from "possible" → "likely" → "confirmed" by counting independent
+  URLs. Two blog posts that repeat the same press release count as "2 independent sources." The agent doesn't check if sources     
+  actually confirm the role, are recent, or contradict each other.
+                                                                                                                                   
+  What exists today: Count distinct (url, source_method) pairs. If ≥ 2 and total reliability ≥ 5, upgrade confidence. No date      
+  validation, no contradiction detection, no role-specificity scoring.
+                                                                                                                                   
+  What Perplexity does: Three-layer verification: source authority × claim specificity × corroboration × recency. When sources     
+  conflict, it surfaces both claims with separate confidence scores rather than picking a winner.
+                                                                                                                                   
+  What this means for you: This is why you see "low confidence" and "unknown" so much. The agent finds a vague mention of a company
+   near a project and can't distinguish that from a direct contract announcement. A press release saying "Blattner awarded 400MW
+  EPC contract" should score completely differently from an OSHA record showing "Blattner has a crew near a solar site."           
+                  
+  Concrete change: Score each source on 4 axes: authority (SEC > press release > blog > forum), specificity (names the role        
+  explicitly vs. just mentions the company), recency (within project timeline vs. years old), corroboration (how many other sources
+   agree). The composite score replaces the current URL-counting logic.                                                            
+                  
+  ---
+  Gap 3: No Priority Signal — Every Discovery Looks the Same
+                                                                                                                                   
+  The problem: A 500MW Blattner project in ERCOT and a 20MW unknown-EPC project in MISO look identical in the discovery list. No
+  way to know which ones deserve your time.                                                                                        
+                  
+  What exists today: Discoveries have confidence (confirmed/likely/possible) and that's it. No project-level scoring, no EPC-level 
+  scoring, no timing signal.
+                                                                                                                                   
+  What 6sense does: Separates fit score (static — does this match your ideal customer?) from intent score (dynamic — is the timing 
+  right?). Each is 0-100, and the combination determines priority.
+                                                                                                                                   
+  What this means for you: Your fit score = (project capacity × EPC tier × geographic match). Your intent score = (how recently    
+  filed × construction timeline × EPC's current pipeline load). A 400MW project from a Tier 1 EPC filed last week with construction
+   starting in 6 months = hot lead. A 15MW project from an unknown EPC filed 2 years ago = noise.                                  
+                  
+  Concrete change: A lead_score computed from: project MW capacity, EPC tier (from target list), ISO queue recency, estimated      
+  construction timeline, developer loyalty (does this developer always use the same EPC?). Surfaced as a visual heat indicator on
+  every discovery.                                                                                                                 
+                  
+  ---
+  Gap 4: Binary Entity Roles — Can't Distinguish EPC from Subcontractor
+                                                                                                                                   
+  The problem: The KB only has two entity types: "developer" and "epc." When the agent finds a company associated with a project,
+  it has no way to record that they might be a subcontractor, equipment vendor, or balance-of-system provider. So everything gets  
+  shoved into "epc" or discarded.
+                                                                                                                                   
+  What exists today: entity_type is a list containing ["developer"] or ["epc"] or both. The prompt tells the agent to verify roles 
+  but the schema can't store the distinction.
+                                                                                                                                   
+  What knowledge graph systems do: Entity-role-per-project relationships. Company X is the EPC on Project A but a subcontractor on 
+  Project B. The role is a property of the engagement, not the entity.
+                                                                                                                                   
+  What this means for you: This is a root cause of the noise problem. The agent finds "SunPower" mentioned on a project. Is        
+  SunPower the developer? The module supplier? The EPC? Today it guesses, and if it guesses wrong, you see a noisy discovery. The
+  schema literally can't represent "SunPower is the module supplier on this project."                                              
+                  
+  Concrete change: Add role field to epc_engagements: prime_epc, sub_epc, developer, supplier, installer, unknown. The agent       
+  classifies the role per-project based on source evidence. "Unknown" is honest and useful — it tells you "I found a connection but
+   can't confirm the role."                                                                                                        
+                  
+  ---
+  Gap 5: No Outreach Package — Discovery Ends at a Name
+                                                                                                                                   
+  The problem: The agent finds an EPC name and stops. You want it to prep the full outreach package: the right contact person, the
+  project context that makes outreach timely, and a personalized angle.                                                            
+                  
+  What exists today: Contact discovery (contact_discovery.py) is basic — 8-iteration web search for leadership names/titles.       
+  HubSpot push creates a company + deal + contacts. No outreach context, no personalization, no recommended angle.
+                                                                                                                                   
+  What Coldreach/Artisan do: A structured "research packet" with layered personalization: signal layer (why now), company layer    
+  (what they do), role layer (their specific pain), social proof layer (relevant case study). This packet feeds the outreach draft.
+                                                                                                                                   
+  What this means for you: When you find that McCarthy Building is EPC on a new 250MW ERCOT project, the outreach package should   
+  be: "VP of Solar Construction at McCarthy, reached out because their new Painted Desert Solar project is entering layout phase in
+   Q3. Civ's robot cut layout time by 70% on a similar 200MW project for Blattner. McCarthy has 3 other active projects where this 
+  could apply."   
+
+  Concrete change: After EPC discovery + approval, auto-trigger a deeper research pass that builds: (1) right contact at that EPC  
+  for robot purchasing decisions, (2) project-specific context (MW, timeline, location), (3) EPC's current project pipeline (how
+  many active projects = how many robots they need), (4) recommended outreach angle based on Civ's value prop.                     
+                  
+  ---
+  Gap 6: No "What Changed" — Can't See the Delta
+                                                                                                                                   
+  The problem: When you open the dashboard, you see all discoveries at once. No way to tell what's new since your last session. The
+   agent doesn't distinguish "first time seeing this EPC" from "known EPC with a new project" from "update to an existing          
+  discovery."     
+                                                                                                                                   
+  What exists today: Discoveries have created_at timestamps. That's it. No read/unread state, no change log, no "new since last    
+  visit" filter.
+                                                                                                                                   
+  What PitchBook/Crunchbase do: Saved searches with email alerts. When something changes on a tracked entity (new filing, new      
+  funding, new hire), it surfaces as a timestamped event in a feed. The feed has "new" badges that clear after viewing.
+                                                                                                                                   
+  What this means for you: The dashboard should have a "What's new" view: new discoveries since your last login, new projects filed
+   by tracked EPCs, confidence upgrades on existing discoveries, and new contacts found. Each with a timestamp and source.
+                                                                                                                                   
+  Concrete change: An events or activity_feed table that logs: new discovery, confidence change, new project filing, contact found,
+   HubSpot sync. Dashboard shows this feed with "new" badges. Tracked EPCs get their events highlighted.
+                                                                                                                                   
+  ---             
+  Gap 7: No Contradiction Detection — Agent Doesn't Know When It's Wrong
+                                                                                                                                   
+  The problem: If Source A says "EPC is Blattner" and Source B says "EPC is McCarthy," the current confidence system counts both as
+   independent evidence for whichever the agent picked. It doesn't detect the conflict.                                            
+                  
+  What exists today: Confidence scoring counts sources for the chosen EPC. Negative evidence is stored in research_attempts but not
+   used in the confidence calculation or surfaced prominently.
+                                                                                                                                   
+  What entity resolution systems do: When sources conflict on the same attribute (who is the EPC?), flag it explicitly. Store both 
+  claims with their individual confidence scores. Present both to the user: "Blattner (2 sources, high specificity) vs. McCarthy (1
+   source, low specificity)."                                                                                                      
+                  
+  What this means for you: Instead of seeing "EPC: Blattner, confidence: possible" and wondering why it's low, you'd see: "Blattner
+   (press release, OSHA record) vs. McCarthy (one news mention). Likely Blattner based on source quality." That's actionable. The
+  current "possible" is not.                                                                                                       
+                  
+  ---
+  How These Gaps Stack-Rank by Impact
+                                                                                                                                   
+  ┌──────────────────────────┬────────────────────────────────────────────────────────────────┬───────────────────────────────┐ 
+  │           Gap            │                    Impact on Your Workflow                     │            Effort             │    
+  ├──────────────────────────┼────────────────────────────────────────────────────────────────┼───────────────────────────────┤    
+  │ 3. Priority signal       │ Highest — turns 50 equal-looking discoveries into a ranked     │ Medium (scoring logic + UI)   │ 
+  │                          │ list you can act on                                            │                               │    
+  ├──────────────────────────┼────────────────────────────────────────────────────────────────┼───────────────────────────────┤    
+  │ 1. Target list mode      │ High — focuses the agent on the 30-50 EPCs you care about      │ Medium (new table + prompt    │ 
+  │                          │                                                                │ changes)                      │    
+  ├──────────────────────────┼────────────────────────────────────────────────────────────────┼───────────────────────────────┤ 
+  │ 2. Evidence-based        │ High — fewer "unknown" results, more actionable confidence     │ Medium (rewrite               │    
+  │ confidence               │                                                                │ confidence.py)                │    
+  ├──────────────────────────┼────────────────────────────────────────────────────────────────┼───────────────────────────────┤
+  │ 7. Contradiction         │ High — surfaces why confidence is low instead of just saying   │ Small (add to confidence      │    
+  │ detection                │ "possible"                                                     │ logic)                        │    
+  ├──────────────────────────┼────────────────────────────────────────────────────────────────┼───────────────────────────────┤
+  │ 4. Entity role per       │ Medium — reduces noise from misclassified companies            │ Small (schema + prompt        │    
+  │ project                  │                                                                │ change)                       │    
+  ├──────────────────────────┼────────────────────────────────────────────────────────────────┼───────────────────────────────┤
+  │ 6. Activity feed / delta │ Medium — saves time on every dashboard visit                   │ Medium (new table + UI)       │    
+  ├──────────────────────────┼────────────────────────────────────────────────────────────────┼───────────────────────────────┤    
+  │ 5. Outreach package      │ Highest long-term value but depends on 1-4 being solid first   │ Large (new agent workflow)    │
+  └──────────────────────────┴────────────────────────────────────────────────────────────────┴───────────────────────────────┘    
+                  
+  Plain English: Your agent is a decent researcher but a terrible sales assistant. It finds names but can't tell you which names
+  matter, how confident you should be, what's new, or what to do next. The gaps above transform it from "here are some company
+  names" into "here's your prioritized lead list with evidence, contacts, and outreach angles, and here's what changed since
+  yesterday."
+
+  ═══════════════════════════════════════════════════════════════════════════
+  DEEP RESEARCH APPENDIX — Competitive Patterns, Codebase Findings, Extra Gaps
+  ═══════════════════════════════════════════════════════════════════════════
+
+  ---
+  A. Competitive Platform Deep Dives (Expanded — March 2026)
+  ---
+
+  ═══════════════════════════════════════════════════════════════
+  A1. Clay — Enrichment Waterfall Architecture
+  ═══════════════════════════════════════════════════════════════
+
+  HIGH-LEVEL CONCEPT:
+  Clay is not a data provider. It is an orchestration layer on top of 150+ data providers.
+  You build sequential "waterfall" workflows: try Provider A, if no result try Provider B,
+  then C. Stops the moment one returns data. Runs in a spreadsheet-like UI where each
+  column is an enrichment step.
+
+  IMPLEMENTATION DETAIL:
+
+  What the waterfall config looks like:
+  - A "Waterfall" column type in Clay's Airtable-like table UI
+  - Drag-and-drop provider ordering within the waterfall
+  - Toggle individual providers on/off with a switch
+  - Set required inputs per step (email, LinkedIn URL, domain)
+  - "Only run if" conditions to control when waterfall executes
+  - Optional output column showing which provider succeeded (provenance)
+  - Pre-built waterfall templates for common use cases (e.g., "Find Work Email")
+  Evidence: https://university.clay.com/docs/building-a-data-waterfall
+
+  Provider ecosystem (150+ integrations):
+  - Email: Hunter.io (~1-2 credits), Apollo (~2), Prospeo (~2-3), Clearbit (~5-8),
+    People Data Labs (~5), DropContact, Datagma, Nimbler, Lusha, Snov.io
+  - Company/person: Clearbit, Apollo, PDL, ZoomInfo (BYOK only), Lusha (~8-15 for mobile)
+  - Technographic: BuiltWith, Wappalyzer
+  - Intent: Bombora, G2
+  - AI/LLM: Claygent (Clay's own agent), OpenAI GPT-4, Anthropic Claude
+  - BYOK (Bring Your Own Key) eliminates Data Credit costs, still 1 Action per enrichment
+  Evidence: https://www.clay.com/integrations, https://mfishbein.com/clay-integrations/
+
+  Conditional routing logic:
+  - "Only run if" conditions on each step or entire waterfall
+  - Operators: AND, OR, contains, equals, is empty, is not empty, >, <, regex
+  - Example: {{email}} is empty — only run email waterfall if no email exists
+  - Example: {{employee_count}} > 500 AND {{funding_round}} >= "Series B" — then enrich
+    with Lusha for phone, else skip
+  - Branch by geography: "If EU company, use DropContact first (GDPR). If US, use Hunter."
+  - Disqualification columns: flag records, reference in conditions to skip entire waterfall
+  Evidence: https://www.octavehq.com/post/clay-filters-conditions-enrichment-logic
+
+  Credit economics (post-March 11, 2026 pricing overhaul):
+  - Two metrics: Actions (1 per enrichment, no rollover) + Data Credits (0.5-10+ per
+    provider, rollover up to 2x monthly limit)
+  - Plans: Launch $185/mo (15K actions, 2.5-10K credits), Growth $495/mo (40K actions,
+    6-100K credits), Enterprise custom (100K+)
+  - Refund policy: "If a provider refunds us due to inability to deliver valid data, we
+    correspondingly refund credits back to you" — but provider-dependent.
+    Hunter.io on managed accounts charges ~2 credits regardless of result
+  - Failed lookups consume 20-30% of credit allocation in practice
+  - Fully enriched record (company + person + email + phone + AI): 6-20 Data Credits
+    = ~$0.16/enriched lead at Pro tier
+  - Emergency credit top-up: 30% surcharge
+  Evidence: https://university.clay.com/docs/credits, https://www.clay.com/faq/what-happens-if-one-of-your-providers-doesnt-return-valid-data, https://hackceleration.com/clay-review/
+
+  AI enrichment (Claygent):
+  - Clay's LLM-based research agent, sits in waterfall or standalone
+  - Receives natural-language prompt ("Find this company's SOC-2 compliance status")
+  - Asks GPT-4 which section of website likely contains answer
+  - Uses BINARY SEARCH approach: takes part of website, checks if data there, narrows
+  - Model tiers: Helium (1 credit, simple), Neon (2), Argon (3), GPT-4/Claude (varies)
+  - You can iterate on prompts in the builder WITHOUT spending credits
+  - Best for unstructured "last-mile" insights (recent launches, hiring patterns, blog
+    topics). Traditional APIs for structured data (email, phone, revenue, funding)
+  Evidence: https://university.clay.com/lessons/enriching-with-claygent, https://www.clay.com/claygent, https://coldiq.com/blog/clay-ai-agent-claygent
+
+  VERIFIED CASE STUDIES:
+
+  OpenAI:
+  - Before: single-source enrichment, coverage in "low 40%"
+  - After: multi-provider waterfall, coverage in "high 80%" — more than 2x improvement
+  - Refined provider combination and ordering within 2 weeks
+  - 8,500+ enrichment runs by team members
+  - Deployed as "Enrichment Actions" inside Salesforce (on-demand, no CRM exit)
+  - Quote (Keith Jones, GTM Systems Lead): "Clay was a way to leapfrog us into a
+    multi-source model with the lowest amount of overhead and labor"
+  Evidence: https://www.clay.com/customers/open-ai
+
+  Anthropic:
+  - Before: single major data provider, data gaps, manual deduplication
+  - After: 3x better match rate using combination of providers through Clay
+  - Cancelled top data provider contract, saved 4 hours/week
+  - Used Claude-in-Clay to build custom industry categories
+  - Quote (Adam Wall, Head of Sales Ops): "Clay made it really easy to experiment with
+    different data enrichment vendors in one place"
+  Evidence: https://www.clay.com/customers/anthropic
+
+  Rippling: 2x YoY cold email performance, 60% open rate, 10% reply rate
+  Evidence: https://www.clay.com/blog/rippling-case-study
+
+  Independent test (Hackceleration, 2026):
+  - 200 prospects from LinkedIn Sales Navigator
+  - Waterfall: Hunter (1 credit) → Apollo (2) → Prospeo (3) → Clearbit (5)
+  - Result: 40% single-provider → 78% waterfall coverage
+  - Burned 3,000 credits in one week enriching 500 prospects on $349/mo plan
+  Evidence: https://hackceleration.com/clay-review/
+
+  Re-enrichment / stale data:
+  - Clay does NOT support scheduled re-enrichment natively (as of March 2026)
+  - Workaround: CRM dynamic list pulls records where last_enriched > 90 days, imports
+    to Clay, triggers enrichment, pushes back. CRM drives the cadence
+  - Recommended cadences: high-value accounts 30 days, standard 60-90, dormant 180
+  Evidence: https://www.clay.com/faq/can-i-schedule-data-enrichments-so-they-re-run-on-their-own, https://university.clay.com/lessons/keeping-your-crm-data-fresh-crm-enrichment
+
+  KEY TAKEAWAY FOR OUR ARCHITECTURE:
+  The waterfall pattern is proven by multiple independent sources (40% → 78-80% coverage).
+  Clay is orchestration, not data. The value is sequencing + conditional routing + unified
+  credit system. Our agent already does this with tools — we need to add the provenance
+  tracking and explicit "unresolved" status that Clay enforces.
+
+  ═══════════════════════════════════════════════════════════════
+  A2. 6sense — Intent Scoring & Baseline Comparison
+  ═══════════════════════════════════════════════════════════════
+
+  HIGH-LEVEL CONCEPT:
+  6sense watches what companies are researching across the internet (via publisher data
+  partnerships), compares activity against each company's historical baseline, and predicts
+  which "buying stage" they're in. Separates "intent" (third-party research behavior)
+  from "engagement" (first-party interaction with your brand).
+
+  IMPLEMENTATION DETAIL:
+
+  Intent score (0-100) — what feeds it:
+  - Topic consumption volume relative to company's historical BASELINE
+  - Recency weighting (more recent = higher score)
+  - Content depth (pricing page > blog post)
+  - Multi-signal correlation (web research + job postings + tech installs compound)
+  - The score is an ML model output, NOT a simple linear formula
+  - Exact weights are proprietary — 6sense has never published the formula
+  Evidence: https://6sense.com/platform/intent-data/
+
+  BASELINE COMPARISON mechanism (the critical concept):
+  - Each account has a rolling ~16-week baseline activity window
+  - "Intent" = statistically significant deviation from baseline (standard deviation
+    thresholds, exact multiplier not published)
+  - WITHOUT baseline comparison, you just measure how much a company uses the internet
+  - A company that always reads industry news isn't showing intent; one that suddenly
+    starts is
+  - The baseline makes the score RELATIVE, not absolute
+  Evidence: support.6sense.com support articles reference "baseline comparison" (exact
+  article IDs vary), 6sense partner training materials
+
+  Five buying stages — what triggers transitions:
+
+  ┌──────────────┬───────────────────────────────────────────────────────────┐
+  │ Stage        │ Trigger                                                   │
+  ├──────────────┼───────────────────────────────────────────────────────────┤
+  │ Target       │ Matches ICP firmographics, no intent above baseline       │
+  │ Awareness    │ Mild increase on problem-space topics above baseline      │
+  │ Consideration│ Solution-category keywords increase; multiple personas    │
+  │              │ at account researching; competitor content detected        │
+  │ Decision     │ High-intensity vendor-specific keywords, pricing/comparison│
+  │              │ terms; activity concentrated in short windows             │
+  │ Purchase     │ Strongest cluster: RFP terms, contract/procurement        │
+  │              │ keywords, very high frequency direct vendor engagement    │
+  └──────────────┴───────────────────────────────────────────────────────────┘
+
+  Transition model: HIDDEN MARKOV MODEL (per 6sense engineering blog ~2023 and patent
+  filings). Uses:
+  - Volume of intent signals (absolute count)
+  - Topic specificity (problem-level vs. solution-level vs. vendor-level keywords)
+  - Velocity of change (how fast activity is increasing)
+  - Breadth of research (number of distinct personas/IPs at the account)
+  - No hard-coded thresholds. Probabilistic: assigns probability distribution across
+    all 5 stages, reports most likely one
+  - Reported ~80% accuracy validated against CRM opportunity creation data (self-reported,
+    methodology not independently audited)
+  Evidence: Patent US-20200364636-A1, https://6sense.com/blog/buying-stages/
+
+  Intent score vs. Engagement score — exact distinction:
+  - INTENT SCORE: third-party research behavior. What employees read across the open web
+    via Bombora bidstream data, publisher co-ops, content syndication. Account does NOT
+    need to visit your website. This is the "dark funnel"
+  - ENGAGEMENT SCORE: first-party interactions with YOUR brand only. Website visits, email
+    opens, ad clicks, webinar attendance, content downloads
+  - Combined into "6QA" (6sense Qualified Account) = ready for sales handoff. Requires
+    BOTH high intent AND meaningful engagement
+  Evidence: https://6sense.com/blog/magic-numbers, https://support.6sense.com/hc/en-us/categories/
+
+  Dark funnel / anonymous traffic matching:
+  1. Reverse IP lookup (IP → company domain via ISP registration, table-stakes)
+  2. Device graph correlation (TrustRadius acquisition + data co-ops link device IDs,
+     cookies, MAIDs to company accounts)
+  3. ML de-anonymization for VPNs/home offices: behavioral fingerprinting + LinkedIn/
+     employer data for probabilistic company assignment. ~65% match rate claimed
+  - Match accuracy varies significantly by segment (enterprise = higher, SMB = lower)
+  Evidence: https://6sense.com/platform/company-identification/, Forrester Wave: B2B
+  Intent Data Providers Q2 2023
+
+  Verified customer results:
+  - Thomson Reuters: 2x pipeline from 6sense-sourced accounts
+    Evidence: https://6sense.com/customers/thomson-reuters/
+  - Cognizant: 3x engagement rate increase with stage-based outreach
+    Evidence: https://6sense.com/customers/cognizant/
+  - PTC: 40% of pipeline from accounts identified before any inbound activity
+    Evidence: 6sense Breakthrough 2023 keynote
+  - Aggregate: 2.5x pipeline increase, 30% shorter sales cycles (self-reported survey)
+
+  HONEST LIMITATIONS:
+  - Strongest for enterprise B2B with 6+ month sales cycles
+  - Dependent on Bombora's bidstream network (known gaps in some industries)
+  - Pricing: ~$70K-$120K/year (per G2 reviews), firmly enterprise territory
+  - For Civ Robotics: the EPC contractor segment may be too niche for 6sense's intent
+    data to have meaningful coverage
+  Evidence: G2 reviews (https://www.g2.com/products/6sense/reviews)
+
+  KEY TAKEAWAY FOR OUR ARCHITECTURE:
+  The baseline comparison concept is the gold. Our equivalent: track each EPC's typical
+  project filing rate, and flag deviations. If Blattner typically files 2 projects/quarter
+  and suddenly files 5, that's a surge. The fit vs. intent separation also maps directly
+  to our lead scoring (fit = project size + EPC tier, intent = filing recency + timeline).
+
+  ═══════════════════════════════════════════════════════════════
+  A3. Coldreach — Signal-Based Selling
+  ═══════════════════════════════════════════════════════════════
+
+  HIGH-LEVEL CONCEPT:
+  Instead of monitoring "intent" (what people read), Coldreach monitors "events" (what
+  companies DO — hire, post, raise money, announce projects). You define buying signals
+  in plain English, and it watches for them. Every outreach message anchored to a verified
+  buying signal.
+
+  IMPLEMENTATION DETAIL:
+
+  Signal definition (the core differentiator):
+  - Plain English input: "Company just raised Series B and is hiring VP of Sales"
+  - Or: "Company posted a job mentioning Salesforce migration"
+  - Or: "CEO posted on LinkedIn about struggling with outbound"
+  - LLM (likely GPT-4 class) interprets the definition and converts to monitoring query
+  - UI shows: text input field, example templates, preview of matched accounts before
+    activating
+  - This is genuinely novel — competitors require pre-defined signal categories or
+    technical configuration
+  Evidence: https://www.producthunt.com/posts/coldreach, https://www.coldreach.ai/
+
+  How signals are detected:
+  - Data sources scanned: job postings (aggregators: LinkedIn Jobs, Indeed), news/press
+    releases (news APIs/scraping), LinkedIn posts (public feed or Phantombuster/Proxycurl),
+    company websites (monitoring for changes), funding announcements (Crunchbase/scraped),
+    SEC filings (for larger companies)
+  - Scan frequency: ~24-48 hours after triggering event (not real-time)
+  - Matching is LLM-based: AI reads unstructured text and determines if it matches the
+    plain-English signal definition. Essentially semantic classification
+  Evidence: https://www.coldreach.ai/ feature descriptions, Product Hunt comments
+
+  Signal verification / false positive prevention:
+  - Shows SOURCE EVIDENCE alongside each signal (actual job posting text, LinkedIn post,
+    news article) so user can verify
+  - Relevance score displayed per signal (visible in demos, methodology not documented)
+  - User feedback (thumbs up/down) improves matching over time
+  - The plain-English definition allows more specificity than keyword matching, reducing
+    false positives at the definition level
+  - NO published false positive rate or confidence methodology
+  Evidence: Product Hunt launch screenshots, demo videos
+
+  The 3.8% reply rate claim — evidence assessment:
+  - Claim appears at https://www.coldreach.ai/ — "Customers see 3.8% avg reply rates"
+  - NO sample size, time period, methodology, or baseline comparison published
+  - Industry average cold email reply rate: 1-3% (per Woodpecker.co, Lemlist benchmarks)
+  - 3.8% is plausible but only modestly above average
+  - Likely from aggregated early-adopter data (selection bias: early signal-tool adopters
+    are probably already above-average at outreach)
+  - NO independent verification found
+  EVIDENCE STATUS: UNVERIFIED MARKETING CLAIM
+
+  Outreach structuring:
+  - For each triggered signal: research packet (signal event, company context, talking
+    points) + draft email/LinkedIn message referencing the specific signal
+  - Messages designed to be edited, not auto-sent. "Research + draft" not "automation"
+  - Integrates with Outreach, Salesloft, Apollo for actual sending
+  Evidence: https://www.coldreach.ai/features
+
+  The "97M+ accounts" database:
+  - Aggregation of public data: LinkedIn company profiles (~60M+), Crunchbase, government
+    registrations, web-scraped company data
+  - Company database, not contact database
+  - For comparison: Apollo claims 60M+, ZoomInfo 100M+, LinkedIn has 60M+ company pages
+  - Includes very small businesses and international companies where signal quality is lower
+  - No documentation on data sourcing methodology
+  Evidence: https://www.coldreach.ai/ (homepage claim)
+
+  Pricing: ~$500-1,500/mo per G2 reviews
+  Evidence: https://www.g2.com/products/coldreach/reviews
+
+  KEY TAKEAWAY FOR OUR ARCHITECTURE:
+  The plain-English signal definition is the pattern to steal. For Civ: "EPC contractor
+  awarded a solar project over 100MW in ERCOT" as a monitoring query. The event-based
+  approach (what companies DO, not what they read) maps directly to our ISO queue filings,
+  permit applications, and contract awards. But our data sources are specialized (ISO
+  queues, OSHA, SEC EDGAR) — more reliable than generic news scraping.
+
+  ═══════════════════════════════════════════════════════════════
+  A4. Artisan — Personalization Waterfall
+  ═══════════════════════════════════════════════════════════════
+
+  HIGH-LEVEL CONCEPT:
+  Artisan's "Ava" AI SDR automates outreach by scraping data sources to find the best
+  personalization angle per prospect, then generates and sends email/LinkedIn sequences.
+
+  CRITICAL CORRECTION:
+  The "4 layers" (signal/company/role/social proof) described earlier in this document
+  are NOT documented in any Artisan public material. This framing likely came from a
+  pitch deck or demo, not product documentation. What Artisan actually documents is
+  a SELECTION algorithm — it picks the single best personalization angle, not layers.
+
+  IMPLEMENTATION DETAIL:
+
+  What Artisan actually documents:
+  - Ava scrapes "dozens of integrated data sources" to find "the most relevant insights
+    for each prospect"
+  - System "analyze[s] and determine[s] the best form of personalization for each lead,
+    weighing factors like relevance and timeliness"
+  - This is a SELECTION algorithm (pick best angle), not a cascade (try A then B then C)
+  Evidence: https://www.artisan.co/products/email-personalization, https://www.artisan.co/blog/ai-sdr
+
+  Data sources:
+  - Built-in database: 300M+ B2B contacts across 200 countries
+  - CrunchBase (funding), BuiltWith (technographics), StoreLeads, Twitter/X, LinkedIn
+    (via "Cyber Stalker" research tool), company websites, press releases, hiring data
+  - Two internal tools:
+    1. "Data Miner" — web scraper for demographics, technographics, buying intent, ICP fit
+    2. "Cyber Stalker" — research assistant gathering prospect's digital footprint
+  Evidence: https://www.artisan.co/ai-sales-agent
+
+  Intent signal scoring:
+  - First-party: pricing page visits (40-50 pts), resource downloads (30 pts), social/
+    blog engagement (10-20 pts)
+  - Third-party: funding, product updates, blog posts, social media, press, hiring
+  - Custom CRM fields: "Intent Score", "Last High-Intent Action", "Topic Surge"
+  - If-then triggers: "If views comparison guide + 200+ employees + uses HubSpot, enroll
+    in high-fit automation workflow"
+  Evidence: https://www.artisan.co/blog/intent-signals
+
+  Fallback / degradation logic: NOT PUBLICLY DOCUMENTED
+  - Industry best practice (not Artisan-specific):
+    Tier 1 (high signal): 15-20 min deep research, full situational personalization
+    Tier 2 (some signal): 5-8 min, 2-3 key points from LinkedIn/news
+    Tier 3 (low/no signal): segment-level (industry + role + pain point) with one detail
+  - Artisan's minimum viable personalization appears to be template with firmographic
+    variables (company name, role, industry) — "Mad Libs with a logo" per one reviewer
+  Evidence: https://www.saleshandy.com/blog/how-to-personalize-cold-emails/ (industry practice, not Artisan-specific)
+
+  VERIFIED CASE STUDIES:
+  - SaaStr: 6,892 emails, 3,574 new leads, 3.55% positive reply rate, 49.41% LinkedIn
+    connection acceptance
+  - Zirtual: 81,785 emails, 27,132 new leads, 3x higher replies than Apollo
+  - Chain of Events: $700K ARR, 20x ROI ($28K annual spend), 6 months
+  Evidence: https://www.artisan.co/casestudies
+
+  COUNTERPOINT — independent reviews (100+ verified users):
+  - "~1,400 emails sent. 0 responses received"
+  - "Super poor quality emails... overpromising and underdelivering AI slop"
+  - "Mad Libs with a logo"
+  - Lead sourcing retrieved "3-7 C-level contacts from 3M+ records" (weak filtering)
+  - Deliverability problems: DNS errors, broken warm-up timers
+  - Early enthusiasm faded within 30-60 days for most users
+  Evidence: https://coldreach.ai/blog/artisan-ai-review
+
+  Is "personalization waterfall" an Artisan-specific term?
+  NO — it is a mashup of two established patterns:
+  1. Waterfall enrichment (cascading providers, predates Artisan — Clay, Lemlist use it,
+     inspired by SiriusDecisions Demand Waterfall, 2002/2012, now Forrester)
+  2. Tiered personalization (standard sales methodology — invest more research on
+     higher-value prospects)
+  Artisan branded the combination but didn't invent either concept.
+  Evidence: https://www.saleshandy.com/blog/waterfall-enrichment/, https://www.lemlist.com/blog/waterfall-lead-enrichment
+
+  Pricing: $2,400-$7,200/mo estimated (not published officially)
+  Evidence: https://coldreach.ai/blog/best-ai-sdr-tool-2026
+
+  KEY TAKEAWAY FOR OUR ARCHITECTURE:
+  The 4-layer personalization framework (signal/company/role/social proof) is a useful
+  DESIGN PATTERN even though Artisan doesn't implement it well. We should build the
+  framework ourselves as a structured research packet. The honest takeaway: AI SDR
+  quality varies wildly. The research packet matters more than the email generation.
+  Invest in research depth, let humans (or a good LLM) write the outreach.
+
+  ═══════════════════════════════════════════════════════════════
+  A5. Perplexity — Multi-Source Verification Architecture
+  ═══════════════════════════════════════════════════════════════
+
+  HIGH-LEVEL CONCEPT:
+  Perplexity is a search engine with a real retrieval pipeline (not just an LLM with
+  web access). It has a custom index (200B+ URLs on Vespa AI), a three-layer reranking
+  system with an ML quality gate, a custom inference engine (ROSE), and a Model Council
+  feature that runs queries through 3 frontier models with a 4th synthesizer.
+
+  IMPLEMENTATION DETAIL:
+
+  Model Council (launched February 5, 2026):
+  - Available to Max and Enterprise Max subscribers
+  - Runs query through 3 frontier models SIMULTANEOUSLY:
+    GPT-5.4, Claude Opus 4.6, Gemini 3.1 Pro (models updated over time)
+  - User selects which 3 models to use
+  - A 4th "chair" model (defaults to Claude Opus 4.5, user-configurable) SYNTHESIZES
+  Evidence: https://www.perplexity.ai/hub/blog/introducing-model-council, https://www.perplexity.ai/help-center/en/articles/13641704
+
+  How the council works (NOT a simple vote):
+  - All 3 models produce independent responses in parallel
+  - Chair model inspects all outputs
+  - Identifies consensus sentences (areas of agreement)
+  - Tags unique/novel points from individual models
+  - EXPLICITLY FLAGS disagreements rather than silently picking one
+  - UI: color cues mark agreement zones, warning icons mark conflicts
+  - Example: if GPT says X and Claude contradicts X, the synthesizer shows both with
+    the conflict highlighted
+  Evidence: https://www.humai.blog/perplexitys-model-council-queries-gpt-claude-and-gemini-at-once/, https://auto-post.io/blog/perplexity-launches-model-council
+
+  WHAT IS NOT DOCUMENTED:
+  - Exact prompt template for the synthesizer
+  - Whether chair model accesses raw source citations from each council member or just text
+  - Weighting algorithm (if any) for which model's output takes priority
+
+  Source selection — the 5-stage RAG pipeline:
+  1. Query Intent Parsing — LLM-based semantic understanding (not keyword matching)
+  2. Live Web Retrieval — dispatches to real-time search index (Google + Bing indexes)
+  3. Snippet Extraction — documents chunked into segments, specific paragraphs returned
+  4. Synthesized Answer — model cannot output anything unsourced, inline citations required
+  5. Conversational Refinement — maintains context for follow-ups
+  Evidence: https://blog.bytebytego.com/p/how-perplexity-built-an-ai-google
+
+  Three-layer reranking (L1/L2/L3) — reverse-engineered from third-party analysis:
+
+  L1 (Initial Retrieval):
+  - Hybrid retrieval: dense (vector embeddings) + sparse (BM25 lexical matching)
+  - Optimized for speed. Produces candidate set
+
+  L2 (Standard Ranking):
+  - Conventional authority and relevance signals
+  - Cross-encoder reranker models
+  - Produces ordered list
+
+  L3 (XGBoost Quality Gate) — the critical filter:
+  - Specifically targets entity searches (company names, people, products)
+  - Parameters include:
+    - l3_reranker_drop_threshold — quality minimum a source must clear
+    - l3_reranker_drop_all_docs_if_count_less_equal — drops entire result set if too
+      few sources pass quality bar
+  - Uses BERT-based entity linking for disambiguation
+  - Sources that are vague, promotional, or fail entity disambiguation get lower scores
+  Evidence: https://ipullrank.com/ai-search-manual/search-architecture (reverse-engineered)
+
+  ML ranking signals (59 identified factors):
+  - Lexical relevance, vector similarity
+  - Domain authority (composite feature in ML model, not standalone PageRank-like score)
+  - Document freshness (heavy bias toward recent "Last Modified" dates)
+  - User engagement signals
+  - Entity clarity and contextual linking (pages where entities clearly named get preference)
+  - AI-generated content detection (internal algorithms, acknowledged as imperfect)
+  Evidence: https://authoritytech.io/blog/how-perplexity-selects-sources-algorithm-2026, https://metehan.ai/blog/perplexity-ai-seo-59-ranking-patterns/
+
+  Source authority scoring:
+  - Domain authority (composite feature, not a single number)
+  - Semantic relevance to query
+  - Presence of direct, verifiable facts
+  - Recent Last Modified dates (heavily weighted)
+  - Entity prominence — entities clearly named and contextually linked
+  - NO publicly documented PageRank-like standalone score
+  Evidence: https://www.datastudios.org/post/perplexity-ai-models-explained, https://www.xfunnel.ai/blog/inside-perplexity-ai
+
+  Citation verification — honest assessment:
+  - Sonar models fine-tuned to prefer evidence-grounded answers
+  - Architecture enforces "nothing output unless sourced"
+  - Sonar cites 2-3x more sources than comparable Gemini models
+  - BUT: Tow Center study (200 tests, 8 AI search engines): Perplexity had LOWEST failure
+    rate but still incorrect 37% of the time
+  - Known to cite AI-generated spam from sketchy blogs and LinkedIn posts
+  - No NLI (Natural Language Inference) verification step publicly documented — grounding
+    appears enforced at TRAINING TIME, not inference-time post-hoc verification
+  - This is a genuine gap in what is publicly known
+  Evidence: https://www.niemanlab.org/2025/03/ai-search-engines-fail-to-produce-accurate-citations/, https://futurism.com/the-byte/perplexity-citing-ai-generated-spam, https://www.perplexity.ai/hub/blog/meet-new-sonar
+
+  Conflict resolution:
+  - Deep Research: conflicting claims flagged and double-checked. Model splits query into
+    subtopics, searches each independently, writes structured notes, surfaces conflicts
+  - Model Council: synthesizer flags disagreements with warning icons/color cues
+  - Standard search: weighted consensus with confidence scores (e.g., "85% agreement on
+    2C threshold impacts")
+  - Synthesis errors REMAIN COMMON: conditional claims presented as definitive, conflicting
+    reports merged without explicit qualification
+  Evidence: https://www.datastudios.org/post/perplexity-ai-accuracy-and-reliability, https://www.usaii.org/ai-insights/what-is-perplexity-deep-research
+
+  Pro Search (multi-step):
+  1. Agent creates step-by-step plan (planning separated from execution)
+  2. Per step: generates and executes specific search queries
+  3. Sequential: step N results passed as context to step N+1
+  4. Each step: focused retrieval → rank sources → synthesize intermediate summary
+  5. Supports tool use: code interpreter, Wolfram Alpha
+  Evidence: https://www.langchain.com/breakoutagents/perplexity
+
+  Deep Research (comprehensive reports):
+  - 20-50 targeted queries per research task
+  - Reads hundreds of sources (200+ per report)
+  - Process: split into subtopics → dedicated search per subtopic → partial answers as
+    structured notes → conflicting claims flagged → single narrative with citations
+  - Output: 5-15 page reports, 2-4 minutes completion
+  Evidence: https://www.perplexity.ai/hub/blog/introducing-perplexity-deep-research
+
+  ROSE inference engine:
+  - Python + PyTorch for model definitions, critical hot paths in Rust
+  - Speculative decoding: draft model generates n candidate tokens, target model scores,
+    longest sequence above threshold accepted, target provides n+1th token "free"
+  - Model routing: small classifier determines query complexity, routes to smallest
+    adequate model
+  - In-house Sonar family (fine-tuned from Llama 3 70B) + third-party via Amazon Bedrock
+  - Infrastructure: AWS, NVIDIA H100 GPUs, Kubernetes, TensorRT-LLM
+  Evidence: https://www.perplexity.ai/hub/blog/accelerating-sonar-through-speculation, https://blog.bytebytego.com/p/how-perplexity-built-an-ai-google
+
+  KEY TAKEAWAY FOR OUR ARCHITECTURE:
+  Three patterns to steal: (1) The L3 quality gate with entity disambiguation — our
+  "is this the EPC?" problem IS an entity disambiguation problem. (2) The Model Council's
+  explicit conflict flagging — instead of picking one answer, show competing claims with
+  scores. (3) Deep Research's subtopic decomposition — our EPC research should decompose
+  into structured sub-questions (who filed the project? who won the EPC contract? what's
+  their construction timeline? do OSHA records corroborate?).
+
+  ═══════════════════════════════════════════════════════════════
+  A6. Fellegi-Sunter Model — Entity Resolution
+  ═══════════════════════════════════════════════════════════════
+
+  Three-zone thresholding for entity matching:
+  - Above upper threshold (>90%): auto-merge (same entity)
+  - Below lower threshold (<50%): auto-reject (different entities)
+  - Between thresholds (50-90%): manual review queue (uncertain)
+
+  Field-level comparison weights:
+  - Rare value matches get HIGH weight (matching on unusual company name = strong evidence)
+  - Common value matches get LOW weight (matching on "LLC" or "Inc" = weak evidence)
+  - Composite score = sum of all field-level weights
+
+  Key insight: Systems that force binary yes/no on ambiguous data either miss matches or
+  create false merges. The "uncertain" zone with human review catches the hard cases.
+
+  Source: O'Reilly Hands-On Entity Resolution ch04
+
+  ---
+  B. Codebase-Specific Findings (What Exists vs. What's Missing)
+  ---
+
+  B1. System Prompt Analysis (prompts.py)
+
+  Strengths:
+  - Clear distinction between developer and EPC (lines 17-20): "The developer (financial
+    owner) is NOT the EPC. The EPC is the construction company hired by the developer."
+  - Role verification checklist (lines 55-57): "Is this company actually the EPC, or are they
+    the developer, utility/offtaker, landowner, equipment supplier, or subcontractor?"
+  - References SPW ranking tool for role discrimination
+
+  Weaknesses:
+  - Prompt tells agent to verify roles but gives no concrete WAY to verify beyond web search
+  - SPW only categorizes as "EPC" / "developer" / "installer" — no subcontractor category
+  - Top 10 EPC list is hardcoded (line 207-209), not dynamic
+
+  B2. Data Source Coverage
+
+  ┌────────────────────────────┬─────────────────────────────┬──────────────────────────┐
+  │ Source                     │ Validation Quality          │ Notes                    │
+  ├────────────────────────────┼─────────────────────────────┼──────────────────────────┤
+  │ Generic web (Tavily)       │ None — returns snippets     │ Fast, broad, noisy       │
+  │ Broad web (Brave)          │ None — returns snippets     │ Catches Tavily misses    │
+  │ SEC EDGAR                  │ CIK lookup, fuzzy matching  │ Public companies only    │
+  │ OSHA inspections           │ Employer lookup by state    │ Indirect — presence not  │
+  │                            │                             │ contract                 │
+  │ Wiki-Solar rankings        │ DB lookup, no external call │ Top ~30 EPCs globally    │
+  │ SPW rankings               │ DB lookup, no external call │ US-only, no subcontractor│
+  │ ENR power rankings         │ DB lookup                   │ Not solar-specific       │
+  │ Page fetch                 │ None — manual reading       │ Agent reads full article │
+  │ Knowledge base             │ Prior accepted discoveries  │ Circular — only what was │
+  │                            │                             │ already accepted         │
+  └────────────────────────────┴─────────────────────────────┴──────────────────────────┘
+
+  Key weakness: No real data validation. Tools return metadata but don't verify the company
+  actually worked on the specific project. Rankings biased toward large EPCs — mid-market
+  EPC (50-100 MW/year) might not appear in any ranking.
+
+  B3. Confidence System Detail (confidence.py)
+
+  Current logic:
+  1. Count independent sources (distinct URL + source_method pairs)
+  2. Compute total reliability (high=3, medium=2, low=1)
+  3. Upgrade rules (only upgrade, never downgrade):
+     - possible + 2 sources + reliability ≥ 5 → likely
+     - likely + 2 sources + ≥1 high-reliability → confirmed
+     - Single low-reliability source → warning flag
+
+  Problems found:
+  - "Independent sources" counts URL variants, not truly independent evidence
+  - Two search results linking same press release count as 2 (wrong)
+  - Reliability score treats developer press release same as OSHA record (both "high" = 3)
+  - No source date validation — 2018 source counts same as 2025
+  - No contradictory source detection
+  - "Confirmed" only requires 2 high-reliability sources (too low bar)
+
+  B4. Knowledge Base Schema Gaps
+
+  What's tracked: entities (name, type, metadata, profile, aliases), epc_engagements
+  (developer→EPC per project, confidence, sources, state), research_attempts (outcome,
+  reasoning, negative_evidence)
+
+  What's NOT tracked:
+  - Project phases/roles (Phase 1 vs Phase 2 EPCs)
+  - Subcontractor relationships
+  - Equipment supply chain
+  - Contract value or timeline
+  - Whether EPC is prime or sub
+  - Developer loyalty patterns (computed but not stored or surfaced)
+  - Company org chart / decision-maker mapping
+
+  B5. Contact Discovery State
+
+  Partially implemented (contact_discovery.py):
+  - 8-iteration focused search for leadership roles
+  - Targets: VP Procurement, VP Solar/Renewables, VP Construction, VP Innovation, C-suite
+  - Tools: web_search, web_search_broad, fetch_page, search_sec_edgar
+  - Returns: full_name, title, linkedin_url, source_url, source_method
+  - Concurrency limited to 2 via semaphore
+
+  Missing:
+  - No check if contact already in HubSpot
+  - No intelligence about which decision-makers are most relevant to Civ's value prop
+  - No relationship between contact and specific project
+  - No procurement-specific info (RFQ emails, purchasing department)
+  - Outreach context generation is shallow template
+
+  B6. HubSpot Integration State
+
+  Working: settings validation, token encryption, company search/create, deal creation,
+  contact creation, object association, sync log
+
+  Missing:
+  - No pipeline/stage management (defaults to "appointmentscheduled")
+  - No deal amount/probability tracking
+  - No activity logging (calls, emails)
+  - One-way sync only (no sync-back from HubSpot)
+  - No conversion tracking or ROI measurement
+
+  B7. Discovery Approval Flow
+
+  Current: report_findings → pending → request_discovery_review → user accept/reject →
+  approve_discovery → KB promotion
+
+  Weaknesses:
+  - Binary: accept or reject. No "accept as subcontractor" or "accept for Phase 2"
+  - No feedback loop: rejected reasons logged but not used to improve future searches
+  - Pending discoveries block re-research (must manually reject old ones)
+  - No confidence adjustment at acceptance time
+
+  ---
+  C. Additional Gaps Not in Main Summary
+  ---
+
+  C1. Gap 8 — Enrichment Waterfall with Provenance
+
+  Current: Agent uses tools in whatever order Claude decides per-session. No consistent
+  source ordering by reliability. No tracking of which source resolved which data point.
+
+  What to build:
+  - Define source priority order for EPC identification:
+    1. Structured databases (SEC EDGAR filings naming the contractor)
+    2. Official press releases (developer or EPC announcing the contract)
+    3. Industry rankings (Wiki-Solar, SPW, ENR — confirms company is an EPC)
+    4. Government records (OSHA — indirect, confirms presence not contract)
+    5. News articles (varying quality, check recency)
+    6. General web search (lowest signal, highest noise)
+  - Track provenance per data point: {value, source, url, confidence, retrieved_at}
+  - When waterfall exhausts: mark as "unresolved" with sources attempted. Schedule
+    re-enrichment in 2 weeks. Never report "unknown" without saying what was tried
+
+  C2. Gap 9 — No Sales Pipeline Closure Loop
+
+  Current: HubSpot push creates company + deal + contacts. One-way. No outcome tracking.
+
+  What to build (future):
+  - Bi-directional HubSpot sync: pull deal stage changes back into KB
+  - Track funnel: discovery → CRM → contacted → responded → meeting → opportunity → closed
+  - Use conversion data to improve lead scoring
+  - Per-EPC relationship status: "Blattner — 3 deals pushed, 1 meeting, 0 closed"
+
+  Why it matters: Without closure loop, you can't improve. After 6 months you should be
+  able to say "discoveries with lead score >80 convert at 12%, <40 convert at 0.5%"
+
+  C3. Gap 10 — No Project Versioning
+
+  Current: If EPC changes post-announcement, old discovery gets overwritten. Pending
+  discoveries block re-research. No multi-phase support.
+
+  What to build:
+  - Discovery versioning: new EPC found → mark old as "superseded" not replaced
+  - Multi-phase support: epc_engagements.phase field for multiple EPCs per project
+  - Auto-expire old pending discoveries after N days without review
+  - Change detection: re-research finds different EPC → flag as conflict
+
+  ---
+  D. Implementation Priority (Full Stack-Rank)
+  ---
+
+  ┌──────┬─────────────────────────────────┬───────────┬──────────┬─────────────────────┐
+  │ Rank │ Gap                             │ Impact    │ Effort   │ Depends On          │
+  ├──────┼─────────────────────────────────┼───────────┼──────────┼─────────────────────┤
+  │  1   │ Lead scoring (Gap 3)            │ Highest   │ Medium   │ Gap 1 (target list) │
+  │  2   │ Target list mode (Gap 1)        │ High      │ Medium   │ None                │
+  │  3   │ Evidence-based confidence (G2)  │ High      │ Medium   │ None                │
+  │  4   │ Contradiction detection (G7)    │ High      │ Small    │ Gap 2               │
+  │  5   │ Entity role per project (G4)    │ Medium    │ Small    │ None                │
+  │  6   │ Activity feed / delta (G6)      │ Medium    │ Medium   │ None                │
+  │  7   │ Enrichment waterfall (G8)       │ Medium    │ Medium   │ Gap 2               │
+  │  8   │ Project versioning (G10)        │ Medium    │ Small    │ None                │
+  │  9   │ Outreach package (G5)           │ Highest   │ Large    │ Gaps 1-4            │
+  │ 10   │ Sales closure loop (G9)         │ Long-term │ Large    │ Gap 5               │
+  └──────┴─────────────────────────────────┴───────────┴──────────┴─────────────────────┘
+
+  ---
+  E. References
+  ---
+
+  Sales Intelligence Platforms:
+  - Clay waterfall enrichment: clay.com/waterfall-enrichment
+  - Clay data waterfalls blog: clay.com/blog/data-waterfalls
+  - Clay University building a waterfall: university.clay.com/docs/building-a-data-waterfall
+  - Apollo AI lead scoring: apollo.io/magazine/identify-your-perfect-leads-with-ai-powered-lead-scoring
+  - Apollo scores overview: knowledge.apollo.io/hc/en-us/articles/4988048582285
+  - 6sense intent/engagement scores: 6sense.com/blog/magic-numbers
+  - 6sense predictive buying stages: support.6sense.com/docs/predictive-buying-stages
+  - ZoomInfo lead enrichment: pipeline.zoominfo.com/operations/lead-enrichment
+  - ZoomInfo waterfall tools: pipeline.zoominfo.com/operations/waterfall-enrichment-tools
+
+  Entity Resolution:
+  - Fellegi-Sunter model: O'Reilly Hands-On Entity Resolution ch04
+  - Google Cloud confidence scoring: cloud.google.com/enterprise-knowledge-graph/docs/confidence-score
+  - Neo4j entity resolution: neo4j.com/blog/graph-database/what-is-entity-resolution
+
+  Agent Verification:
+  - Perplexity Model Council: medium.com design-bootcamp
+  - Perplexity source selection: trysight.ai/blog/how-perplexity-ai-selects-sources
+  - PostHog AI 8 learnings: posthog.com/blog/8-learnings-from-1-year-of-agents
+
+  Outreach & Sales Agents:
+  - Coldreach signal-based selling: coldreach.ai
+  - Artisan personalization waterfall: artisan.co
+  - Lyzr AI SDR: lyzr.ai/blog/lyzr-built-ai-sdr-agent
+  - AiSDR outreach: aisdr.com
+
+  Monitoring & Alerts:
+  - PitchBook expanded alerts: pitchbook.com/blog/expanded-email-alerts
+  - Opsgenie dedup: support.atlassian.com/opsgenie/docs/what-is-alert-de-duplication
+  - Salesmotion signal monitoring: salesmotion.io/blog/best-ai-sales-agents-signal-monitoring
+  - Salesmotion buying triggers: salesmotion.io/blog/buying-triggers
+  - Signal-based selling framework: salesmotion.io/blog/signal-based-selling-framework
+
+  Agent UI Patterns:
+  - AG-UI Protocol: docs.ag-ui.com
+  - Vercel AI SDK components: elements.ai-sdk.dev
+  - Chainlit Steps: docs.chainlit.io/concepts/step
+  - Smashing Magazine agentic UX: smashingmagazine.com/2026/02/designing-agentic-ai
+  - ShapeofAI stream-of-thought pattern: shapeof.ai/patterns/stream-of-thought
+
+  Account-Based Intelligence:
+  - DemandSense ABI: demandsense.com/blog/account-based-intelligence
+  - Persana AI signal monitoring: persana.ai
+  - Warmly threshold-based routing: warmly.ai

@@ -42,7 +42,7 @@ async def test_no_accepted_discovery():
     mock_project = {"id": "proj-1", "project_name": "Test"}
 
     mock_table = MagicMock()
-    mock_table.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value = MagicMock(data=[])
+    mock_table.select.return_value.eq.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value = MagicMock(data=[])
     mock_client = MagicMock()
     mock_client.table.return_value = mock_table
 
