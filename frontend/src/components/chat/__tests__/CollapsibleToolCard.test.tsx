@@ -89,10 +89,6 @@ describe('CollapsibleToolCard', () => {
       </CollapsibleToolCard>
     );
 
-    // Children are rendered in a collapsed grid — find the header row
-    const header = screen.getByText('Tool with children').closest('div[class*="flex"]') as HTMLElement ||
-      screen.getByText('Tool with children').parentElement as HTMLElement;
-
     // Click on the label text's parent (the clickable header row)
     fireEvent.click(screen.getByText('Tool with children'));
 

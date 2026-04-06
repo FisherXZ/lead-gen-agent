@@ -15,7 +15,7 @@ function StatusIndicator({ status }: { status: "running" | "done" | "error" }) {
   if (status === "running") {
     return (
       <span className="flex items-center justify-center h-3.5 w-3.5 shrink-0">
-        <span className="h-1.5 w-1.5 rounded-full bg-accent-amber animate-timeline-pulse" />
+        <span className="h-2 w-2 rounded-full bg-accent-amber animate-timeline-pulse" />
       </span>
     );
   }
