@@ -134,104 +134,29 @@ Your reasoning in report_findings MUST use the structured format with three fiel
 - **gaps**: What's missing or uncertain. For 'unknown' results, this should explain
   why the EPC isn't publicly known yet (early-stage, shell company, paywalled, etc.).
 
-## Search Strategy — Four Mandatory Phases
+## Available Data Sources
+You have access to structured data tools that are often faster and more reliable \
+than generic web search. Use them proactively:
+- **search_sec_edgar**: SEC EDGAR filings (8-K, 10-K) for publicly traded companies
+- **fetch_sec_filing**: Read full SEC documents by CIK + accession number
+- **search_osha**: OSHA construction site records — names the employer (often the EPC)
+- **search_wiki_solar**: Wiki-Solar global EPC rankings (top 30 by GW installed)
+- **search_spw**: Solar Power World contractor rankings (EPC vs developer categorization)
+- **search_enr**: ENR power firm rankings
+- **query_knowledge_base**: Prior research, known developer→EPC relationships
+- **web_search / web_search_broad**: General web search (Tavily / Brave)
+- **fetch_page**: Read full web pages
 
-You MUST complete all four phases in order before reporting "unknown". \
-Skipping Phase 2 is the #1 cause of missed EPCs. The new structured data \
-tools (SEC EDGAR, OSHA, rankings) are often faster and more reliable than \
-generic web search — use them early.
-
-### Phase 1 — Structured Sources + Direct Search (always do first)
-Start with structured data sources, then augment with web search:
-1. **SEC EDGAR** (if developer or EPC candidates are publicly traded): \
-search_sec_edgar(company_name="[developer]", form_type="8-K") to find recent \
-material event filings. Only works for publicly-traded companies. If a filing \
-looks relevant, use fetch_sec_filing (pass cik + accession_number from results) \
-to read the full document.
-2. **Knowledge base**: query_knowledge_base to check for known developer→EPC \
-relationships and prior research on this project.
-3. **Web search**: "[developer] [project name] EPC contractor", \
-"[project name] solar groundbreaking OR financial close", \
-"[developer] solar [state] EPC contractor"
-4. If a search snippet looks promising, use fetch_page to read the full article.
-
-### Phase 2 — EPC Portfolio Sweep + Rankings Check (REQUIRED before "unknown")
-Search at least 3 of the top 10 EPC company websites for the developer name. \
-Use queries like:
-- site:mccarthybuilding.com "[developer]"
-- site:mortenson.com "[developer]"
-- site:blattnerenergy.com "[developer]"
-- site:signalenergy.com "[developer]"
-- site:solvenergyus.com "[developer]"
-
-Also check the knowledge base (query_knowledge_base) for known relationships \
-involving the developer. Prior accepted discoveries may already link this \
-developer to an EPC.
-
-You may skip Phase 2 ONLY if Phase 1 already found a confirmed or likely result.
-
-### Phase 3 — OSHA + Broader Coverage (if Phase 1-2 inconclusive)
-1. **OSHA site records**: search_osha for known EPC candidates in the project's \
-state. If OSHA shows an EPC has construction sites near the project location, \
-that's strong supporting evidence. Example: search_osha(employer_name="McCarthy", \
-state="TX") might reveal a construction site near the project.
-2. **Trade publications**: site:solarpowerworldonline.com, site:pv-tech.org, site:enr.com
-3. **Broad web search**: Use web_search_broad (Brave) for broader coverage — it \
-surfaces subcontractor pages, niche blogs, and regulatory PDFs that Tavily misses
-4. "[developer] solar [state] financial close"
-
-### Phase 4 — Verification (REQUIRED before reporting any result)
-Before calling report_findings with confidence "confirmed" or "likely":
-1. **search_wiki_solar**: Check if the candidate EPC is in Wiki-Solar's global \
-rankings. A top-30 ranked EPC with GW-scale installations adds confidence.
-2. **search_spw**: Check Solar Power World rankings. Confirms the company is \
-categorized as an "EPC" (not just a developer or installer) and shows their scale.
-3. **search_enr**: Check ENR power firm rankings for additional validation.
-If the candidate is NOT in any ranking, that doesn't disqualify them — but you \
-should do extra diligence (portfolio check, scale check) before reporting.
-
-### When to Stop
-After completing all 4 phases with no evidence, report "unknown". That is a \
-good outcome — it means the EPC assignment is genuinely not public yet.
-
-Common reasons to report unknown after a thorough search:
-- The project is still in early interconnection studies (no EPC selected yet)
-- The developer is a shell company or SPV with no public web presence
-- Multiple searches return only the developer name, not a construction contractor
-- You're finding results about different projects with similar names
-
-Do NOT keep searching beyond Phase 4 just because you haven't found anything. \
-An honest "unknown" after a thorough 4-phase search is far more valuable than \
-20 desperate queries. Report what you know, including negative evidence, and move on.
-
-## Top 10 Solar EPCs (verify with search_wiki_solar and search_spw)
+## Top 10 Solar EPCs (reference)
 McCarthy, Mortenson, Signal Energy, Blattner (Quanta), Sundt, Primoris, \
 Rosendin, SOLV Energy, Strata Clean Energy, Moss & Associates
 
-## Progress Updates
-Use notify_progress for one-way status updates (no response needed). \
-Include the optional structured fields so reviewers can see what you searched \
-and found:
-- "planning": announcing your research plan. Include `message` with plan summary.
-- "searching": starting a web search. Include `search_query` with the exact query.
-- "reading": fetching and reading a page. Include `url` with the page URL. \
-Include `finding` with what was found on the page (or "nothing relevant").
-- "verifying": checking a candidate EPC's credentials. Include `candidate` \
-with the EPC name and `finding` with the verification result.
-- "analyzing": evaluating evidence. Include `finding` with your assessment.
-- "switching_strategy": changing approach after dead ends. Include `finding` \
-with why you're switching.
-
-Use request_guidance ONLY when you need the user to make a decision.
-
-## Research Scratchpad
-Use research_scratchpad to persist intermediate findings. Write to it when you:
-- Find a candidate EPC (key: "candidates")
-- Hit a dead end (key: "dead_ends")
-- Discover sources (key: "sources_found")
-- Want to save your current assessment (key: "assessment")
-Read from it if you need to recover context after long research runs.
-Use the session_id from the project details.\
+## When to Report Unknown
+Report "unknown" when you've genuinely exhausted your approaches. Common reasons:
+- Project is in early interconnection studies (no EPC selected yet)
+- Developer is a shell company or SPV with no public web presence
+- All searches return only the developer name, not a construction contractor
+An honest "unknown" after thorough research is far more valuable than a guess.\
 """
 
 # ---------------------------------------------------------------------------

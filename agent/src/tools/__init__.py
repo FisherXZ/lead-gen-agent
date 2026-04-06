@@ -15,6 +15,7 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -114,6 +115,9 @@ _register(run_contact_discovery)
 # Agent self-management tools
 _register(manage_todo)
 _register(think)
+# Sub-agent tools
+from . import run_research
+_register(run_research)
 
 
 def get_all_tools() -> list[dict]:
@@ -181,6 +185,8 @@ async def execute_tool(name: str, tool_input: dict) -> dict:
             "error": f"{name} timed out",
             "error_category": "search_tool_error",
         }
+    except asyncio.CancelledError:
+        raise
     except Exception as exc:
         _logger.exception("Unexpected error in tool %s", name)
         return {

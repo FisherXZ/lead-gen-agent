@@ -33,7 +33,8 @@ from .batch import run_batch
 from .batch_progress import cancel_batch, cancel_batch_for_conversation, get_batch
 from .knowledge_base import build_knowledge_context, promote_discovery_to_kb, process_rejection_into_kb, resolve_entity
 from .research import run_research, run_research_plan
-from .chat_agent import run_chat_agent
+from .chat_agent import run_chat_agent  # legacy — kept for fallback
+from .agents import build_chat_runtime
 from .knowledge_base import get_entity_with_profile, list_entities, rebuild_profile_if_stale
 from .models import AgentResult, BatchDiscoverRequest, ChatRequest, ContactDiscoverRequest, DiscoverPlanRequest, DiscoverRequest, EpcSource, HubSpotConnectRequest, HubSpotPushRequest, NegativeEvidence, ReviewRequest
 from .sse import StreamWriter
@@ -918,7 +919,7 @@ async def chat(req: ChatRequest, request: Request, _user_id: str = Depends(requi
     job = create_job(job_id, conversation_id)
 
     stream_writer = StreamWriter()
-    task = asyncio.create_task(_run_agent_job(job, messages, conversation_id, stream_writer, api_key=api_key))
+    task = asyncio.create_task(_run_agent_job_v2(job, messages, conversation_id, stream_writer, api_key=api_key, user_id=_user_id))
     set_task(job_id, task)
 
     return StreamingResponse(
@@ -964,6 +965,121 @@ async def _run_agent_job(
     except Exception:
         logger.exception("Agent job %s failed", job.job_id)
         # Push error events so any connected client sees the failure
+        error_sw = StreamWriter()
+        job.append_event(error_sw.finish("error"))
+        job.append_event(error_sw.done())
+        mark_job_done(job.job_id, error=db.sanitize_key_from_string(traceback.format_exc()[:500]))
+
+
+async def _run_agent_job_v2(
+    job, messages: list[dict], conversation_id: str, stream_writer: StreamWriter,
+    api_key: str | None = None, user_id: str = "",
+) -> None:
+    """Background wrapper using the new AgentRuntime."""
+    try:
+        runtime = build_chat_runtime(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            api_key=api_key,
+        )
+
+        message_id = str(uuid.uuid4())
+        job.append_event(stream_writer.start(message_id))
+        job.append_event(stream_writer.start_step())
+
+        full_text = ""
+        all_parts: list[dict] = []
+        current_text_part_id: str | None = None
+        had_tool_rounds = False
+
+        def on_event(event: dict):
+            nonlocal full_text, current_text_part_id, had_tool_rounds
+            etype = event.get("type")
+
+            if etype == "text_start":
+                current_text_part_id = str(len(all_parts))
+                if had_tool_rounds:
+                    job.append_event(stream_writer.thinking_start(current_text_part_id))
+                else:
+                    job.append_event(stream_writer.text_start(current_text_part_id))
+
+            elif etype == "text_delta":
+                text = event.get("text", "")
+                full_text += text
+                if current_text_part_id is not None:
+                    if had_tool_rounds:
+                        job.append_event(stream_writer.thinking_delta(current_text_part_id, text))
+                    else:
+                        job.append_event(stream_writer.text_delta(current_text_part_id, text))
+
+            elif etype == "tool_input_start":
+                had_tool_rounds = True
+                job.append_event(stream_writer.tool_input_start(
+                    event.get("tool_id", ""), event.get("tool_name", "")
+                ))
+
+            elif etype == "tool_input_available":
+                # tool_input_available is emitted by _call_api when a tool block finishes
+                pass  # We emit tool_input_available after tool execution in the runtime loop
+
+            elif etype == "tool_result":
+                job.append_event(stream_writer.tool_output_available(
+                    event.get("tool_id", ""),
+                    event.get("result", {}),
+                ))
+                # Build part for persistence
+                all_parts.append({
+                    "type": "tool-invocation",
+                    "toolCallId": event.get("tool_id", ""),
+                    "toolName": event.get("tool_name", ""),
+                    "input": event.get("input", {}),
+                    "output": event.get("result", {}),
+                })
+
+            elif etype == "escalation":
+                # Surface escalation as text to the user
+                suggestion = event.get("suggestion", "")
+                if suggestion:
+                    job.append_event(stream_writer.text_delta(
+                        str(len(all_parts)), f"\n\n{suggestion}"
+                    ))
+
+        result = await runtime.run_turn(messages, on_event)
+
+        # Capture final text
+        if full_text:
+            all_parts.insert(0, {"type": "text", "text": full_text})
+
+        job.append_event(stream_writer.finish_step())
+        job.append_event(stream_writer.finish())
+        job.append_event(stream_writer.done())
+
+        db.save_message(
+            conversation_id=conversation_id,
+            role="assistant",
+            content=full_text,
+            parts=all_parts,
+        )
+        mark_job_done(job.job_id)
+
+    except asyncio.CancelledError:
+        logger.info("Agent job %s cancelled by user", job.job_id)
+        sw = StreamWriter()
+        job.append_event(sw.finish_step())
+        job.append_event(sw.finish("stop"))
+        job.append_event(sw.done())
+        mark_job_done(job.job_id)
+        db.save_message(conversation_id=conversation_id, role="assistant", content="[Stopped by user]")
+
+    except anthropic.AuthenticationError:
+        error_sw = StreamWriter()
+        job.append_event(error_sw.text("\n\n**Authentication failed.** Your API key is invalid or expired. Check Settings to update it."))
+        job.append_event(error_sw.finish("error"))
+        job.append_event(error_sw.done())
+        mark_job_done(job.job_id, error="Authentication failed")
+
+    except Exception:
+        logger.exception("Agent job %s failed", job.job_id)
         error_sw = StreamWriter()
         job.append_event(error_sw.finish("error"))
         job.append_event(error_sw.done())
