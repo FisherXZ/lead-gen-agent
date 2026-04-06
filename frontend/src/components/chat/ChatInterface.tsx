@@ -245,7 +245,7 @@ export default function ChatInterface() {
 
           try {
             const evt = JSON.parse(payload);
-            if (evt.type === "text-delta" && evt.delta) {
+            if ((evt.type === "text-delta" || evt.type === "thinking-delta") && evt.delta) {
               textAccum += evt.delta;
             } else if (evt.type === "tool-input-available") {
               const existingPart = parts.find(

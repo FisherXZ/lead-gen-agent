@@ -5,6 +5,7 @@
 CREATE OR REPLACE FUNCTION public.check_email_allowlist(event jsonb)
 RETURNS jsonb
 LANGUAGE plpgsql
+SECURITY DEFINER
 AS $$
 DECLARE
     user_email TEXT;

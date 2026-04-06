@@ -1,89 +1,15 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useApiKey } from "@/lib/api-key";
 import { agentFetch } from "@/lib/agent-fetch";
-import { useAuth } from "@/lib/auth";
+import TeamSection from "@/components/settings/TeamSection";
 
 export default function SettingsPage() {
   const { apiKey, setApiKey, clearApiKey } = useApiKey();
   const [inputValue, setInputValue] = useState("");
   const [status, setStatus] = useState<"idle" | "validating" | "valid" | "invalid" | "error">("idle");
   const [errorDetail, setErrorDetail] = useState("");
-
-  // Allowlist state
-  const { user } = useAuth();
-  const [allowedEmails, setAllowedEmails] = useState<{ email: string; created_at: string }[]>([]);
-  const [newEmail, setNewEmail] = useState("");
-  const [allowlistStatus, setAllowlistStatus] = useState<"idle" | "loading" | "adding" | "error">("idle");
-  const [allowlistError, setAllowlistError] = useState("");
-
-  const fetchAllowedEmails = useCallback(async () => {
-    setAllowlistStatus("loading");
-    try {
-      const res = await fetch("/api/allowed-emails");
-      if (res.ok) {
-        const data = await res.json();
-        setAllowedEmails(data.emails || []);
-        setAllowlistStatus("idle");
-      } else {
-        setAllowlistStatus("error");
-        setAllowlistError("Failed to load allowed emails");
-      }
-    } catch {
-      setAllowlistStatus("error");
-      setAllowlistError("Could not reach the server.");
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchAllowedEmails();
-  }, [fetchAllowedEmails]);
-
-  async function handleAddEmail() {
-    const email = newEmail.trim().toLowerCase();
-    if (!email || !email.includes("@")) return;
-
-    setAllowlistStatus("adding");
-    setAllowlistError("");
-
-    try {
-      const res = await fetch("/api/allowed-emails", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setNewEmail("");
-        fetchAllowedEmails();
-      } else {
-        setAllowlistStatus("error");
-        setAllowlistError(data.error || "Failed to add email");
-      }
-    } catch {
-      setAllowlistStatus("error");
-      setAllowlistError("Could not reach the server.");
-    }
-  }
-
-  async function handleRemoveEmail(email: string) {
-    try {
-      const res = await fetch("/api/allowed-emails", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        fetchAllowedEmails();
-      } else {
-        setAllowlistError(data.error || "Failed to remove email");
-      }
-    } catch {
-      setAllowlistError("Could not reach the server.");
-    }
-  }
 
   // HubSpot state
   const [hsToken, setHsToken] = useState("");
@@ -364,84 +290,9 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      {/* Authorized Emails */}
-      <div className="mt-8 rounded-lg border border-border-subtle bg-surface-raised p-6">
-        <h2 className="font-serif text-lg font-medium text-text-primary">
-          Authorized Emails
-        </h2>
-        <p className="mt-1 text-sm text-text-secondary">
-          Only these emails can sign in. Others will be rejected at login.
-        </p>
-
-        {/* Email list */}
-        <div className="mt-4 space-y-2">
-          {allowlistStatus === "loading" && allowedEmails.length === 0 ? (
-            <p className="text-sm text-text-tertiary">Loading...</p>
-          ) : allowedEmails.length === 0 ? (
-            <p className="text-sm text-text-tertiary">No emails configured.</p>
-          ) : (
-            allowedEmails.map((entry) => (
-              <div
-                key={entry.email}
-                className="flex items-center justify-between rounded-md border border-border-subtle bg-surface-overlay px-3 py-2"
-              >
-                <span className="text-sm text-text-primary">{entry.email}</span>
-                <div className="flex items-center gap-2">
-                  {entry.email === user?.email?.toLowerCase() && (
-                    <span className="text-xs text-text-tertiary">you</span>
-                  )}
-                  <button
-                    onClick={() => handleRemoveEmail(entry.email)}
-                    disabled={entry.email === user?.email?.toLowerCase()}
-                    className="text-text-tertiary transition-colors hover:text-status-red disabled:opacity-30 disabled:hover:text-text-tertiary"
-                    title={
-                      entry.email === user?.email?.toLowerCase()
-                        ? "Cannot remove your own email"
-                        : "Remove"
-                    }
-                  >
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* Add email */}
-        <div className="mt-4 flex gap-2">
-          <input
-            type="email"
-            value={newEmail}
-            onChange={(e) => {
-              setNewEmail(e.target.value);
-              if (allowlistError) setAllowlistError("");
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleAddEmail();
-            }}
-            placeholder="colleague@company.com"
-            className="h-10 flex-1 rounded-md border border-border-default bg-surface-overlay px-3 text-sm text-text-primary placeholder:text-text-tertiary focus:border-border-focus focus:outline-none focus:ring-1 focus:ring-border-focus"
-          />
-          <button
-            onClick={handleAddEmail}
-            disabled={!newEmail.trim() || allowlistStatus === "adding"}
-            className="rounded-md bg-accent-amber px-4 py-2 text-sm font-medium text-surface-primary transition-colors hover:bg-accent-amber/90 disabled:opacity-50"
-          >
-            {allowlistStatus === "adding" ? "Adding..." : "Add"}
-          </button>
-        </div>
-
-        {allowlistError && (
-          <p className="mt-2 text-sm text-status-red">{allowlistError}</p>
-        )}
-
-        <p className="mt-4 text-xs text-text-tertiary">
-          New users must sign in with Google or GitHub using an authorized email.
-          Existing users who already have an account are not affected by changes here.
-        </p>
+      {/* Team Management */}
+      <div className="mt-8">
+        <TeamSection />
       </div>
     </div>
   );

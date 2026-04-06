@@ -26,7 +26,10 @@ from . import (
     export_csv,
     fetch_page,
     fetch_sec_filing,
+    find_contacts,
     get_discoveries,
+    manage_todo,
+    push_to_hubspot,
     notify_progress,
     query_kb,
     recall,
@@ -42,6 +45,7 @@ from . import (
     search_sec_edgar,
     search_spw,
     search_wiki_solar,
+    think,
     web_search,
 )
 
@@ -62,6 +66,8 @@ _register(brave_search)
 _register(export_csv)
 _register(fetch_page)
 _register(fetch_sec_filing)
+_register(find_contacts)
+_register(push_to_hubspot)
 _register(search_projects)
 _register(search_projects_with_epc)
 _register(get_discoveries)
@@ -79,6 +85,9 @@ _register(search_osha)
 _register(search_enr)
 _register(search_wiki_solar)
 _register(search_spw)
+# Agent self-management tools
+_register(manage_todo)
+_register(think)
 
 
 def get_all_tools() -> list[dict]:
@@ -125,6 +134,14 @@ async def execute_tool(name: str, tool_input: dict) -> dict:
         return {
             "error": f"{name} timed out",
             "error_category": "search_tool_error",
+        }
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).exception("Unexpected error in tool %s", name)
+        return {
+            "error": f"Unexpected error in {name}: {type(exc).__name__}",
+            "error_category": "tool_error",
+            "detail": str(exc),
         }
 
 

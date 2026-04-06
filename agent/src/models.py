@@ -14,6 +14,20 @@ class DiscoverPlanRequest(BaseModel):
     project_id: str
 
 
+class ContactDiscoverRequest(BaseModel):
+    entity_id: str
+
+
+class HubSpotConnectRequest(BaseModel):
+    token: str
+    pipeline_id: str | None = None
+    deal_stage_id: str | None = None
+
+
+class HubSpotPushRequest(BaseModel):
+    project_id: str
+
+
 class BatchDiscoverRequest(BaseModel):
     project_ids: list[str]
 

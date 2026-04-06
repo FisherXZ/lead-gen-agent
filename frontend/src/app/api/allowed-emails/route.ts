@@ -1,33 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
 import { createServiceClient } from "@/lib/supabase/service";
+import { withAuth, withAdmin } from "@/lib/auth-guard";
 
-/** Verify the request has an authenticated Supabase session. */
-async function getAuthUser(request: NextRequest) {
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll() {},
-      },
-    }
-  );
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return user;
-}
-
-export async function GET(request: NextRequest) {
-  const user = await getAuthUser(request);
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+export const GET = withAuth(async () => {
   const service = createServiceClient();
   const { data, error } = await service
     .from("allowed_emails")
@@ -39,14 +14,9 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({ emails: data });
-}
+});
 
-export async function POST(request: NextRequest) {
-  const user = await getAuthUser(request);
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+export const POST = withAdmin(async (request: NextRequest) => {
   const body = await request.json();
   const email = (body.email || "").trim().toLowerCase();
 
@@ -59,20 +29,18 @@ export async function POST(request: NextRequest) {
 
   if (error) {
     if (error.code === "23505") {
-      return NextResponse.json({ error: "Email already exists" }, { status: 409 });
+      return NextResponse.json(
+        { error: "Email already exists" },
+        { status: 409 }
+      );
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true, email });
-}
+});
 
-export async function DELETE(request: NextRequest) {
-  const user = await getAuthUser(request);
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+export const DELETE = withAdmin(async (request: NextRequest, user) => {
   const body = await request.json();
   const email = (body.email || "").trim().toLowerCase();
 
@@ -80,7 +48,6 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: "Email required" }, { status: 400 });
   }
 
-  // Prevent removing your own email
   if (email === user.email?.toLowerCase()) {
     return NextResponse.json(
       { error: "Cannot remove your own email" },
@@ -99,4 +66,4 @@ export async function DELETE(request: NextRequest) {
   }
 
   return NextResponse.json({ ok: true });
-}
+});

@@ -38,4 +38,14 @@ async def execute(tool_input: dict) -> dict:
     if not entity_name and not state:
         return {"error": "Provide at least one of entity_name or state."}
     result = query_knowledge_base(entity_name=entity_name, state=state)
-    return {"knowledge": result}
+
+    # Include entity_id so other tools (find_contacts, push_to_hubspot) can use it
+    response: dict = {"knowledge": result}
+    if entity_name:
+        from ..knowledge_base import resolve_entity
+        entity = resolve_entity(entity_name)
+        if entity:
+            response["entity_id"] = entity["id"]
+            response["entity_name"] = entity["name"]
+            response["entity_type"] = entity.get("entity_type", [])
+    return response

@@ -9,6 +9,8 @@ import GuidanceCard from "./parts/GuidanceCard";
 import CsvCard from "./parts/CsvCard";
 import PdfCard from "./parts/PdfCard";
 import ResearchTrailEntry from "./parts/ResearchTrailEntry";
+import SearchResultsPreview from "./parts/SearchResultsPreview";
+import PagePreview from "./parts/PagePreview";
 import DiscoveryApprovalCard from "./parts/DiscoveryApprovalCard";
 import CollapsibleToolCard from "./CollapsibleToolCard";
 import { EpcSource } from "@/lib/types";
@@ -188,6 +190,9 @@ const EXPAND_WHEN_DONE = new Set([
   "request_discovery_review",
   "approve_discovery",
   "export_csv",
+  "web_search",
+  "web_search_broad",
+  "fetch_page",
 ]);
 
 /** Tools that should show expanded body while running (live progress) */
@@ -276,19 +281,25 @@ function renderToolBody(
       return null;
     }
 
+    case "export_csv":
+      return <CsvCard data={data as { headers?: string[]; rows?: string[][]; csv_text?: string; filename?: string; row_count?: number; error?: string }} />;
+
+    case "web_search":
+    case "web_search_broad":
+      return <SearchResultsPreview data={data} />;
+
     case "fetch_page": {
       if (data.content_type === "pdf") {
         return <PdfCard data={data as PdfCardData} />;
       }
+      // Show page title + extract for non-PDF pages
+      if (data.title || data.text) {
+        return <PagePreview data={data} input={input} />;
+      }
       return null;
     }
 
-    case "export_csv":
-      return <CsvCard data={data as { headers?: string[]; rows?: string[][]; csv_text?: string; filename?: string; row_count?: number; error?: string }} />;
-
     // These tools have no expanded body
-    case "web_search":
-    case "web_search_broad":
     case "remember":
     case "query_knowledge_base":
       return null;

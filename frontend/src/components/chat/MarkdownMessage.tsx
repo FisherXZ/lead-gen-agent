@@ -1,8 +1,10 @@
 "use client";
 
+import { useRef } from "react";
 import { Streamdown } from "streamdown";
 import { code } from "@streamdown/code";
 import "streamdown/styles.css";
+import CitationBadge from "./CitationBadge";
 
 interface MarkdownMessageProps {
   content: string;
@@ -11,25 +13,52 @@ interface MarkdownMessageProps {
 
 const plugins = { code };
 
-const components = {
-  table: ({ children, ...props }: React.ComponentProps<"table">) => (
-    <div className="overflow-x-auto my-2 rounded-lg border border-border-subtle">
-      <table {...props} className="min-w-full">
-        {children}
-      </table>
-    </div>
-  ),
-  a: ({ children, ...props }: React.ComponentProps<"a">) => (
-    <a {...props} target="_blank" rel="noopener noreferrer">
-      {children}
-    </a>
-  ),
-};
+/** Check if a URL looks like an external source (not internal/relative) */
+function isExternalUrl(href: string): boolean {
+  try {
+    const url = new URL(href);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
 
 export default function MarkdownMessage({
   content,
   isStreaming,
 }: MarkdownMessageProps) {
+  const citationCounterRef = useRef(0);
+
+  // Reset counter on each render (citations re-number per message render)
+  citationCounterRef.current = 0;
+
+  const components = {
+    table: ({ children, ...props }: React.ComponentProps<"table">) => (
+      <div className="overflow-x-auto my-2 rounded-lg border border-border-subtle">
+        <table {...props} className="min-w-full">
+          {children}
+        </table>
+      </div>
+    ),
+    a: ({ children, href, ...props }: React.ComponentProps<"a">) => {
+      // Convert external links to citation badges
+      if (href && isExternalUrl(href)) {
+        citationCounterRef.current += 1;
+        return (
+          <CitationBadge href={href} index={citationCounterRef.current}>
+            {children}
+          </CitationBadge>
+        );
+      }
+      // Keep internal/relative links as normal
+      return (
+        <a {...props} href={href} target="_blank" rel="noopener noreferrer">
+          {children}
+        </a>
+      );
+    },
+  };
+
   if (!content || content.trim() === "") {
     return null;
   }

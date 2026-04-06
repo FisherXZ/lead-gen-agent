@@ -71,10 +71,26 @@ def verify_token(request: Request) -> dict:
         raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
 
 
-def get_user_id(request: Request) -> str:
-    """Extract and return the user_id (sub) from the JWT."""
-    payload = verify_token(request)
+def _extract_user_id(payload: dict) -> str:
     user_id = payload.get("sub")
     if not user_id:
         raise HTTPException(status_code=401, detail="Token missing user ID")
     return user_id
+
+
+def get_user_id(request: Request) -> str:
+    """Extract and return the user_id (sub) from the JWT."""
+    return _extract_user_id(verify_token(request))
+
+
+def get_user_role(request: Request) -> str:
+    """Extract the user_role from the JWT claims (injected by custom access token hook)."""
+    return verify_token(request).get("user_role", "member")
+
+
+def require_admin(request: Request) -> str:
+    """Require admin role. Returns user_id if admin, raises 403 otherwise."""
+    payload = verify_token(request)
+    if payload.get("user_role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return _extract_user_id(payload)

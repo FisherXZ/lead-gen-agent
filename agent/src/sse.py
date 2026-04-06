@@ -57,6 +57,17 @@ class StreamWriter:
     def text_end(self, part_id: str) -> str:
         return _event({"type": "text-end", "id": part_id})
 
+    # -- Thinking (reasoning before tool calls) --------------------------------
+
+    def thinking_start(self, part_id: str | None = None) -> str:
+        return _event({"type": "thinking-start", "id": part_id or self._next_id()})
+
+    def thinking_delta(self, part_id: str, delta: str) -> str:
+        return _event({"type": "thinking-delta", "id": part_id, "delta": delta})
+
+    def thinking_end(self, part_id: str) -> str:
+        return _event({"type": "thinking-end", "id": part_id})
+
     # -- Tool invocations ---------------------------------------------------
 
     def tool_input_start(

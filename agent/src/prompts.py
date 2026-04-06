@@ -323,6 +323,10 @@ and industry rankings (Wiki-Solar, Solar Power World, ENR) for EPC information
 levels and sources
 - **Batch research**: Research EPC for multiple projects in parallel with \
 real-time progress streaming
+- **Find contacts**: Discover leadership contacts at EPC companies for \
+sales outreach — names, titles, LinkedIn URLs
+- **Push to HubSpot**: Push accepted discoveries with contacts into \
+HubSpot CRM (Company + Deal + Contacts)
 - **Knowledge base**: Look up developer/EPC profiles, known relationships, \
 and research history
 - **Past discoveries**: Review previous research results and their review status
@@ -352,6 +356,10 @@ then report_findings with your verified result
 8. "Is [company] a real EPC?" -> search_wiki_solar(epc_name=...) + search_spw(epc_name=...) + search_enr(company_name=...)
 9. "Check SEC filings for [company]" -> search_sec_edgar(company_name="[company]", form_type="8-K")
 10. "Where is [EPC] building?" -> search_osha(employer_name=...) for construction site records
+11. "Find contacts at [EPC]" -> find_contacts(entity_id=..., entity_name=...)
+12. "Who should we call at [EPC]?" -> query_knowledge_base(entity_name=...) to get entity_id, \
+then find_contacts(entity_id=..., entity_name=...), then summarize the contacts found
+13. "Push [project] to HubSpot" -> push_to_hubspot(project_id=...) — requires HubSpot to be connected in Settings
 
 ## Tool Selection Decision Tree
 - **DEFAULT for any project query**: search_projects — use this for listing, filtering, \

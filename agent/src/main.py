@@ -35,7 +35,7 @@ from .knowledge_base import build_knowledge_context, promote_discovery_to_kb, pr
 from .research import run_research, run_research_plan
 from .chat_agent import run_chat_agent
 from .knowledge_base import get_entity_with_profile, list_entities, rebuild_profile_if_stale
-from .models import AgentResult, BatchDiscoverRequest, ChatRequest, DiscoverPlanRequest, DiscoverRequest, EpcSource, NegativeEvidence, ReviewRequest
+from .models import AgentResult, BatchDiscoverRequest, ChatRequest, ContactDiscoverRequest, DiscoverPlanRequest, DiscoverRequest, EpcSource, HubSpotConnectRequest, HubSpotPushRequest, NegativeEvidence, ReviewRequest
 from .sse import StreamWriter
 
 logger = logging.getLogger(__name__)
@@ -256,7 +256,7 @@ Discovery ID: `{discovery.get("id", "unknown")}`
 You can ask me questions about this research, request more investigation, or approve/reject the finding."""
 
     # Create conversation and pre-populate
-    conv = db.create_conversation(title=f"Review: {epc} for {project_name}")
+    conv = db.create_conversation(title=f"Review: {epc} for {project_name}", user_id=_user_id)
     db.save_message(conv["id"], "assistant", context_msg)
 
     return {
@@ -353,7 +353,7 @@ async def discover_batch(req: BatchDiscoverRequest, request: Request, _user_id: 
 
 
 @app.patch("/api/discover/{discovery_id}/review")
-def review_discovery(discovery_id: str, req: ReviewRequest, _user_id: str = Depends(require_auth)):
+def review_discovery(discovery_id: str, req: ReviewRequest, request: Request, _user_id: str = Depends(require_auth)):
     """Accept or reject an EPC discovery."""
     if req.action not in ("accepted", "rejected"):
         raise HTTPException(status_code=400, detail="Action must be 'accepted' or 'rejected'")
@@ -386,6 +386,25 @@ def review_discovery(discovery_id: str, req: ReviewRequest, _user_id: str = Depe
                     negative_evidence=neg_evidence,
                 )
                 promote_discovery_to_kb(discovery["project_id"], result, project)
+
+                # Auto-trigger contact discovery for the EPC entity
+                epc_name = discovery.get("epc_contractor")
+                if epc_name and epc_name != "Unknown":
+                    try:
+                        from .knowledge_base import resolve_entity
+                        epc_entity = resolve_entity(epc_name)
+                        if epc_entity:
+                            api_key = request.headers.get("x-anthropic-api-key")
+                            from .contact_discovery import discover_contacts
+                            asyncio.create_task(
+                                discover_contacts(epc_entity["id"], epc_name, api_key, project=project)
+                            )
+                            logger.info("Auto-triggered contact discovery for %s", epc_name)
+                    except Exception:
+                        logger.warning(
+                            "Failed to auto-trigger contact discovery for %s", epc_name,
+                            exc_info=True,
+                        )
             except Exception:
                 logger.error(
                     "KB promotion failed for discovery %s", discovery_id, exc_info=True
@@ -423,6 +442,221 @@ def list_pending_discoveries(_user_id: str = Depends(require_auth)):
     for d in discoveries:
         d["reasoning"] = _parse_reasoning(d.get("reasoning", ""))
     return discoveries
+
+
+# ---------------------------------------------------------------------------
+# Contact Discovery endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/contacts/discover")
+async def discover_contacts_endpoint(
+    req: ContactDiscoverRequest,
+    request: Request,
+    _user_id: str = Depends(require_auth),
+):
+    """Trigger contact discovery for an EPC entity."""
+    entity_id = req.entity_id
+
+    # Verify entity exists
+    client = db.get_client()
+    resp = client.table("entities").select("id, name").eq("id", entity_id).limit(1).execute()
+    if not resp.data:
+        raise HTTPException(status_code=404, detail="Entity not found")
+
+    entity = resp.data[0]
+    api_key = request.headers.get("x-anthropic-api-key")
+
+    from .contact_discovery import discover_contacts
+    contacts = await discover_contacts(entity_id, entity["name"], api_key)
+
+    return {"contacts": contacts, "entity_id": entity_id, "entity_name": entity["name"]}
+
+
+@app.get("/api/contacts/{entity_id}")
+def get_contacts(entity_id: str, _user_id: str = Depends(require_auth)):
+    """Get cached contacts for an entity."""
+    contacts = db.get_contacts_for_entity(entity_id)
+    return {"contacts": contacts, "entity_id": entity_id}
+
+
+# ---------------------------------------------------------------------------
+# HubSpot Integration endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/hubspot/connect")
+def hubspot_connect(req: HubSpotConnectRequest, _user_id: str = Depends(require_auth)):
+    """Validate and save HubSpot Private App token."""
+    from .hubspot import save_settings
+
+    try:
+        settings = save_settings(
+            token=req.token,
+            pipeline_id=req.pipeline_id,
+            deal_stage_id=req.deal_stage_id,
+        )
+        return {"connected": True, "portal_id": settings.get("portal_id")}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error("HubSpot connect failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to save HubSpot settings")
+
+
+@app.get("/api/hubspot/status")
+def hubspot_status(_user_id: str = Depends(require_auth)):
+    """Check HubSpot connection status."""
+    from .hubspot import get_settings
+    settings = get_settings()
+    if settings and settings.get("enabled"):
+        return {"connected": True, "portal_id": settings.get("portal_id")}
+    return {"connected": False}
+
+
+@app.post("/api/hubspot/push")
+def hubspot_push(req: HubSpotPushRequest, _user_id: str = Depends(require_auth)):
+    """Push a discovery to HubSpot (Company + Deal + Contacts)."""
+    project_id = req.project_id
+
+    from .hubspot import get_settings, push_discovery
+    settings = get_settings()
+    if not settings:
+        raise HTTPException(status_code=400, detail="HubSpot is not connected. Configure in Settings.")
+
+    token = settings.get("api_key")
+    if not token:
+        raise HTTPException(status_code=500, detail="Could not decrypt HubSpot token")
+
+    # Look up project + entity + contacts
+    project = db.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    client = db.get_client()
+    disc_resp = (
+        client.table("epc_discoveries")
+        .select("*")
+        .eq("project_id", project_id)
+        .eq("review_status", "accepted")
+        .limit(1)
+        .execute()
+    )
+    if not disc_resp.data:
+        raise HTTPException(status_code=400, detail="No accepted discovery for this project")
+
+    epc_name = disc_resp.data[0].get("epc_contractor")
+    from .knowledge_base import resolve_entity
+    entity = resolve_entity(epc_name) if epc_name else None
+    if not entity:
+        raise HTTPException(status_code=400, detail=f"EPC entity '{epc_name}' not found")
+
+    contacts = db.get_contacts_for_entity(entity["id"])
+
+    try:
+        result = push_discovery(
+            project=project,
+            entity=entity,
+            contacts=contacts,
+            token=token,
+            pipeline_id=settings.get("pipeline_id"),
+            deal_stage_id=settings.get("deal_stage_id"),
+        )
+        return result
+    except Exception as e:
+        logger.error("HubSpot push failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"HubSpot push failed: {str(e)[:200]}")
+
+
+@app.get("/api/hubspot/sync-log")
+def hubspot_sync_log(_user_id: str = Depends(require_auth)):
+    """Recent HubSpot sync history."""
+    client = db.get_client()
+    resp = (
+        client.table("hubspot_sync_log")
+        .select("*")
+        .order("created_at", desc=True)
+        .limit(50)
+        .execute()
+    )
+    return resp.data
+
+
+# ---------------------------------------------------------------------------
+# Sales Actions endpoint
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/actions")
+def get_actions(_user_id: str = Depends(require_auth)):
+    """Prioritized list of actionable discoveries with contacts.
+
+    Returns accepted discoveries joined with project data, EPC entity,
+    contacts, and HubSpot sync status. Sorted by lead_score descending.
+    """
+    client = db.get_client()
+
+    # Get accepted discoveries with project info
+    disc_resp = (
+        client.table("epc_discoveries")
+        .select(
+            "id, epc_contractor, confidence, source_count, created_at, "
+            "project:project_id(id, project_name, developer, mw_capacity, state, expected_cod, lead_score)"
+        )
+        .eq("review_status", "accepted")
+        .order("created_at", desc=True)
+        .limit(100)
+        .execute()
+    )
+
+    actions = []
+    for disc in disc_resp.data:
+        proj = disc.get("project") or {}
+        epc_name = disc.get("epc_contractor", "")
+
+        # Look up entity + contacts
+        entity = resolve_entity(epc_name) if epc_name else None
+        entity_id = entity["id"] if entity else None
+        contacts = db.get_contacts_for_entity(entity_id) if entity_id else []
+
+        # Check HubSpot sync status
+        has_hubspot_sync = False
+        if entity_id:
+            sync_resp = (
+                client.table("hubspot_sync_log")
+                .select("id")
+                .eq("entity_id", entity_id)
+                .eq("sync_status", "success")
+                .eq("hubspot_object_type", "company")
+                .limit(1)
+                .execute()
+            )
+            has_hubspot_sync = bool(sync_resp.data)
+
+        # Contact discovery status
+        contact_status = entity.get("contact_discovery_status") if entity else None
+
+        actions.append({
+            "discovery_id": disc["id"],
+            "project_id": proj.get("id"),
+            "project_name": proj.get("project_name"),
+            "developer": proj.get("developer"),
+            "mw_capacity": proj.get("mw_capacity"),
+            "state": proj.get("state"),
+            "expected_cod": proj.get("expected_cod"),
+            "lead_score": proj.get("lead_score"),
+            "epc_contractor": epc_name,
+            "confidence": disc.get("confidence"),
+            "entity_id": entity_id,
+            "contacts": contacts,
+            "contact_count": len(contacts),
+            "contact_discovery_status": contact_status,
+            "has_hubspot_sync": has_hubspot_sync,
+        })
+
+    # Sort by lead_score descending
+    actions.sort(key=lambda a: a.get("lead_score") or 0, reverse=True)
+    return actions
 
 
 # ---------------------------------------------------------------------------
@@ -623,7 +857,7 @@ async def chat(req: ChatRequest, request: Request, _user_id: str = Depends(requi
         conversation_id = req.conversation_id
     else:
         first_text = req.messages[0].get_text() if req.messages else "New conversation"
-        conv = db.create_conversation(title=first_text[:80])
+        conv = db.create_conversation(title=first_text[:80], user_id=_user_id)
         conversation_id = conv["id"]
 
     # If agent is already running for this conversation, reconnect
@@ -785,11 +1019,11 @@ def conversation_status(conversation_id: str, _user_id: str = Depends(require_au
 
 @app.get("/api/conversations")
 def get_conversations(_user_id: str = Depends(require_auth)):
-    """List recent chat conversations."""
-    return db.list_conversations()
+    """List recent chat conversations for the current user."""
+    return db.list_conversations(user_id=_user_id)
 
 
 @app.get("/api/conversations/{conversation_id}/messages")
 def get_conversation_messages(conversation_id: str, _user_id: str = Depends(require_auth)):
-    """Get all messages for a conversation."""
-    return db.get_conversation_messages(conversation_id)
+    """Get all messages for a conversation (only if owned by current user)."""
+    return db.get_conversation_messages(conversation_id, user_id=_user_id)

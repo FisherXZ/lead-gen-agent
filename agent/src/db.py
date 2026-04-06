@@ -390,6 +390,93 @@ def get_discoveries_for_projects(project_ids: list[str]) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Contacts
+# ---------------------------------------------------------------------------
+
+
+def store_contacts(entity_id: str, contacts: list[dict]) -> list[dict]:
+    """Upsert contacts for an entity. Handles dedup via ON CONFLICT."""
+    if not contacts:
+        return []
+    client = get_client()
+    stored = []
+    for c in contacts:
+        data = {
+            "entity_id": entity_id,
+            "full_name": c["full_name"],
+            "title": c.get("title"),
+            "linkedin_url": c.get("linkedin_url"),
+            "source_url": c.get("source_url"),
+            "source_method": c.get("source_method"),
+            "outreach_context": c.get("outreach_context"),
+        }
+        try:
+            resp = client.table("contacts").upsert(
+                data, on_conflict="entity_id,lower(full_name)"
+            ).execute()
+            if resp.data:
+                stored.append(resp.data[0])
+        except Exception:
+            # Fallback: try insert, ignore if exists
+            try:
+                resp = client.table("contacts").insert(data).execute()
+                if resp.data:
+                    stored.append(resp.data[0])
+            except Exception:
+                pass  # Dedup conflict — contact already exists
+    return stored
+
+
+def get_contacts_for_entity(entity_id: str) -> list[dict]:
+    """Get all contacts for an entity."""
+    client = get_client()
+    resp = (
+        client.table("contacts")
+        .select("*")
+        .eq("entity_id", entity_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return resp.data
+
+
+def get_contacts_for_project(project_id: str) -> list[dict]:
+    """Get contacts for the EPC entity associated with a project.
+
+    Joins through epc_discoveries (accepted) → entities → contacts.
+    """
+    client = get_client()
+    # Find accepted EPC discovery for this project
+    disc_resp = (
+        client.table("epc_discoveries")
+        .select("epc_contractor")
+        .eq("project_id", project_id)
+        .eq("review_status", "accepted")
+        .limit(1)
+        .execute()
+    )
+    if not disc_resp.data:
+        return []
+
+    epc_name = disc_resp.data[0].get("epc_contractor")
+    if not epc_name or epc_name == "Unknown":
+        return []
+
+    # Find entity
+    entity_resp = (
+        client.table("entities")
+        .select("id")
+        .ilike("name", epc_name)
+        .limit(1)
+        .execute()
+    )
+    if not entity_resp.data:
+        return []
+
+    return get_contacts_for_entity(entity_resp.data[0]["id"])
+
+
+# ---------------------------------------------------------------------------
 # Agent memory
 # ---------------------------------------------------------------------------
 
@@ -497,11 +584,13 @@ def read_scratch(session_id: str, key: str | None = None) -> list[dict]:
 # Chat conversations
 # ---------------------------------------------------------------------------
 
-def create_conversation(title: str | None = None) -> dict:
+def create_conversation(title: str | None = None, user_id: str | None = None) -> dict:
     client = get_client()
     data = {}
     if title:
         data["title"] = title[:120]
+    if user_id:
+        data["user_id"] = user_id
     resp = client.table("chat_conversations").insert(data).execute()
     return resp.data[0]
 
@@ -523,8 +612,12 @@ def save_message(
     return resp.data[0]
 
 
-def get_conversation_messages(conversation_id: str) -> list[dict]:
+def get_conversation_messages(conversation_id: str, user_id: str | None = None) -> list[dict]:
     client = get_client()
+    if user_id:
+        conv = client.table("chat_conversations").select("user_id").eq("id", conversation_id).maybe_single().execute()
+        if not conv.data or conv.data.get("user_id") != user_id:
+            return []
     return (
         client.table("chat_messages")
         .select("*")
@@ -535,11 +628,13 @@ def get_conversation_messages(conversation_id: str) -> list[dict]:
     )
 
 
-def list_conversations(limit: int = 20) -> list[dict]:
+def list_conversations(limit: int = 20, user_id: str | None = None) -> list[dict]:
     client = get_client()
+    query = client.table("chat_conversations").select("*")
+    if user_id:
+        query = query.eq("user_id", user_id)
     return (
-        client.table("chat_conversations")
-        .select("*")
+        query
         .order("updated_at", desc=True)
         .limit(limit)
         .execute()

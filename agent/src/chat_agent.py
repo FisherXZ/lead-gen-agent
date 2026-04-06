@@ -147,11 +147,15 @@ async def run_chat_agent(
 
     remember_count = 0
 
+    had_tool_rounds = False  # Track if prior rounds used tools
+
     for _round in range(MAX_TOOL_ROUNDS):
         # Stream the response
         tool_calls: list[dict] = []
         current_tool_input = ""
         current_text_part_id: str | None = None
+        # In rounds after a tool round, text is "thinking" (reasoning between tools)
+        is_thinking_round = had_tool_rounds
 
         async with client.messages.stream(
             model=MODEL,
@@ -166,7 +170,10 @@ async def run_chat_agent(
                 if event.type == "content_block_start":
                     if event.content_block.type == "text":
                         current_text_part_id = str(len(all_parts))
-                        yield stream_writer.text_start(current_text_part_id)
+                        if is_thinking_round:
+                            yield stream_writer.thinking_start(current_text_part_id)
+                        else:
+                            yield stream_writer.text_start(current_text_part_id)
 
                     elif event.content_block.type == "tool_use":
                         tool_calls.append({
@@ -183,16 +190,24 @@ async def run_chat_agent(
                 elif event.type == "content_block_delta":
                     if event.delta.type == "text_delta" and current_text_part_id is not None:
                         full_text += event.delta.text
-                        yield stream_writer.text_delta(
-                            current_text_part_id, event.delta.text
-                        )
+                        if is_thinking_round:
+                            yield stream_writer.thinking_delta(
+                                current_text_part_id, event.delta.text
+                            )
+                        else:
+                            yield stream_writer.text_delta(
+                                current_text_part_id, event.delta.text
+                            )
 
                     elif event.delta.type == "input_json_delta":
                         current_tool_input += event.delta.partial_json
 
                 elif event.type == "content_block_stop":
                     if current_text_part_id is not None:
-                        yield stream_writer.text_end(current_text_part_id)
+                        if is_thinking_round:
+                            yield stream_writer.thinking_end(current_text_part_id)
+                        else:
+                            yield stream_writer.text_end(current_text_part_id)
                         all_parts.append({"type": "text", "text": full_text})
                         current_text_part_id = None
 
@@ -213,6 +228,7 @@ async def run_chat_agent(
 
         # Execute any tool calls
         if response.stop_reason == "tool_use" and tool_calls:
+            had_tool_rounds = True
             tool_results = []
             for tc in tool_calls:
                 # Special-case report_findings to store discoveries in DB

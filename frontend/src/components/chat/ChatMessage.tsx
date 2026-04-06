@@ -4,6 +4,9 @@ import type { UIMessage } from "ai";
 import FileAttachment from "./FileAttachment";
 import ToolPart from "./ToolPart";
 import MarkdownMessage from "./MarkdownMessage";
+import ThinkingAccordion from "./ThinkingAccordion";
+import ResearchTimeline from "./ResearchTimeline";
+import SourceSummaryBar from "./SourceSummaryBar";
 
 interface ChatMessageProps {
   message: UIMessage;
@@ -96,7 +99,169 @@ export default function ChatMessage({ message, isStreaming = false }: ChatMessag
     );
   }
 
-  // ─── Assistant message ───
+  // ─── Helper: render a single tool group as a ToolPart ───
+  function renderToolPart(group: { type: "tool"; part: typeof message.parts[number]; index: number }) {
+    const toolPart = group.part as Record<string, unknown>;
+    const partType = toolPart.type as string;
+    const toolCallId = (toolPart.toolCallId as string) || String(group.index);
+    const toolName = (toolPart.toolName as string)
+      || (partType.startsWith("tool-") ? partType.slice(5) : null)
+      || "unknown";
+    const partState = toolPart.state as string | undefined;
+    return (
+      <ToolPart
+        key={toolCallId}
+        toolInvocation={{
+          toolCallId,
+          toolName,
+          state: (partState === "input-streaming" || partState === "input-available" || partState === "call" || partState === "partial-call") ? "call" : "result",
+          input: toolPart.input as Record<string, unknown> | undefined,
+          output: "output" in toolPart ? (toolPart.output as unknown) : undefined,
+        }}
+      />
+    );
+  }
+
+  // ─── Determine if we should use timeline mode ───
+  const toolGroups = partGroups.filter((g) => g.type === "tool") as Array<{
+    type: "tool";
+    part: typeof message.parts[number];
+    index: number;
+  }>;
+  const hasNotifyProgress = toolGroups.some((g) => {
+    const tp = g.part as Record<string, unknown>;
+    return (tp.toolName as string) === "notify_progress";
+  });
+  const useTimeline = toolGroups.length >= 2 || hasNotifyProgress;
+
+  // ─── Build timeline stages if in timeline mode ───
+  function buildTimelineStages() {
+    // Separate thinking, tool, and response groups
+    const thinkingGroups: Array<{ type: "text"; parts: { text: string; index: number }[] }> = [];
+    const responseGroups: Array<{ type: "text"; parts: { text: string; index: number }[] }> = [];
+    const toolSequence: Array<{
+      type: "tool";
+      part: typeof message.parts[number];
+      index: number;
+    }> = [];
+
+    for (const group of partGroups) {
+      if (group.type === "text") {
+        const isThinking = lastToolGroupIndex >= 0 && partGroups.indexOf(group) <= lastToolGroupIndex;
+        if (isThinking) thinkingGroups.push(group);
+        else responseGroups.push(group);
+      } else {
+        toolSequence.push(group);
+      }
+    }
+
+    // Group tools between notify_progress markers into stages
+    type Stage = {
+      name: string;
+      status: "pending" | "active" | "complete" | "error";
+      tools: typeof toolSequence;
+    };
+    const stages: Stage[] = [];
+
+    if (hasNotifyProgress) {
+      let currentStage: Stage | null = null;
+      for (const tg of toolSequence) {
+        const tp = tg.part as Record<string, unknown>;
+        const toolName = (tp.toolName as string) || "";
+        if (toolName === "notify_progress") {
+          const input = tp.input as Record<string, unknown> | undefined;
+          const stageName = (input?.stage as string) || "research";
+          currentStage = { name: stageName, status: "pending", tools: [] };
+          stages.push(currentStage);
+        } else {
+          if (!currentStage) {
+            currentStage = { name: "research", status: "pending", tools: [] };
+            stages.push(currentStage);
+          }
+          currentStage.tools.push(tg);
+        }
+      }
+    } else {
+      // Single "Research" stage for all tools
+      stages.push({ name: "research", status: "pending", tools: toolSequence });
+    }
+
+    // Compute stage statuses
+    for (const stage of stages) {
+      const states = stage.tools.map((tg) => {
+        const tp = tg.part as Record<string, unknown>;
+        const s = tp.state as string | undefined;
+        const output = tp.output as Record<string, unknown> | undefined;
+        if (s === "result" && output && "error" in output) return "error";
+        if (s === "result") return "done";
+        return "running";
+      });
+
+      if (states.length === 0) {
+        stage.status = "pending";
+      } else if (states.every((s) => s === "done")) {
+        stage.status = "complete";
+      } else if (states.some((s) => s === "error") && states.every((s) => s === "error" || s === "done")) {
+        stage.status = "error";
+      } else if (states.some((s) => s === "running")) {
+        stage.status = "active";
+      } else {
+        stage.status = "pending";
+      }
+    }
+
+    return { thinkingGroups, responseGroups, stages };
+  }
+
+  // ─── Assistant message: Timeline mode ───
+  if (useTimeline) {
+    const { thinkingGroups, responseGroups, stages } = buildTimelineStages();
+
+    const timelineStages = stages.map((stage) => ({
+      name: stage.name,
+      status: stage.status,
+      children: stage.tools.map((tg) => renderToolPart(tg)),
+    }));
+
+    return (
+      <div className="space-y-2">
+        {/* Thinking accordions */}
+        {thinkingGroups.map((group, gi) => {
+          const thinkingTexts = group.parts.map((tp) => tp.text).filter(Boolean);
+          const isThinkingStreaming =
+            isStreaming && group.parts.some((tp) => tp.index === lastTextIndex);
+          return (
+            <ThinkingAccordion
+              key={`thinking-${gi}`}
+              texts={thinkingTexts}
+              isStreaming={isThinkingStreaming}
+            />
+          );
+        })}
+
+        {/* Research timeline */}
+        <ResearchTimeline stages={timelineStages} />
+
+        {/* Source summary bar — between timeline and response */}
+        <SourceSummaryBar message={message} />
+
+        {/* Response text */}
+        {responseGroups.map((group, gi) => (
+          <div key={`response-${gi}`} className="text-text-primary pt-1">
+            {group.parts.map((tp) => (
+              <MarkdownMessage
+                key={tp.index}
+                content={tp.text}
+                isStreaming={isStreaming && tp.index === lastTextIndex}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // ─── Assistant message: Flat mode (0-1 tools) ───
   return (
     <div className="space-y-2">
       {partGroups.map((group, gi) => {
@@ -104,25 +269,19 @@ export default function ChatMessage({ message, isStreaming = false }: ChatMessag
           const isThinking = lastToolGroupIndex >= 0 && gi <= lastToolGroupIndex;
 
           if (isThinking) {
-            // ─── Thinking text ─── muted, small, left border, de-emphasized
+            const thinkingTexts = group.parts.map((tp) => tp.text).filter(Boolean);
+            const isThinkingStreaming =
+              isStreaming &&
+              group.parts.some((tp) => tp.index === lastTextIndex);
             return (
-              <div
-                key={`text-${gi}`}
-                className="border-l-2 border-border-subtle pl-3 py-1"
-              >
-                {group.parts.map((tp) => (
-                  <p
-                    key={tp.index}
-                    className="text-[13px] leading-relaxed text-text-tertiary"
-                  >
-                    {tp.text}
-                  </p>
-                ))}
-              </div>
+              <ThinkingAccordion
+                key={`thinking-${gi}`}
+                texts={thinkingTexts}
+                isStreaming={isThinkingStreaming}
+              />
             );
           }
 
-          // ─── Response text ─── prominent, full typography, no bubble
           return (
             <div key={`text-${gi}`} className="text-text-primary pt-1">
               {group.parts.map((tp) => (
@@ -136,26 +295,7 @@ export default function ChatMessage({ message, isStreaming = false }: ChatMessag
           );
         }
 
-        // ─── Tool calls ─── compact, muted, subordinate
-        const toolPart = group.part as Record<string, unknown>;
-        const partType = toolPart.type as string;
-        const toolCallId = (toolPart.toolCallId as string) || String(group.index);
-        const toolName = (toolPart.toolName as string)
-          || (partType.startsWith("tool-") ? partType.slice(5) : null)
-          || "unknown";
-        const partState = toolPart.state as string | undefined;
-        return (
-          <ToolPart
-            key={toolCallId}
-            toolInvocation={{
-              toolCallId,
-              toolName,
-              state: (partState === "input-streaming" || partState === "input-available" || partState === "call" || partState === "partial-call") ? "call" : "result",
-              input: toolPart.input as Record<string, unknown> | undefined,
-              output: "output" in toolPart ? (toolPart.output as unknown) : undefined,
-            }}
-          />
-        );
+        return renderToolPart(group);
       })}
     </div>
   );

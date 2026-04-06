@@ -42,6 +42,39 @@ body {
   color: var(--color-text-primary);
 }
 
+/* Thinking accordion pulse */
+@keyframes thinking-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+.animate-thinking-pulse {
+  animation: thinking-pulse 1.5s ease-in-out infinite;
+}
+
+/* Tool card fade-in from timeline */
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-slide-in {
+  animation: fadeSlideIn 150ms ease-out both;
+}
+
+/* Timeline active dot pulse */
+@keyframes timeline-dot-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+.animate-timeline-pulse {
+  animation: timeline-dot-pulse 1.5s ease-in-out infinite;
+}
+
 /* Badge utility classes */
 .badge-green {
   background: rgba(92, 183, 122, 0.15);
