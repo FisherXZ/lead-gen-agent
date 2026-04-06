@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 
-export const revalidate = 300; // 5 min ISR cache
+export const dynamic = "force-dynamic"; // env vars not available at build time
 
 export async function GET() {
   const supabase = createServiceClient();
