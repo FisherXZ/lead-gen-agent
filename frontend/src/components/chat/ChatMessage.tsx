@@ -4,7 +4,6 @@ import type { UIMessage } from "ai";
 import FileAttachment from "./FileAttachment";
 import ToolPart from "./ToolPart";
 import MarkdownMessage from "./MarkdownMessage";
-import ThinkingAccordion from "./ThinkingAccordion";
 import ResearchTimeline from "./ResearchTimeline";
 import SourceSummaryBar from "./SourceSummaryBar";
 
@@ -147,9 +146,7 @@ export default function ChatMessage({ message, isStreaming = false }: ChatMessag
 
     for (const group of partGroups) {
       if (group.type === "text") {
-        const isThinking = lastToolGroupIndex >= 0 && partGroups.indexOf(group) <= lastToolGroupIndex;
-        if (isThinking) thinkingGroups.push(group);
-        else responseGroups.push(group);
+        responseGroups.push(group);
       } else {
         toolSequence.push(group);
       }
@@ -225,20 +222,6 @@ export default function ChatMessage({ message, isStreaming = false }: ChatMessag
 
     return (
       <div className="space-y-2">
-        {/* Thinking accordions */}
-        {thinkingGroups.map((group, gi) => {
-          const thinkingTexts = group.parts.map((tp) => tp.text).filter(Boolean);
-          const isThinkingStreaming =
-            isStreaming && group.parts.some((tp) => tp.index === lastTextIndex);
-          return (
-            <ThinkingAccordion
-              key={`thinking-${gi}`}
-              texts={thinkingTexts}
-              isStreaming={isThinkingStreaming}
-            />
-          );
-        })}
-
         {/* Research timeline */}
         <ResearchTimeline stages={timelineStages} />
 
@@ -266,22 +249,6 @@ export default function ChatMessage({ message, isStreaming = false }: ChatMessag
     <div className="space-y-2">
       {partGroups.map((group, gi) => {
         if (group.type === "text") {
-          const isThinking = lastToolGroupIndex >= 0 && gi <= lastToolGroupIndex;
-
-          if (isThinking) {
-            const thinkingTexts = group.parts.map((tp) => tp.text).filter(Boolean);
-            const isThinkingStreaming =
-              isStreaming &&
-              group.parts.some((tp) => tp.index === lastTextIndex);
-            return (
-              <ThinkingAccordion
-                key={`thinking-${gi}`}
-                texts={thinkingTexts}
-                isStreaming={isThinkingStreaming}
-              />
-            );
-          }
-
           return (
             <div key={`text-${gi}`} className="text-text-primary pt-1">
               {group.parts.map((tp) => (
