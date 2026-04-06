@@ -12,10 +12,10 @@ pytest.skip(
     allow_module_level=True,
 )
 
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from types import SimpleNamespace  # noqa: E402
+from unittest.mock import AsyncMock, MagicMock, patch  # noqa: E402
 
-from src.models import AgentResult
+from src.models import AgentResult  # noqa: E402
 
 REFLECTION_MAX_RETRIES = 3  # placeholder so tests below are syntactically valid
 _run_reflection = None  # placeholder

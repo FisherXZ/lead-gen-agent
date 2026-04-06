@@ -13,13 +13,12 @@ Covers:
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.main import _run_agent_job_v2
 from src.sse import StreamWriter
-
 
 # ---------------------------------------------------------------------------
 # Helpers
