@@ -90,7 +90,10 @@ export default function CollapsibleToolCard({
   // Auto-update expansion when status transitions from running to done/error
   useEffect(() => {
     if (prevStatusRef.current === "running" && status !== "running") {
-      setExpanded(defaultExpanded);
+      // Defer state update to avoid synchronous setState within effect
+      const id = setTimeout(() => setExpanded(defaultExpanded), 0);
+      prevStatusRef.current = status;
+      return () => clearTimeout(id);
     }
     prevStatusRef.current = status;
   }, [status, defaultExpanded]);

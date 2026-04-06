@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 
 const STORAGE_KEY = "anthropic-api-key";
 
@@ -17,13 +17,10 @@ const ApiKeyContext = createContext<ApiKeyContextValue>({
 });
 
 export function ApiKeyProvider({ children }: { children: ReactNode }) {
-  const [apiKey, setApiKeyState] = useState<string | null>(null);
-
-  // Hydrate from localStorage on mount
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) setApiKeyState(stored);
-  }, []);
+  const [apiKey, setApiKeyState] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem(STORAGE_KEY);
+  });
 
   function setApiKey(key: string) {
     localStorage.setItem(STORAGE_KEY, key);

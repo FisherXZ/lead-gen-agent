@@ -2,25 +2,23 @@
 from __future__ import annotations
 
 import json
+
 import pytest
 
 from runtime.compactor import (
+    CONTINUATION_PREAMBLE,
+    RECENT_MESSAGES_NOTE,
     HeuristicCompactor,
     _build_continuation_message,
     _detect_existing_summary,
     _estimate_tokens,
     _extract_file_candidates,
     _extract_first_text,
-    _extract_highlights,
-    _extract_timeline,
     _format_summary,
     _merge_summaries,
     _summarize_messages,
     _truncate,
-    CONTINUATION_PREAMBLE,
-    RECENT_MESSAGES_NOTE,
 )
-
 
 # ---------------------------------------------------------------------------
 # _truncate

@@ -8,7 +8,10 @@ export function usePreferences() {
   const [preferences, setPreferences] = useState<Preferences>({});
   const [loading, setLoading] = useState(true);
   const prefsRef = useRef(preferences);
-  prefsRef.current = preferences;
+
+  useEffect(() => {
+    prefsRef.current = preferences;
+  }, [preferences]);
 
   useEffect(() => {
     fetch("/api/preferences")
