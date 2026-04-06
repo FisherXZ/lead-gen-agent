@@ -15,9 +15,12 @@ Usage:
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import httpx
+
+_logger = logging.getLogger(__name__)
 
 from . import (
     approve_discovery,
@@ -111,8 +114,8 @@ def get_tool_names() -> list[str]:
 async def execute_tool(name: str, tool_input: dict) -> dict:
     """Dispatch to the named tool's execute function.
 
-    Catches common error types and returns structured error dicts.
-    Unknown/unexpected exceptions are re-raised.
+    Catches all exceptions and returns structured error dicts.
+    Raises KeyError only for unknown tool names (not registered).
     """
     if name not in _REGISTRY:
         raise KeyError(f"Unknown tool: {name}. Available: {list(_REGISTRY.keys())}")
@@ -136,8 +139,7 @@ async def execute_tool(name: str, tool_input: dict) -> dict:
             "error_category": "search_tool_error",
         }
     except Exception as exc:
-        import logging
-        logging.getLogger(__name__).exception("Unexpected error in tool %s", name)
+        _logger.exception("Unexpected error in tool %s", name)
         return {
             "error": f"Unexpected error in {name}: {type(exc).__name__}",
             "error_category": "tool_error",

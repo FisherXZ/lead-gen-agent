@@ -71,6 +71,7 @@ async def execute(tool_input: dict) -> dict:
         .select("*")
         .eq("project_id", project_id)
         .eq("review_status", "accepted")
+        .order("created_at", desc=True)
         .limit(1)
         .execute()
     )

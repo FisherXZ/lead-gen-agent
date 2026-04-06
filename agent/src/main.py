@@ -14,12 +14,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import anthropic
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from . import db
-from .auth import get_user_id
+from .auth import get_user_id, require_admin
 from .agent_jobs import (
     cancel_job,
     cancel_job_for_conversation,
@@ -31,7 +31,7 @@ from .agent_jobs import (
 )
 from .batch import run_batch
 from .batch_progress import cancel_batch, cancel_batch_for_conversation, get_batch
-from .knowledge_base import build_knowledge_context, promote_discovery_to_kb, process_rejection_into_kb
+from .knowledge_base import build_knowledge_context, promote_discovery_to_kb, process_rejection_into_kb, resolve_entity
 from .research import run_research, run_research_plan
 from .chat_agent import run_chat_agent
 from .knowledge_base import get_entity_with_profile, list_entities, rebuild_profile_if_stale
@@ -353,7 +353,7 @@ async def discover_batch(req: BatchDiscoverRequest, request: Request, _user_id: 
 
 
 @app.patch("/api/discover/{discovery_id}/review")
-def review_discovery(discovery_id: str, req: ReviewRequest, request: Request, _user_id: str = Depends(require_auth)):
+async def review_discovery(discovery_id: str, req: ReviewRequest, request: Request, _user_id: str = Depends(require_auth)):
     """Accept or reject an EPC discovery."""
     if req.action not in ("accepted", "rejected"):
         raise HTTPException(status_code=400, detail="Action must be 'accepted' or 'rejected'")
@@ -391,7 +391,6 @@ def review_discovery(discovery_id: str, req: ReviewRequest, request: Request, _u
                 epc_name = discovery.get("epc_contractor")
                 if epc_name and epc_name != "Unknown":
                     try:
-                        from .knowledge_base import resolve_entity
                         epc_entity = resolve_entity(epc_name)
                         if epc_entity:
                             api_key = request.headers.get("x-anthropic-api-key")
@@ -486,7 +485,7 @@ def get_contacts(entity_id: str, _user_id: str = Depends(require_auth)):
 
 
 @app.post("/api/hubspot/connect")
-def hubspot_connect(req: HubSpotConnectRequest, _user_id: str = Depends(require_auth)):
+def hubspot_connect(req: HubSpotConnectRequest, _user_id: str = Depends(require_admin)):
     """Validate and save HubSpot Private App token."""
     from .hubspot import save_settings
 
@@ -515,7 +514,7 @@ def hubspot_status(_user_id: str = Depends(require_auth)):
 
 
 @app.post("/api/hubspot/push")
-def hubspot_push(req: HubSpotPushRequest, _user_id: str = Depends(require_auth)):
+def hubspot_push(req: HubSpotPushRequest, _user_id: str = Depends(require_admin)):
     """Push a discovery to HubSpot (Company + Deal + Contacts)."""
     project_id = req.project_id
 
@@ -539,6 +538,7 @@ def hubspot_push(req: HubSpotPushRequest, _user_id: str = Depends(require_auth))
         .select("*")
         .eq("project_id", project_id)
         .eq("review_status", "accepted")
+        .order("created_at", desc=True)
         .limit(1)
         .execute()
     )
@@ -546,7 +546,6 @@ def hubspot_push(req: HubSpotPushRequest, _user_id: str = Depends(require_auth))
         raise HTTPException(status_code=400, detail="No accepted discovery for this project")
 
     epc_name = disc_resp.data[0].get("epc_contractor")
-    from .knowledge_base import resolve_entity
     entity = resolve_entity(epc_name) if epc_name else None
     if not entity:
         raise HTTPException(status_code=400, detail=f"EPC entity '{epc_name}' not found")

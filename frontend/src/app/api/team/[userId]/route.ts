@@ -32,13 +32,18 @@ export const PATCH = withAdminParams<{ userId: string }>(
       }
     }
 
-    const { error } = await service
+    const { data, error } = await service
       .from("user_roles")
       .update({ role: newRole, updated_at: new Date().toISOString() })
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .select();
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    if (!data || data.length === 0) {
+      return NextResponse.json({ error: "User role not found" }, { status: 404 });
     }
 
     return NextResponse.json({ ok: true, userId, role: newRole });
@@ -72,14 +77,20 @@ export const DELETE = withAdminParams<{ userId: string }>(
 
     // Remove from allowlist
     if (targetUser.email) {
-      await service
+      const { error: allowlistError } = await service
         .from("allowed_emails")
         .delete()
         .eq("email", targetUser.email.toLowerCase());
+      if (allowlistError) {
+        return NextResponse.json({ error: `Failed to remove from allowlist: ${allowlistError.message}` }, { status: 500 });
+      }
     }
 
     // Remove role row (will cascade on user delete, but be explicit)
-    await service.from("user_roles").delete().eq("user_id", userId);
+    const { error: roleError } = await service.from("user_roles").delete().eq("user_id", userId);
+    if (roleError) {
+      return NextResponse.json({ error: `Failed to remove role: ${roleError.message}` }, { status: 500 });
+    }
 
     // Delete auth user
     const { error } = await service.auth.admin.deleteUser(userId);

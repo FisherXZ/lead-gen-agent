@@ -412,7 +412,7 @@ def store_contacts(entity_id: str, contacts: list[dict]) -> list[dict]:
         }
         try:
             resp = client.table("contacts").upsert(
-                data, on_conflict="entity_id,lower(full_name)"
+                data, on_conflict="entity_id,full_name"
             ).execute()
             if resp.data:
                 stored.append(resp.data[0])
@@ -452,6 +452,7 @@ def get_contacts_for_project(project_id: str) -> list[dict]:
         .select("epc_contractor")
         .eq("project_id", project_id)
         .eq("review_status", "accepted")
+        .order("created_at", desc=True)
         .limit(1)
         .execute()
     )

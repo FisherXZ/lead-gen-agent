@@ -49,8 +49,8 @@ DEFINITION = {
 
 async def execute(tool_input: dict) -> dict:
     """Find contacts at an EPC company."""
-    entity_id = tool_input.get("entity_id", "").strip()
-    entity_name = tool_input.get("entity_name", "").strip()
+    entity_id = str(tool_input.get("entity_id") or "").strip()
+    entity_name = str(tool_input.get("entity_name") or "").strip()
 
     if not entity_id or not entity_name:
         return {"error": "Both entity_id and entity_name are required."}

@@ -358,5 +358,16 @@ def push_discovery(
                 "error": error_msg,
             })
             result["errors"].append(f"Contact {contact.get('full_name')}: {error_msg}")
+            try:
+                db_client.table("hubspot_sync_log").insert({
+                    "contact_id": contact.get("id"),
+                    "entity_id": entity.get("id"),
+                    "hubspot_object_type": "contact",
+                    "sync_status": "error",
+                    "error_message": error_msg,
+                    "synced_at": now,
+                }).execute()
+            except Exception:
+                pass
 
     return result

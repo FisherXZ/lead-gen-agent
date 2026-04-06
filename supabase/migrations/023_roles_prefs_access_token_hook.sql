@@ -81,8 +81,15 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+    assigned_role TEXT := 'member';
 BEGIN
-    INSERT INTO user_roles (user_id, role) VALUES (NEW.id, 'member')
+    -- Auto-promote known admin emails
+    IF NEW.email IN ('fisher262425@gmail.com', 'liav@civrobotics.com') THEN
+        assigned_role := 'admin';
+    END IF;
+
+    INSERT INTO user_roles (user_id, role) VALUES (NEW.id, assigned_role)
     ON CONFLICT (user_id) DO NOTHING;
 
     INSERT INTO user_preferences (user_id) VALUES (NEW.id)

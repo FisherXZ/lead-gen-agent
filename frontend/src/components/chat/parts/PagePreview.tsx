@@ -27,7 +27,8 @@ function extractFirstSentence(text: string): string {
 }
 
 export default function PagePreview({ data, input }: PagePreviewProps) {
-  const url = input?.url as string | undefined;
+  const rawUrl = input?.url as string | undefined;
+  const url = rawUrl && /^https?:\/\//i.test(rawUrl) ? rawUrl : undefined;
   const title = data.title as string | undefined;
   const text = data.text as string | undefined;
   const extract = text ? extractFirstSentence(text) : null;
