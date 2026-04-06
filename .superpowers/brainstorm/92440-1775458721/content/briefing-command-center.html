@@ -1,0 +1,169 @@
+<h2>Briefing Command Center — Full Design</h2>
+<p class="subtitle">Progress tracker funnel + stacked action sections. Click to approve or request changes.</p>
+
+<div class="cards">
+  <div class="card" data-choice="approve" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 28px 24px; background: #1C1A17; min-height: 700px; overflow-y: auto;">
+
+      <!-- Page Header -->
+      <div style="max-width: 900px; margin: 0 auto;">
+        <div style="margin-bottom: 24px;">
+          <div style="font-family: Georgia, serif; font-size: 28px; color: #FFF8EB; letter-spacing: -0.015em;">Briefing</div>
+          <div style="font-size: 13px; color: rgba(255,248,235,0.5); margin-top: 2px;">Your pipeline at a glance.</div>
+        </div>
+
+        <!-- ═══ PIPELINE FUNNEL ═══ -->
+        <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 10px; padding: 20px 24px; margin-bottom: 24px;">
+          <div style="display: flex; align-items: center; gap: 0;">
+
+            <!-- Stage 1: Projects -->
+            <div style="flex: 1; text-align: center; cursor: pointer; padding: 8px 4px; border-radius: 6px; transition: background 0.15s;" onmouseover="this.style.background='rgba(255,248,235,0.04)'" onmouseout="this.style.background='transparent'">
+              <div style="font-family: Georgia, serif; font-size: 28px; color: #FFF8EB;">423</div>
+              <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,248,235,0.4); margin-top: 2px;">Projects</div>
+            </div>
+
+            <!-- Arrow -->
+            <div style="color: rgba(255,248,235,0.15); font-size: 18px; margin: 0 2px;">→</div>
+
+            <!-- Stage 2: Researched -->
+            <div style="flex: 1; text-align: center; cursor: pointer; padding: 8px 4px; border-radius: 6px; transition: background 0.15s;" onmouseover="this.style.background='rgba(255,248,235,0.04)'" onmouseout="this.style.background='transparent'">
+              <div style="font-family: Georgia, serif; font-size: 28px; color: rgba(255,248,235,0.6);">64</div>
+              <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,248,235,0.4); margin-top: 2px;">Researched</div>
+            </div>
+
+            <!-- Arrow -->
+            <div style="color: rgba(255,248,235,0.15); font-size: 18px; margin: 0 2px;">→</div>
+
+            <!-- Stage 3: Pending Review (bottleneck — amber) -->
+            <div style="flex: 1; text-align: center; cursor: pointer; padding: 8px 4px; border-radius: 6px; background: rgba(232,162,48,0.08); border: 1px solid rgba(232,162,48,0.2);">
+              <div style="font-family: Georgia, serif; font-size: 28px; color: #E8A230;">61</div>
+              <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: #E8A230; margin-top: 2px;">Pending Review</div>
+            </div>
+
+            <!-- Arrow -->
+            <div style="color: rgba(255,248,235,0.15); font-size: 18px; margin: 0 2px;">→</div>
+
+            <!-- Stage 4: Accepted -->
+            <div style="flex: 1; text-align: center; cursor: pointer; padding: 8px 4px; border-radius: 6px; transition: background 0.15s;" onmouseover="this.style.background='rgba(255,248,235,0.04)'" onmouseout="this.style.background='transparent'">
+              <div style="font-family: Georgia, serif; font-size: 28px; color: #5CB77A;">3</div>
+              <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,248,235,0.4); margin-top: 2px;">Accepted</div>
+            </div>
+
+            <!-- Arrow -->
+            <div style="color: rgba(255,248,235,0.15); font-size: 18px; margin: 0 2px;">→</div>
+
+            <!-- Stage 5: In CRM -->
+            <div style="flex: 1; text-align: center; cursor: pointer; padding: 8px 4px; border-radius: 6px; transition: background 0.15s;" onmouseover="this.style.background='rgba(255,248,235,0.04)'" onmouseout="this.style.background='transparent'">
+              <div style="font-family: Georgia, serif; font-size: 28px; color: rgba(255,248,235,0.3);">0</div>
+              <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,248,235,0.4); margin-top: 2px;">In CRM</div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Quick nav strip -->
+        <div style="display: flex; gap: 8px; margin-bottom: 24px;">
+          <a style="font-size: 11px; color: rgba(255,248,235,0.5); text-decoration: none; padding: 4px 10px; border: 1px solid rgba(255,248,235,0.08); border-radius: 6px; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(255,248,235,0.2)'" onmouseout="this.style.borderColor='rgba(255,248,235,0.08)'">Pipeline →</a>
+          <a style="font-size: 11px; color: rgba(255,248,235,0.5); text-decoration: none; padding: 4px 10px; border: 1px solid rgba(255,248,235,0.08); border-radius: 6px; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(255,248,235,0.2)'" onmouseout="this.style.borderColor='rgba(255,248,235,0.08)'">Review Queue →</a>
+          <a style="font-size: 11px; color: rgba(255,248,235,0.5); text-decoration: none; padding: 4px 10px; border: 1px solid rgba(255,248,235,0.08); border-radius: 6px; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(255,248,235,0.2)'" onmouseout="this.style.borderColor='rgba(255,248,235,0.08)'">Actions →</a>
+          <a style="font-size: 11px; color: rgba(255,248,235,0.5); text-decoration: none; padding: 4px 10px; border: 1px solid rgba(255,248,235,0.08); border-radius: 6px; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(255,248,235,0.2)'" onmouseout="this.style.borderColor='rgba(255,248,235,0.08)'">Map →</a>
+        </div>
+
+        <!-- ═══ SECTION 1: NEEDS REVIEW ═══ -->
+        <div style="margin-bottom: 24px;">
+          <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px;">
+            <div>
+              <span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,248,235,0.38); font-weight: 500;">Needs Review</span>
+              <span style="font-size: 10px; color: #E8A230; margin-left: 8px;">61</span>
+            </div>
+            <a style="font-size: 11px; color: rgba(255,248,235,0.4); text-decoration: none;" onmouseover="this.style.color='#E8A230'" onmouseout="this.style.color='rgba(255,248,235,0.4)'">View all →</a>
+          </div>
+
+          <!-- Review card 1 -->
+          <div style="background: #252320; border: 1px solid rgba(232,162,48,0.15); border-radius: 8px; padding: 14px 16px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(232,162,48,0.3)'" onmouseout="this.style.borderColor='rgba(232,162,48,0.15)'">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+              <div>
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                  <span style="font-family: Georgia, serif; font-size: 14px; color: #FFF8EB;">McCarthy Building Companies</span>
+                  <span style="font-size: 10px; padding: 1px 6px; border-radius: 9999px; background: rgba(232,162,48,0.15); color: #E8A230;">likely</span>
+                </div>
+                <div style="font-size: 11px; color: rgba(255,248,235,0.5);">Sunrise Solar 400MW · ERCOT · Texas</div>
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <button style="padding: 4px 10px; font-size: 11px; border-radius: 6px; border: none; background: rgba(92,183,122,0.15); color: #5CB77A; cursor: pointer;">Approve</button>
+                <button style="padding: 4px 10px; font-size: 11px; border-radius: 6px; border: none; background: rgba(212,97,78,0.15); color: #D4614E; cursor: pointer;">Reject</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Review card 2 -->
+          <div style="background: #252320; border: 1px solid rgba(232,162,48,0.15); border-radius: 8px; padding: 14px 16px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(232,162,48,0.3)'" onmouseout="this.style.borderColor='rgba(232,162,48,0.15)'">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+              <div>
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                  <span style="font-family: Georgia, serif; font-size: 14px; color: #FFF8EB;">Blattner Energy</span>
+                  <span style="font-size: 10px; padding: 1px 6px; border-radius: 9999px; background: rgba(92,183,122,0.15); color: #5CB77A;">confirmed</span>
+                </div>
+                <div style="font-size: 11px; color: rgba(255,248,235,0.5);">Cottonwood Solar 250MW · CAISO · California</div>
+              </div>
+              <div style="display: flex; gap: 6px;">
+                <button style="padding: 4px 10px; font-size: 11px; border-radius: 6px; border: none; background: rgba(92,183,122,0.15); color: #5CB77A; cursor: pointer;">Approve</button>
+                <button style="padding: 4px 10px; font-size: 11px; border-radius: 6px; border: none; background: rgba(212,97,78,0.15); color: #D4614E; cursor: pointer;">Reject</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- +59 more indicator -->
+          <div style="text-align: center; padding: 8px; font-size: 11px; color: rgba(255,248,235,0.3);">+ 59 more pending</div>
+        </div>
+
+        <!-- ═══ SECTION 2: NEEDS INVESTIGATION ═══ -->
+        <div style="margin-bottom: 24px;">
+          <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px;">
+            <div>
+              <span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,248,235,0.38); font-weight: 500;">Needs Investigation</span>
+              <span style="font-size: 10px; color: rgba(255,248,235,0.5); margin-left: 8px;">359</span>
+            </div>
+            <a style="font-size: 11px; color: rgba(255,248,235,0.4); text-decoration: none;" onmouseover="this.style.color='#E8A230'" onmouseout="this.style.color='rgba(255,248,235,0.4)'">View pipeline →</a>
+          </div>
+
+          <!-- Investigation card 1 -->
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 14px 16px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(255,248,235,0.2)'" onmouseout="this.style.borderColor='rgba(255,248,235,0.08)'">
+            <div>
+              <span style="font-size: 13px; color: #FFF8EB;">Desert Bloom Solar 500MW</span>
+              <div style="font-size: 11px; color: rgba(255,248,235,0.4); margin-top: 2px;">MISO · Nevada · Score: 82</div>
+            </div>
+            <button style="padding: 4px 12px; font-size: 11px; border-radius: 6px; border: none; background: rgba(232,162,48,0.15); color: #E8A230; cursor: pointer;">Research EPC</button>
+          </div>
+
+          <!-- Investigation card 2 -->
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 14px 16px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(255,248,235,0.2)'" onmouseout="this.style.borderColor='rgba(255,248,235,0.08)'">
+            <div>
+              <span style="font-size: 13px; color: #FFF8EB;">Prairie Wind Solar 300MW</span>
+              <div style="font-size: 11px; color: rgba(255,248,235,0.4); margin-top: 2px;">ERCOT · Texas · Score: 76</div>
+            </div>
+            <button style="padding: 4px 12px; font-size: 11px; border-radius: 6px; border: none; background: rgba(232,162,48,0.15); color: #E8A230; cursor: pointer;">Research EPC</button>
+          </div>
+
+          <div style="text-align: center; padding: 8px; font-size: 11px; color: rgba(255,248,235,0.3);">Showing top by lead score · 357 more unresearched</div>
+        </div>
+
+        <!-- ═══ SECTION 3: RECENTLY COMPLETED (collapsed) ═══ -->
+        <div>
+          <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0; cursor: pointer; padding: 12px 0; border-top: 1px solid rgba(255,248,235,0.06);">
+            <div>
+              <span style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,248,235,0.38); font-weight: 500;">Recently Completed</span>
+              <span style="font-size: 10px; color: #5CB77A; margin-left: 8px;">3 accepted</span>
+            </div>
+            <span style="font-size: 11px; color: rgba(255,248,235,0.3);">▸ Expand</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>✓ Approve this design</h3>
+      <p>Pipeline funnel → Needs Review (inline approve/reject) → Needs Investigation (research EPC) → Recently Completed (collapsed). All at max-w-5xl, matching other pages' visual density.</p>
+    </div>
+  </div>
+</div>

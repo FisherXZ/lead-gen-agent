@@ -1,0 +1,134 @@
+<h2>Playbook Layout: Which structure feels right?</h2>
+<p class="subtitle">The top section is dynamic (live data), the bottom is categorized actions. How should they be arranged?</p>
+
+<div class="cards">
+
+  <!-- Option A: Vertical Stack -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 24px; background: #1C1A17;">
+      <div style="font-family: Georgia, serif; color: #FFF8EB; margin-bottom: 16px;">
+        <div style="font-size: 22px; margin-bottom: 4px;">Solar Project Research Assistant</div>
+        <div style="font-size: 13px; color: rgba(255,248,235,0.5);">What needs your attention</div>
+      </div>
+
+      <!-- Dynamic nudges -->
+      <div style="display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;">
+        <div style="background: rgba(232,162,48,0.15); color: #E8A230; padding: 8px 14px; border-radius: 8px; font-size: 12px; cursor: pointer;">
+          <strong>61 pending reviews</strong> — Review discoveries
+        </div>
+        <div style="background: rgba(92,183,122,0.15); color: #5CB77A; padding: 8px 14px; border-radius: 8px; font-size: 12px; cursor: pointer;">
+          <strong>3 new ERCOT projects</strong> — What's new?
+        </div>
+      </div>
+
+      <!-- Divider -->
+      <div style="border-top: 1px solid rgba(255,248,235,0.08); margin-bottom: 16px;"></div>
+
+      <!-- Category tabs -->
+      <div style="display: flex; gap: 12px; margin-bottom: 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,248,235,0.5);">
+        <span style="color: #E8A230; border-bottom: 1px solid #E8A230; padding-bottom: 4px;">Research</span>
+        <span>Contacts</span>
+        <span>Review</span>
+        <span>CRM</span>
+      </div>
+
+      <!-- Prompt pills for active tab -->
+      <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+        <div style="border: 1px solid rgba(255,248,235,0.12); padding: 6px 12px; border-radius: 16px; font-size: 12px; color: rgba(255,248,235,0.6);">Research EPC for Sunrise Solar 400MW</div>
+        <div style="border: 1px solid rgba(255,248,235,0.12); padding: 6px 12px; border-radius: 16px; font-size: 12px; color: rgba(255,248,235,0.6);">Which EPCs are most active in CAISO?</div>
+        <div style="border: 1px solid rgba(255,248,235,0.12); padding: 6px 12px; border-radius: 16px; font-size: 12px; color: rgba(255,248,235,0.6);">Batch research 10 unresearched projects</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A: Vertical Stack + Tabs</h3>
+      <p>Dynamic nudges on top, tabbed categories below. Clean separation. Perplexity-like — live context above, structured actions below.</p>
+    </div>
+  </div>
+
+  <!-- Option B: Two-Column -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 24px; background: #1C1A17;">
+      <div style="font-family: Georgia, serif; color: #FFF8EB; margin-bottom: 16px;">
+        <div style="font-size: 22px; margin-bottom: 4px;">Solar Project Research Assistant</div>
+        <div style="font-size: 13px; color: rgba(255,248,235,0.5);">Search, discover, and take action</div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <!-- Left: Dynamic -->
+        <div>
+          <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,248,235,0.38); margin-bottom: 8px;">Right Now</div>
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 12px; margin-bottom: 8px; font-size: 12px; color: rgba(255,248,235,0.6); cursor: pointer;">
+            <span style="color: #E8A230; font-weight: 600;">61</span> discoveries awaiting review
+          </div>
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 12px; margin-bottom: 8px; font-size: 12px; color: rgba(255,248,235,0.6); cursor: pointer;">
+            <span style="color: #5CB77A; font-weight: 600;">3</span> new projects in ERCOT
+          </div>
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 12px; font-size: 12px; color: rgba(255,248,235,0.6); cursor: pointer;">
+            <span style="color: #FFF8EB; font-weight: 600;">5</span> EPCs need contact discovery
+          </div>
+        </div>
+
+        <!-- Right: Static categories -->
+        <div>
+          <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,248,235,0.38); margin-bottom: 8px;">Actions</div>
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 10px 12px; margin-bottom: 6px; font-size: 12px; color: rgba(255,248,235,0.6); cursor: pointer;">
+            🔍 Research an EPC contractor
+          </div>
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 10px 12px; margin-bottom: 6px; font-size: 12px; color: rgba(255,248,235,0.6); cursor: pointer;">
+            👤 Find contacts at a company
+          </div>
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 10px 12px; margin-bottom: 6px; font-size: 12px; color: rgba(255,248,235,0.6); cursor: pointer;">
+            📊 Export pipeline to CSV
+          </div>
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 10px 12px; font-size: 12px; color: rgba(255,248,235,0.6); cursor: pointer;">
+            🏢 Push leads to HubSpot
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B: Two-Column Split</h3>
+      <p>"Right Now" (dynamic) on the left, "Actions" (static) on the right. Dashboard feel. Shows both lanes side-by-side without scrolling.</p>
+    </div>
+  </div>
+
+  <!-- Option C: Manus-style Outcome Cards -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 24px; background: #1C1A17;">
+      <div style="font-family: Georgia, serif; color: #FFF8EB; margin-bottom: 16px;">
+        <div style="font-size: 22px; margin-bottom: 4px;">Solar Project Research Assistant</div>
+        <div style="font-size: 13px; color: rgba(255,248,235,0.5);">What would you like to do?</div>
+      </div>
+
+      <!-- Dynamic banner -->
+      <div style="background: rgba(232,162,48,0.08); border: 1px solid rgba(232,162,48,0.2); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 12px; color: #E8A230; cursor: pointer;">
+        ⚡ 61 discoveries need review · 3 new ERCOT projects · 5 EPCs need contacts
+      </div>
+
+      <!-- Outcome cards grid -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+        <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 14px; cursor: pointer;">
+          <div style="font-size: 13px; color: #FFF8EB; font-weight: 500; margin-bottom: 4px;">Deep-dive a company</div>
+          <div style="font-size: 11px; color: rgba(255,248,235,0.5);">Research EPC, find contacts, check filings</div>
+        </div>
+        <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 14px; cursor: pointer;">
+          <div style="font-size: 13px; color: #FFF8EB; font-weight: 500; margin-bottom: 4px;">Triage the review queue</div>
+          <div style="font-size: 11px; color: rgba(255,248,235,0.5);">Walk through pending discoveries one by one</div>
+        </div>
+        <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 14px; cursor: pointer;">
+          <div style="font-size: 13px; color: #FFF8EB; font-weight: 500; margin-bottom: 4px;">Batch research projects</div>
+          <div style="font-size: 11px; color: rgba(255,248,235,0.5);">Run EPC discovery on multiple projects at once</div>
+        </div>
+        <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 14px; cursor: pointer;">
+          <div style="font-size: 13px; color: #FFF8EB; font-weight: 500; margin-bottom: 4px;">Pipeline intelligence</div>
+          <div style="font-size: 11px; color: rgba(255,248,235,0.5);">Market trends, EPC rankings, regional activity</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C: Outcome Cards + Dynamic Banner</h3>
+      <p>Manus-style outcome-first cards that describe goals, not queries. Single dynamic banner summarizes live state. Clean, goal-oriented, fewer choices.</p>
+    </div>
+  </div>
+
+</div>

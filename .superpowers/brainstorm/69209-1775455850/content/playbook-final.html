@@ -1,0 +1,118 @@
+<h2>Final Design: Agent Chat Playbook</h2>
+<p class="subtitle">Two-column hybrid — dynamic "Right Now" left, outcome cards right. Click to approve or request changes.</p>
+
+<div class="cards">
+  <div class="card" data-choice="approve" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 32px 28px; background: #1C1A17; min-height: 380px;">
+
+      <!-- Header -->
+      <div style="text-align: center; margin-bottom: 28px;">
+        <div style="font-family: Georgia, serif; font-size: 20px; color: #FFF8EB; letter-spacing: -0.01em;">Solar Project Research Assistant</div>
+        <div style="font-size: 13px; color: rgba(255,248,235,0.5); margin-top: 4px;">Search projects, discover EPCs, and take action.</div>
+      </div>
+
+      <!-- Two-column layout -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+
+        <!-- LEFT: Right Now (dynamic) -->
+        <div>
+          <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,248,235,0.38); margin-bottom: 10px; font-weight: 500;">Right Now</div>
+
+          <!-- Nudge 1: Reviews (amber = action needed) -->
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(255,248,235,0.2)'" onmouseout="this.style.borderColor='rgba(255,248,235,0.08)'">
+            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+              <div>
+                <span style="font-size: 18px; font-family: Georgia, serif; color: #E8A230; font-weight: 500;">61</span>
+                <span style="font-size: 12px; color: rgba(255,248,235,0.6); margin-left: 6px;">awaiting review</span>
+              </div>
+              <span style="font-size: 10px; color: rgba(255,248,235,0.3);">→ /review</span>
+            </div>
+          </div>
+
+          <!-- Nudge 2: New projects (green = fresh) -->
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(255,248,235,0.2)'" onmouseout="this.style.borderColor='rgba(255,248,235,0.08)'">
+            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+              <div>
+                <span style="font-size: 18px; font-family: Georgia, serif; color: #5CB77A; font-weight: 500;">3</span>
+                <span style="font-size: 12px; color: rgba(255,248,235,0.6); margin-left: 6px;">new projects this week</span>
+              </div>
+              <span style="font-size: 10px; color: rgba(255,248,235,0.3);">→ /briefing</span>
+            </div>
+          </div>
+
+          <!-- Nudge 3: Contacts needed -->
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(255,248,235,0.2)'" onmouseout="this.style.borderColor='rgba(255,248,235,0.08)'">
+            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+              <div>
+                <span style="font-size: 18px; font-family: Georgia, serif; color: #FFF8EB; font-weight: 500;">5</span>
+                <span style="font-size: 12px; color: rgba(255,248,235,0.6); margin-left: 6px;">EPCs need contacts</span>
+              </div>
+              <span style="font-size: 10px; color: rgba(255,248,235,0.3);">→ /actions</span>
+            </div>
+          </div>
+
+          <!-- Nudge 4: HubSpot -->
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 12px 14px; cursor: pointer; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(255,248,235,0.2)'" onmouseout="this.style.borderColor='rgba(255,248,235,0.08)'">
+            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+              <div>
+                <span style="font-size: 18px; font-family: Georgia, serif; color: #FFF8EB; font-weight: 500;">8</span>
+                <span style="font-size: 12px; color: rgba(255,248,235,0.6); margin-left: 6px;">leads ready for CRM</span>
+              </div>
+              <span style="font-size: 10px; color: rgba(255,248,235,0.3);">→ /actions</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT: Actions (static outcome cards) -->
+        <div>
+          <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,248,235,0.38); margin-bottom: 10px; font-weight: 500;">I can help you</div>
+
+          <!-- Card 1: Deep-dive -->
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(232,162,48,0.3)'" onmouseout="this.style.borderColor='rgba(255,248,235,0.08)'">
+            <div style="font-size: 13px; color: #FFF8EB; font-weight: 500; margin-bottom: 2px;">Deep-dive a company</div>
+            <div style="font-size: 11px; color: rgba(255,248,235,0.45);">Research EPC, check filings, find contacts</div>
+          </div>
+
+          <!-- Card 2: Batch research -->
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(232,162,48,0.3)'" onmouseout="this.style.borderColor='rgba(255,248,235,0.08)'">
+            <div style="font-size: 13px; color: #FFF8EB; font-weight: 500; margin-bottom: 2px;">Batch research projects</div>
+            <div style="font-size: 11px; color: rgba(255,248,235,0.45);">Run EPC discovery on multiple projects at once</div>
+          </div>
+
+          <!-- Card 3: Triage reviews -->
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(232,162,48,0.3)'" onmouseout="this.style.borderColor='rgba(255,248,235,0.08)'">
+            <div style="font-size: 13px; color: #FFF8EB; font-weight: 500; margin-bottom: 2px;">Triage the review queue</div>
+            <div style="font-size: 11px; color: rgba(255,248,235,0.45);">Walk through pending discoveries one by one</div>
+          </div>
+
+          <!-- Card 4: Market intel -->
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(232,162,48,0.3)'" onmouseout="this.style.borderColor='rgba(255,248,235,0.08)'">
+            <div style="font-size: 13px; color: #FFF8EB; font-weight: 500; margin-bottom: 2px;">Pipeline intelligence</div>
+            <div style="font-size: 11px; color: rgba(255,248,235,0.45);">Market trends, EPC rankings, regional activity</div>
+          </div>
+
+          <!-- Card 5: Export -->
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 12px 14px; cursor: pointer; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(232,162,48,0.3)'" onmouseout="this.style.borderColor='rgba(255,248,235,0.08)'">
+            <div style="font-size: 13px; color: #FFF8EB; font-weight: 500; margin-bottom: 2px;">Export data</div>
+            <div style="font-size: 11px; color: rgba(255,248,235,0.45);">Download pipeline, contacts, or discoveries as CSV</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>✓ Approve this design</h3>
+      <p>Click to approve and proceed to spec writing.</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 24px;">
+  <h3>Interaction Model</h3>
+  <ul style="font-size: 14px; line-height: 1.8; color: #ccc;">
+    <li><strong>Left column ("Right Now")</strong> — dynamic, fed from the same stats the Briefing page uses. Click pre-fills chat with relevant prompt (e.g. "Let's triage the 61 pending reviews"). Subtle <code>→ /review</code> link navigates to dedicated page.</li>
+    <li><strong>Right column ("I can help you")</strong> — static outcome cards. Click pre-fills chat with a goal-oriented prompt (e.g. "I want to deep-dive a company"). Agent then asks follow-up ("Which company?").</li>
+    <li><strong>Dynamic items hide when zero</strong> — if awaiting_review is 0, that nudge doesn't show. If all are zero, left column shows "You're all caught up" with a single subtle CTA.</li>
+    <li><strong>Future: generative UI</strong> — when the agent handles review triage or contact discovery in chat, it renders interactive cards inline (approve/reject buttons, contact cards with LinkedIn links) so users don't need to tab-switch. This is a separate spec.</li>
+  </ul>
+</div>

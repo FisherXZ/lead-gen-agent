@@ -14,9 +14,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import uuid
 from collections.abc import AsyncGenerator
+
+import anthropic
 
 from . import db
 from .batch_progress import create_batch, get_cancel_event, mark_done, update_project
@@ -27,6 +30,9 @@ from .tools import execute_tool, get_all_tools
 
 MODEL = os.environ.get("CHAT_MODEL", "claude-sonnet-4-6")
 MAX_TOOL_ROUNDS = 15
+TOOL_TIMEOUT_SECONDS = 60  # Per-tool execution timeout
+
+_logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------

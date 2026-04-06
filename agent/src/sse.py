@@ -96,3 +96,18 @@ class StreamWriter:
                 "output": output,
             }
         )
+
+    # -- Convenience helpers -----------------------------------------------
+
+    def text(self, content: str) -> str:
+        """Emit a complete text block (start + delta + end) as a single string."""
+        part_id = self._next_id()
+        return (
+            self.text_start(part_id)
+            + self.text_delta(part_id, content)
+            + self.text_end(part_id)
+        )
+
+    def error(self, message: str) -> str:
+        """Emit an error event."""
+        return _event({"type": "error", "error": message})

@@ -1,0 +1,98 @@
+<h2>Final Design v2: Solarina Playbook</h2>
+<p class="subtitle">Updated naming. Click to approve or request changes.</p>
+
+<div class="cards">
+  <div class="card" data-choice="approve" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 32px 28px; background: #1C1A17; min-height: 380px;">
+
+      <!-- Header — just the name, no subtitle -->
+      <div style="text-align: center; margin-bottom: 28px;">
+        <div style="font-family: Georgia, serif; font-size: 24px; color: #FFF8EB; letter-spacing: -0.015em;">Solarina</div>
+      </div>
+
+      <!-- Two-column layout -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+
+        <!-- LEFT: Right Now (dynamic) -->
+        <div>
+          <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,248,235,0.38); margin-bottom: 10px; font-weight: 500;">Right Now</div>
+
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(255,248,235,0.2)'" onmouseout="this.style.borderColor='rgba(255,248,235,0.08)'">
+            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+              <div>
+                <span style="font-size: 18px; font-family: Georgia, serif; color: #E8A230; font-weight: 500;">61</span>
+                <span style="font-size: 12px; color: rgba(255,248,235,0.6); margin-left: 6px;">awaiting review</span>
+              </div>
+              <span style="font-size: 10px; color: rgba(255,248,235,0.3);">→ /review</span>
+            </div>
+          </div>
+
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(255,248,235,0.2)'" onmouseout="this.style.borderColor='rgba(255,248,235,0.08)'">
+            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+              <div>
+                <span style="font-size: 18px; font-family: Georgia, serif; color: #5CB77A; font-weight: 500;">3</span>
+                <span style="font-size: 12px; color: rgba(255,248,235,0.6); margin-left: 6px;">new projects this week</span>
+              </div>
+              <span style="font-size: 10px; color: rgba(255,248,235,0.3);">→ /briefing</span>
+            </div>
+          </div>
+
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(255,248,235,0.2)'" onmouseout="this.style.borderColor='rgba(255,248,235,0.08)'">
+            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+              <div>
+                <span style="font-size: 18px; font-family: Georgia, serif; color: #FFF8EB; font-weight: 500;">5</span>
+                <span style="font-size: 12px; color: rgba(255,248,235,0.6); margin-left: 6px;">EPCs need contacts</span>
+              </div>
+              <span style="font-size: 10px; color: rgba(255,248,235,0.3);">→ /actions</span>
+            </div>
+          </div>
+
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 12px 14px; cursor: pointer; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(255,248,235,0.2)'" onmouseout="this.style.borderColor='rgba(255,248,235,0.08)'">
+            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+              <div>
+                <span style="font-size: 18px; font-family: Georgia, serif; color: #FFF8EB; font-weight: 500;">8</span>
+                <span style="font-size: 12px; color: rgba(255,248,235,0.6); margin-left: 6px;">leads ready for CRM</span>
+              </div>
+              <span style="font-size: 10px; color: rgba(255,248,235,0.3);">→ /actions</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT: Actions (static outcome cards) -->
+        <div>
+          <div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,248,235,0.38); margin-bottom: 10px; font-weight: 500;">I can help you</div>
+
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(232,162,48,0.3)'" onmouseout="this.style.borderColor='rgba(255,248,235,0.08)'">
+            <div style="font-size: 13px; color: #FFF8EB; font-weight: 500; margin-bottom: 2px;">Deep-dive a company</div>
+            <div style="font-size: 11px; color: rgba(255,248,235,0.45);">Research EPC, check filings, find contacts</div>
+          </div>
+
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(232,162,48,0.3)'" onmouseout="this.style.borderColor='rgba(255,248,235,0.08)'">
+            <div style="font-size: 13px; color: #FFF8EB; font-weight: 500; margin-bottom: 2px;">Batch research projects</div>
+            <div style="font-size: 11px; color: rgba(255,248,235,0.45);">Run EPC discovery on multiple projects at once</div>
+          </div>
+
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(232,162,48,0.3)'" onmouseout="this.style.borderColor='rgba(255,248,235,0.08)'">
+            <div style="font-size: 13px; color: #FFF8EB; font-weight: 500; margin-bottom: 2px;">Triage the review queue</div>
+            <div style="font-size: 11px; color: rgba(255,248,235,0.45);">Walk through pending discoveries one by one</div>
+          </div>
+
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(232,162,48,0.3)'" onmouseout="this.style.borderColor='rgba(255,248,235,0.08)'">
+            <div style="font-size: 13px; color: #FFF8EB; font-weight: 500; margin-bottom: 2px;">Pipeline intelligence</div>
+            <div style="font-size: 11px; color: rgba(255,248,235,0.45);">Market trends, EPC rankings, regional activity</div>
+          </div>
+
+          <div style="background: #252320; border: 1px solid rgba(255,248,235,0.08); border-radius: 8px; padding: 12px 14px; cursor: pointer; transition: border-color 0.15s;" onmouseover="this.style.borderColor='rgba(232,162,48,0.3)'" onmouseout="this.style.borderColor='rgba(255,248,235,0.08)'">
+            <div style="font-size: 13px; color: #FFF8EB; font-weight: 500; margin-bottom: 2px;">Export data</div>
+            <div style="font-size: 11px; color: rgba(255,248,235,0.45);">Download pipeline, contacts, or discoveries as CSV</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>✓ Approve this design</h3>
+      <p>Solarina — clean name, no subtitle clutter. Click to approve and proceed to spec.</p>
+    </div>
+  </div>
+</div>
