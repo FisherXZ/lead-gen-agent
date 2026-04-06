@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { agentFetch, agentHeaders, AGENT_API_URL } from "@/lib/agent-fetch";
 import ChatMessage from "./ChatMessage";
 import FileAttachment from "./FileAttachment";
-import SuggestedPrompts from "./SuggestedPrompts";
+import Playbook from "./Playbook";
 
 const ACCEPTED_FILE_TYPES = [
   "image/png", "image/jpeg", "image/gif", "image/webp",
@@ -554,7 +554,7 @@ export default function ChatInterface({ initialContext }: ChatInterfaceProps) {
             </svg>
           </button>
           <h2 className="text-sm font-medium text-text-primary">
-            EPC Discovery Chat
+            Solarina
           </h2>
         </div>
 
@@ -566,16 +566,8 @@ export default function ChatInterface({ initialContext }: ChatInterfaceProps) {
           onDrop={handleDrop}
         >
           {messages.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center gap-6">
-              <div className="text-center">
-                <h3 className="text-lg font-semibold font-serif text-text-primary">
-                  Solar Project Research Assistant
-                </h3>
-                <p className="mt-1 text-sm text-text-secondary">
-                  Search projects, discover EPC contractors, and review findings.
-                </p>
-              </div>
-              <SuggestedPrompts onSelect={handlePromptSelect} />
+            <div className="flex h-full flex-col items-center justify-center">
+              <Playbook onSelect={handlePromptSelect} />
             </div>
           ) : (
             <div className="mx-auto max-w-3xl space-y-4">
