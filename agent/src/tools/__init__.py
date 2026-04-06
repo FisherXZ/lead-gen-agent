@@ -23,6 +23,9 @@ from . import (
     approve_discovery,
     batch_research_epc,
     brave_search,
+    classify_contact,
+    enrich_contact_email,
+    enrich_contact_phone,
     export_csv,
     fetch_page,
     fetch_sec_filing,
@@ -92,6 +95,11 @@ _register(search_spw)
 _register(search_exa_people)
 _register(search_linkedin)
 _register(lookup_hubspot_contacts)
+# Contact enrichment tools
+_register(enrich_contact_email)
+_register(enrich_contact_phone)
+# Contact scoring
+_register(classify_contact)
 # Agent self-management tools
 _register(manage_todo)
 _register(think)
