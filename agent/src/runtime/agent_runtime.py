@@ -166,16 +166,13 @@ class AgentRuntime:
                 })
                 break
             elif action.kind == "inject_guidance":
-                # Append guidance to the last tool result message
-                last_msg = messages[-1]
-                if isinstance(last_msg.get("content"), list):
-                    last_msg["content"].append({
-                        "type": "tool_result",
-                        "tool_use_id": "guidance",
-                        "content": json.dumps({
-                            "_runtime_guidance": action.message,
-                        }),
-                    })
+                # Inject guidance as a separate user message (not a synthetic
+                # tool_result, which would violate the API contract requiring
+                # every tool_result to reference a real tool_use_id).
+                messages.append({
+                    "role": "user",
+                    "content": f"[Runtime guidance]: {action.message}",
+                })
 
             # Compact again if context grew
             messages = await self.compactor.maybe_compact(messages)

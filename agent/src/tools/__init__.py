@@ -26,11 +26,15 @@ from . import (
     approve_discovery,
     batch_research_epc,
     brave_search,
+    classify_contact,
+    enrich_contact_email,
+    enrich_contact_phone,
     export_csv,
     fetch_page,
     fetch_sec_filing,
     find_contacts,
     get_discoveries,
+    lookup_hubspot_contacts,
     manage_todo,
     push_to_hubspot,
     notify_progress,
@@ -41,7 +45,12 @@ from . import (
     request_discovery_review,
     request_guidance,
     research_scratchpad,
+    run_contact_discovery,
+    save_contact,
+    scrape_epc_website,
     search_enr,
+    search_exa_people,
+    search_linkedin,
     search_osha,
     search_projects,
     search_projects_with_epc,
@@ -88,6 +97,20 @@ _register(search_osha)
 _register(search_enr)
 _register(search_wiki_solar)
 _register(search_spw)
+# Contact discovery tools
+_register(search_exa_people)
+_register(search_linkedin)
+_register(lookup_hubspot_contacts)
+_register(scrape_epc_website)
+# Contact enrichment tools
+_register(enrich_contact_email)
+_register(enrich_contact_phone)
+# Contact scoring
+_register(classify_contact)
+# Contact persistence
+_register(save_contact)
+# Sub-agent launcher tools
+_register(run_contact_discovery)
 # Agent self-management tools
 _register(manage_todo)
 _register(think)
@@ -114,13 +137,33 @@ def get_tool_names() -> list[str]:
 async def execute_tool(name: str, tool_input: dict) -> dict:
     """Dispatch to the named tool's execute function.
 
-    Catches all exceptions and returns structured error dicts.
-    Raises KeyError only for unknown tool names (not registered).
+    Catches common error types and returns structured error dicts.
+    Unknown/unexpected exceptions are re-raised.
+
+    If the tool module defines an `Input` Pydantic model, `tool_input` is
+    validated against it before dispatch.  On failure a structured
+    ``validation_error`` dict is returned.  On success, ``model_dump()`` is
+    forwarded so that field defaults are always applied.
     """
     if name not in _REGISTRY:
         raise KeyError(f"Unknown tool: {name}. Available: {list(_REGISTRY.keys())}")
+
+    mod = _REGISTRY[name]
+
+    # Pydantic validation for tools that declare an Input model
+    if hasattr(mod, "Input"):
+        try:
+            from pydantic import ValidationError
+            validated = mod.Input(**tool_input)
+            tool_input = validated.model_dump()
+        except ValidationError as exc:
+            return {
+                "error": f"Invalid input for {name}: {exc.errors()}",
+                "error_category": "validation_error",
+            }
+
     try:
-        return await _REGISTRY[name].execute(tool_input)
+        return await mod.execute(tool_input)
     except KeyError as exc:
         return {
             "error": f"API key not configured for {name}",

@@ -5,12 +5,18 @@
 ALTER TABLE chat_conversations
   ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES auth.users(id);
 
--- 2. Backfill all existing conversations to Fisher
+-- 2. Backfill existing conversations to the first admin (or first user)
 UPDATE chat_conversations
-SET user_id = (SELECT id FROM auth.users WHERE email = 'fisher262425@gmail.com' LIMIT 1)
+SET user_id = (
+  SELECT COALESCE(
+    (SELECT ur.user_id FROM user_roles ur WHERE ur.role = 'admin' LIMIT 1),
+    (SELECT id FROM auth.users ORDER BY created_at LIMIT 1)
+  )
+)
 WHERE user_id IS NULL;
 
--- 3. Make NOT NULL after backfill
+-- 3. Delete orphans if no users exist, then make NOT NULL
+DELETE FROM chat_conversations WHERE user_id IS NULL;
 ALTER TABLE chat_conversations ALTER COLUMN user_id SET NOT NULL;
 
 -- 4. Index for efficient per-user listing

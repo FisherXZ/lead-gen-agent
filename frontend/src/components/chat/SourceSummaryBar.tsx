@@ -21,7 +21,7 @@ interface SourceInfo {
 
 /**
  * Walk all tool parts in a message and extract unique source URLs.
- * Sources come from: web_search results, fetch_page inputs, and KB lookups.
+ * Sources come from: web_search results and fetch_page inputs.
  */
 function extractSources(message: UIMessage): SourceInfo[] {
   const seen = new Set<string>();
