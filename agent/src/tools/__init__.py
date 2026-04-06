@@ -41,6 +41,7 @@ from . import (
     research_scratchpad,
     search_enr,
     search_exa_people,
+    search_linkedin,
     search_osha,
     search_projects,
     search_projects_with_epc,
@@ -89,6 +90,7 @@ _register(search_wiki_solar)
 _register(search_spw)
 # Contact discovery tools
 _register(search_exa_people)
+_register(search_linkedin)
 _register(lookup_hubspot_contacts)
 # Agent self-management tools
 _register(manage_todo)
