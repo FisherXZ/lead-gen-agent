@@ -114,6 +114,9 @@ _register(run_contact_discovery)
 # Agent self-management tools
 _register(manage_todo)
 _register(think)
+# Sub-agent tools
+from . import run_research
+_register(run_research)
 
 
 def get_all_tools() -> list[dict]:
