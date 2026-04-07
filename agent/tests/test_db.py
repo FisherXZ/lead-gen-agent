@@ -56,9 +56,17 @@ class TestRejectPendingDiscovery:
 
 
 class TestStoreDiscovery:
+    @patch.object(db, "get_client")
     @patch.object(db, "insert_discovery")
     @patch.object(db, "reject_pending_discovery")
-    def test_stores_and_returns(self, mock_reject, mock_insert):
+    def test_stores_and_returns(self, mock_reject, mock_insert, mock_get_client):
+        # Entity lookup after insert — return no match so path stays simple
+        mock_entity_chain = MagicMock()
+        mock_entity_chain.execute.return_value = _mock_supabase_response([])
+        (
+            mock_get_client.return_value.table.return_value.select.return_value.ilike.return_value.limit.return_value
+        ) = mock_entity_chain
+
         agent_result = AgentResult(
             epc_contractor="Blattner Energy",
             confidence="confirmed",
@@ -106,9 +114,16 @@ class TestStoreDiscovery:
         call_data = mock_insert.call_args[0][0]
         assert call_data["epc_contractor"] == "Unknown"
 
+    @patch.object(db, "get_client")
     @patch.object(db, "insert_discovery")
     @patch.object(db, "reject_pending_discovery")
-    def test_empty_sources_list(self, mock_reject, mock_insert):
+    def test_empty_sources_list(self, mock_reject, mock_insert, mock_get_client):
+        mock_entity_chain = MagicMock()
+        mock_entity_chain.execute.return_value = _mock_supabase_response([])
+        (
+            mock_get_client.return_value.table.return_value.select.return_value.ilike.return_value.limit.return_value
+        ) = mock_entity_chain
+
         agent_result = AgentResult(
             epc_contractor="SomeCo",
             confidence="possible",
