@@ -417,7 +417,7 @@ class TestTenacityRetry:
 
         mock_client = MagicMock()
         mock_client.messages = MagicMock()
-        mock_client.messages.create = AsyncMock(side_effect=[rate_err, rate_err, rate_err])
+        mock_client.messages.create = AsyncMock(side_effect=[rate_err] * 5)
         MockClient.return_value = mock_client
 
         with patch("src.research._call_api.retry.wait", return_value=0):
@@ -425,4 +425,4 @@ class TestTenacityRetry:
 
         assert result.error is not None
         assert "rate limit" in result.error.message.lower()
-        assert mock_client.messages.create.call_count == 3
+        assert mock_client.messages.create.call_count == 5

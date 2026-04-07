@@ -17,7 +17,12 @@ import os
 from uuid import uuid4
 
 import anthropic
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import (
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from .completeness import CHECKPOINTS, evaluate_completeness
 from .models import AgentResult, ResearchError
@@ -65,7 +70,12 @@ logger = logging.getLogger(__name__)
 
 
 @retry(
-    retry=retry_if_exception_type((anthropic.RateLimitError, anthropic.APIStatusError)),
+    retry=retry_if_exception(
+        lambda e: (
+            isinstance(e, (anthropic.RateLimitError, anthropic.APIStatusError))
+            and not isinstance(e, anthropic.AuthenticationError)
+        )
+    ),
     stop=stop_after_attempt(5),
     wait=wait_exponential(multiplier=2, min=2, max=30),
     reraise=True,
