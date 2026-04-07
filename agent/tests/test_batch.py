@@ -211,7 +211,7 @@ class TestRunBatch:
 
         call_count = 0
 
-        async def fake_agent(project, knowledge_context=None):
+        async def fake_agent(project, knowledge_context=None, api_key=None):
             nonlocal call_count
             call_count += 1
             if project["id"] == "proj-err":
