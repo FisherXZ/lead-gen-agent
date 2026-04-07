@@ -1,6 +1,6 @@
 """Tests for county-centroid geocoder."""
 
-from scrapers.src.geocoder import (
+from src.geocoder import (
     geocode_county,
     geocode_project,
     geocode_projects,

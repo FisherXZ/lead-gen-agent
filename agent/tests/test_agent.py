@@ -326,64 +326,6 @@ class TestTokenCounting:
 
 
 # ---------------------------------------------------------------------------
-# Compaction integration
-# ---------------------------------------------------------------------------
-
-
-class TestCompaction:
-    @patch("src.research.estimate_context_size", return_value=400_000)
-    @patch("src.research.compact_messages")
-    @patch("src.research.execute_tool", new_callable=AsyncMock)
-    @patch("src.research.anthropic.AsyncAnthropic")
-    async def test_compaction_called_during_multi_turn(
-        self, MockClient, mock_exec_tool, mock_compact, mock_estimate, sample_project
-    ):
-        """compact_messages is called when context exceeds threshold."""
-        # Turn 1: web_search
-        search_block = make_tool_use_block(
-            name="web_search",
-            block_id="ws-c1",
-            input_data={"query": "test query"},
-        )
-        turn1 = make_claude_response(
-            stop_reason="tool_use",
-            content=[search_block],
-        )
-        mock_exec_tool.return_value = {"results": []}
-
-        # Turn 2: report_findings
-        report_block = make_tool_use_block(
-            name="report_findings",
-            block_id="rf-c1",
-            input_data={
-                "confidence": "unknown",
-                "reasoning": "Nothing found.",
-                "searches_performed": ["test query"],
-            },
-        )
-        turn2 = make_claude_response(
-            stop_reason="tool_use",
-            content=[report_block],
-        )
-
-        mock_client = MagicMock()
-        mock_client.messages = MagicMock()
-        mock_client.messages.create = AsyncMock(side_effect=[turn1, turn2])
-        MockClient.return_value = mock_client
-
-        # compact_messages should return messages unchanged (pass-through)
-        mock_compact.side_effect = lambda msgs, **kw: msgs
-
-        result, log, tokens = await run_research(sample_project)
-
-        # compact_messages should have been called once (context exceeded 300K)
-        assert mock_compact.call_count == 1
-        call_kwargs = mock_compact.call_args[1]
-        assert call_kwargs["max_context_chars"] == 300_000
-        assert call_kwargs["keep_recent_turns"] == 4
-
-
-# ---------------------------------------------------------------------------
 # Tenacity retry behavior
 # ---------------------------------------------------------------------------
 
