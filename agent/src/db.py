@@ -120,6 +120,21 @@ def store_discovery(
     }
     discovery = insert_discovery(discovery_data)
 
+    # Populate entity_id from entities table (case-insensitive name match)
+    epc_name = result.epc_contractor or "Unknown"
+    if epc_name and epc_name != "Unknown":
+        entity_resp = (
+            get_client()
+            .table("entities")
+            .select("id")
+            .ilike("name", epc_name)
+            .limit(1)
+            .execute()
+        )
+        if entity_resp.data:
+            entity_id = entity_resp.data[0]["id"]
+            discovery = update_discovery(discovery["id"], {"entity_id": entity_id})
+
     # Write-back to knowledge base
     if project:
         try:
