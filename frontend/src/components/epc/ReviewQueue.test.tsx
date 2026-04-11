@@ -181,3 +181,22 @@ describe("ReviewQueue sorting", () => {
     expect(createdHeader.textContent).toMatch(/↑/);
   });
 });
+
+describe("ReviewQueue empty states", () => {
+  it("shows 'no pending discoveries' when initial list is empty", () => {
+    render(<ReviewQueue initialDiscoveries={[]} />);
+    expect(screen.getByText(/no pending discoveries/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/state/i)).not.toBeInTheDocument();
+  });
+
+  it("shows 'no discoveries match' when filters exclude all rows, and keeps filters visible", () => {
+    render(<ReviewQueue initialDiscoveries={fixtures} />);
+    fireEvent.change(screen.getByPlaceholderText(/search/i), {
+      target: { value: "zzznomatches" },
+    });
+    expect(screen.getByText(/no discoveries match/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/state/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /clear filters/i }));
+    expect(screen.getByText("Sunstone Solar")).toBeInTheDocument();
+  });
+});

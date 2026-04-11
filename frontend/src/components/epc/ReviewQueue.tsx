@@ -231,6 +231,24 @@ export default function ReviewQueue({ initialDiscoveries }: ReviewQueueProps) {
         </div>
       )}
 
+      {visibleDiscoveries.length === 0 ? (
+        <div className="rounded-lg border border-border-subtle bg-surface-raised p-12 text-center">
+          <p className="text-sm text-text-secondary">
+            No discoveries match the current filters.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setFilterState("");
+              setFilterConfidence("");
+              setSearchQuery("");
+            }}
+            className="mt-3 rounded-md bg-surface-overlay px-3 py-1.5 text-xs font-medium text-text-primary hover:bg-surface-raised"
+          >
+            Clear filters
+          </button>
+        </div>
+      ) : (
       <div className="overflow-hidden rounded-lg border border-border-subtle bg-surface-raised">
         <table className="min-w-full divide-y divide-border-subtle">
           <thead className="bg-surface-overlay">
@@ -409,6 +427,7 @@ export default function ReviewQueue({ initialDiscoveries }: ReviewQueueProps) {
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }
