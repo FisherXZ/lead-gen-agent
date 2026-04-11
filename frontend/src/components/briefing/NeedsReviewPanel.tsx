@@ -81,7 +81,7 @@ export default function NeedsReviewPanel({
           href="/review"
           className="text-[10px] text-text-tertiary transition-colors hover:text-text-secondary"
         >
-          View all →
+          View all {remaining} →
         </Link>
       </div>
 

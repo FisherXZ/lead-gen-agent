@@ -101,7 +101,7 @@ export default function ContactsPanel({
           href="/actions"
           className="text-[10px] text-text-tertiary transition-colors hover:text-text-secondary"
         >
-          Actions →
+          View all contacts & CRM →
         </Link>
       </div>
 
