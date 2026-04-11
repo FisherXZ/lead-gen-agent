@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import ConfidenceBadge from "@/components/epc/ConfidenceBadge";
 import ReasoningCard from "@/components/epc/ReasoningCard";
 import { PendingDiscoveryWithProject } from "@/lib/types";
@@ -18,6 +18,34 @@ export default function ReviewQueue({ initialDiscoveries }: ReviewQueueProps) {
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [filterState, setFilterState] = useState("");
+  const [filterConfidence, setFilterConfidence] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const availableStates = useMemo(() => {
+    const set = new Set<string>();
+    for (const d of discoveries) {
+      if (d.project?.state) set.add(d.project.state);
+    }
+    return Array.from(set).sort();
+  }, [discoveries]);
+
+  const visibleDiscoveries = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return discoveries.filter((d) => {
+      const p = d.project || {};
+      if (filterState && (p.state || "") !== filterState) return false;
+      if (filterConfidence && d.confidence !== filterConfidence) return false;
+      if (q) {
+        const haystack = [p.project_name, p.developer, d.epc_contractor]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [discoveries, filterState, filterConfidence, searchQuery]);
 
   function toggleExpand(id: string) {
     setExpandedIds((prev) => {
@@ -88,10 +116,50 @@ export default function ReviewQueue({ initialDiscoveries }: ReviewQueueProps) {
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-text-secondary">
-        {discoveries.length} pending{" "}
-        {discoveries.length === 1 ? "discovery" : "discoveries"}
-      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="mr-auto text-sm text-text-secondary">
+          {visibleDiscoveries.length} of {discoveries.length} pending{" "}
+          {discoveries.length === 1 ? "discovery" : "discoveries"}
+        </p>
+        <label className="flex items-center gap-1.5 text-xs text-text-tertiary">
+          State
+          <select
+            aria-label="State"
+            className="h-8 rounded-md border border-border-default bg-surface-raised px-2 text-sm text-text-primary focus:border-border-focus focus:ring-1 focus:ring-border-focus focus:outline-none"
+            value={filterState}
+            onChange={(e) => setFilterState(e.target.value)}
+          >
+            <option value="">All</option>
+            {availableStates.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-text-tertiary">
+          Confidence
+          <select
+            aria-label="Confidence"
+            className="h-8 rounded-md border border-border-default bg-surface-raised px-2 text-sm text-text-primary focus:border-border-focus focus:ring-1 focus:ring-border-focus focus:outline-none"
+            value={filterConfidence}
+            onChange={(e) => setFilterConfidence(e.target.value)}
+          >
+            <option value="">All</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="likely">Likely</option>
+            <option value="possible">Possible</option>
+            <option value="unknown">Unknown</option>
+          </select>
+        </label>
+        <input
+          type="text"
+          placeholder="Search project, developer, EPC…"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="h-8 w-56 rounded-md border border-border-default bg-surface-raised px-3 text-sm text-text-primary placeholder:text-text-tertiary focus:border-border-focus focus:ring-1 focus:ring-border-focus focus:outline-none"
+        />
+      </div>
 
       {error && (
         <div className="rounded-lg badge-red border border-status-red/20 px-4 py-3 text-sm">
@@ -130,7 +198,7 @@ export default function ReviewQueue({ initialDiscoveries }: ReviewQueueProps) {
             </tr>
           </thead>
           <tbody className="divide-y divide-border-subtle">
-            {discoveries.map((d) => {
+            {visibleDiscoveries.map((d) => {
               const project = d.project || {};
               const isRejecting = rejectingId === d.id;
               const isLoading = loadingId === d.id;
