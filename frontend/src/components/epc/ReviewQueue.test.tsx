@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import ReviewQueue from "./ReviewQueue";
 import type { PendingDiscoveryWithProject } from "@/lib/types";
@@ -122,5 +122,62 @@ describe("ReviewQueue filters", () => {
     const stateSelect = screen.getByLabelText(/state/i) as HTMLSelectElement;
     const values = Array.from(stateSelect.options).map((o) => o.value);
     expect(values).toEqual(["", "AR", "CO", "TX"]);
+  });
+});
+
+describe("ReviewQueue sorting", () => {
+  const firstCellText = (row: HTMLElement) =>
+    within(row).getAllByRole("cell")[0].textContent;
+  const stateCellText = (row: HTMLElement) =>
+    within(row).getAllByRole("cell")[3].textContent;
+  const epcCellText = (row: HTMLElement) =>
+    within(row).getAllByRole("cell")[4].textContent;
+
+  function dataRows() {
+    return screen
+      .getAllByRole("row")
+      .filter((r) => within(r).queryAllByRole("cell").length > 0);
+  }
+
+  it("defaults to newest created_at first", () => {
+    render(<ReviewQueue initialDiscoveries={fixtures} />);
+    const rows = dataRows();
+    expect(firstCellText(rows[0])).toContain("White Bluff"); // 2026-04-05
+    expect(firstCellText(rows[1])).toContain("Sunstone Solar"); // 2026-04-01
+    expect(firstCellText(rows[2])).toContain("Silver Ridge"); // 2026-03-12
+  });
+
+  it("clicking the Created header toggles to oldest-first", () => {
+    render(<ReviewQueue initialDiscoveries={fixtures} />);
+    fireEvent.click(screen.getByRole("columnheader", { name: /created/i }));
+    const rows = dataRows();
+    expect(firstCellText(rows[0])).toContain("Silver Ridge"); // 2026-03-12
+    expect(firstCellText(rows[2])).toContain("White Bluff"); // 2026-04-05
+  });
+
+  it("sorts by state alphabetically when State header clicked", () => {
+    render(<ReviewQueue initialDiscoveries={fixtures} />);
+    fireEvent.click(screen.getByRole("columnheader", { name: /state/i }));
+    const rows = dataRows();
+    expect(stateCellText(rows[0])).toBe("AR");
+    expect(stateCellText(rows[1])).toBe("CO");
+    expect(stateCellText(rows[2])).toBe("TX");
+  });
+
+  it("sorts confidence with confirmed on top", () => {
+    render(<ReviewQueue initialDiscoveries={fixtures} />);
+    fireEvent.click(screen.getByRole("columnheader", { name: /confidence/i }));
+    const rows = dataRows();
+    expect(epcCellText(rows[0])).toBe("McCarthy Building"); // confirmed
+    expect(epcCellText(rows[1])).toBe("Blattner Energy"); // likely
+    expect(epcCellText(rows[2])).toBe("Swinerton Renewable"); // possible
+  });
+
+  it("shows an arrow indicator on the active sort column", () => {
+    render(<ReviewQueue initialDiscoveries={fixtures} />);
+    const createdHeader = screen.getByRole("columnheader", { name: /created/i });
+    expect(createdHeader.textContent).toMatch(/↓/);
+    fireEvent.click(createdHeader);
+    expect(createdHeader.textContent).toMatch(/↑/);
   });
 });

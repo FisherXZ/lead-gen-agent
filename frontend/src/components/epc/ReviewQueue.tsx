@@ -10,6 +10,13 @@ interface ReviewQueueProps {
   initialDiscoveries: PendingDiscoveryWithProject[];
 }
 
+const CONFIDENCE_ORDER: Record<string, number> = {
+  confirmed: 0,
+  likely: 1,
+  possible: 2,
+  unknown: 3,
+};
+
 export default function ReviewQueue({ initialDiscoveries }: ReviewQueueProps) {
   const [discoveries, setDiscoveries] =
     useState<PendingDiscoveryWithProject[]>(initialDiscoveries);
@@ -22,6 +29,24 @@ export default function ReviewQueue({ initialDiscoveries }: ReviewQueueProps) {
   const [filterConfidence, setFilterConfidence] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
+  type SortField =
+    | "project_name"
+    | "state"
+    | "epc_contractor"
+    | "confidence"
+    | "created_at";
+  const [sortField, setSortField] = useState<SortField>("created_at");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  function handleSort(field: SortField) {
+    if (field === sortField) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDir(field === "created_at" ? "desc" : "asc");
+    }
+  }
+
   const availableStates = useMemo(() => {
     const set = new Set<string>();
     for (const d of discoveries) {
@@ -32,7 +57,7 @@ export default function ReviewQueue({ initialDiscoveries }: ReviewQueueProps) {
 
   const visibleDiscoveries = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return discoveries.filter((d) => {
+    const filtered = discoveries.filter((d) => {
       const p = d.project || {};
       if (filterState && (p.state || "") !== filterState) return false;
       if (filterConfidence && d.confidence !== filterConfidence) return false;
@@ -45,7 +70,46 @@ export default function ReviewQueue({ initialDiscoveries }: ReviewQueueProps) {
       }
       return true;
     });
-  }, [discoveries, filterState, filterConfidence, searchQuery]);
+
+    const sorted = [...filtered].sort((a, b) => {
+      let av: string | number = "";
+      let bv: string | number = "";
+      switch (sortField) {
+        case "project_name":
+          av = a.project?.project_name || "";
+          bv = b.project?.project_name || "";
+          break;
+        case "state":
+          av = a.project?.state || "";
+          bv = b.project?.state || "";
+          break;
+        case "epc_contractor":
+          av = a.epc_contractor || "";
+          bv = b.epc_contractor || "";
+          break;
+        case "confidence":
+          av = CONFIDENCE_ORDER[a.confidence] ?? 4;
+          bv = CONFIDENCE_ORDER[b.confidence] ?? 4;
+          break;
+        case "created_at":
+          av = a.created_at ? Date.parse(a.created_at) : 0;
+          bv = b.created_at ? Date.parse(b.created_at) : 0;
+          break;
+      }
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    return sorted;
+  }, [
+    discoveries,
+    filterState,
+    filterConfidence,
+    searchQuery,
+    sortField,
+    sortDir,
+  ]);
 
   function toggleExpand(id: string) {
     setExpandedIds((prev) => {
@@ -171,8 +235,14 @@ export default function ReviewQueue({ initialDiscoveries }: ReviewQueueProps) {
         <table className="min-w-full divide-y divide-border-subtle">
           <thead className="bg-surface-overlay">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-text-tertiary">
+              <th
+                onClick={() => handleSort("project_name")}
+                className="cursor-pointer select-none px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-text-tertiary hover:text-text-secondary"
+              >
                 Project
+                {sortField === "project_name" && (
+                  <span className="ml-1">{sortDir === "asc" ? "↑" : "↓"}</span>
+                )}
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-text-tertiary">
                 Developer
@@ -180,17 +250,41 @@ export default function ReviewQueue({ initialDiscoveries }: ReviewQueueProps) {
               <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-text-tertiary">
                 MW
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-text-tertiary">
+              <th
+                onClick={() => handleSort("state")}
+                className="cursor-pointer select-none px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-text-tertiary hover:text-text-secondary"
+              >
                 State
+                {sortField === "state" && (
+                  <span className="ml-1">{sortDir === "asc" ? "↑" : "↓"}</span>
+                )}
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-text-tertiary">
+              <th
+                onClick={() => handleSort("epc_contractor")}
+                className="cursor-pointer select-none px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-text-tertiary hover:text-text-secondary"
+              >
                 EPC Contractor
+                {sortField === "epc_contractor" && (
+                  <span className="ml-1">{sortDir === "asc" ? "↑" : "↓"}</span>
+                )}
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-text-tertiary">
+              <th
+                onClick={() => handleSort("confidence")}
+                className="cursor-pointer select-none px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-text-tertiary hover:text-text-secondary"
+              >
                 Confidence
+                {sortField === "confidence" && (
+                  <span className="ml-1">{sortDir === "asc" ? "↑" : "↓"}</span>
+                )}
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-text-tertiary">
+              <th
+                onClick={() => handleSort("created_at")}
+                className="cursor-pointer select-none px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-text-tertiary hover:text-text-secondary"
+              >
                 Created
+                {sortField === "created_at" && (
+                  <span className="ml-1">{sortDir === "asc" ? "↑" : "↓"}</span>
+                )}
               </th>
               <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wide text-text-tertiary">
                 Actions
