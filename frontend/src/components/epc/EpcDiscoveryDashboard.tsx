@@ -330,7 +330,7 @@ export default function EpcDiscoveryDashboard({
   ];
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       {/* Active research banner */}
       <ActiveResearchBanner
         projects={projects}
@@ -338,7 +338,7 @@ export default function EpcDiscoveryDashboard({
       />
 
       {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border-subtle bg-surface-raised px-4 py-3">
         <select
           className={selectClasses}
           value={filterState}

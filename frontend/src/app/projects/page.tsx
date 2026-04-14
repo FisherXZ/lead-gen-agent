@@ -18,9 +18,20 @@ export default async function ProjectsPage() {
     .order("created_at", { ascending: false });
 
   return (
-    <EpcDiscoveryDashboard
-      projects={(projects ?? []) as Project[]}
-      discoveries={(discoveries ?? []) as EpcDiscovery[]}
-    />
+    <main className="mx-auto max-w-7xl px-4 pt-12 pb-16 sm:px-6 lg:px-8">
+      <div className="mb-8">
+        <h1 className="font-serif text-3xl tracking-tight text-text-primary">
+          Pipeline
+        </h1>
+        <p className="mt-1 text-sm text-text-tertiary">
+          All projects, sortable and filterable. Research EPCs inline.
+        </p>
+      </div>
+
+      <EpcDiscoveryDashboard
+        projects={(projects ?? []) as Project[]}
+        discoveries={(discoveries ?? []) as EpcDiscovery[]}
+      />
+    </main>
   );
 }
