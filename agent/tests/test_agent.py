@@ -426,3 +426,84 @@ class TestTenacityRetry:
         assert result.error is not None
         assert "rate limit" in result.error.message.lower()
         assert mock_client.messages.create.call_count == 5
+
+
+# ---------------------------------------------------------------------------
+# Triage integration
+# ---------------------------------------------------------------------------
+
+
+class TestTriageIntegration:
+    @patch("src.research.triage_project", new_callable=AsyncMock)
+    @patch("src.research.anthropic.AsyncAnthropic")
+    async def test_triage_skip_short_circuits_research(
+        self, MockClient, mock_triage, sample_project
+    ):
+        """When triage says skip, research should return immediately without entering the loop."""
+        from src.models import TriageResult
+
+        mock_triage.return_value = TriageResult(
+            action="skip",
+            skip_reason="utility_as_developer_unresolved",
+            triage_log=[{"rule": "utility_allowlist"}],
+            tokens_used=150,
+        )
+
+        mock_client = MagicMock()
+        MockClient.return_value = mock_client
+
+        result, log, tokens = await run_research(sample_project)
+
+        assert "Skipped by triage" in result.reasoning
+        assert result.error.category == "triaged_skip"
+        assert "utility_as_developer_unresolved" in result.error.message
+        assert tokens == 150
+        # Verify the Anthropic API was never called
+        mock_client.messages.create.assert_not_called()
+
+    @patch("src.research.triage_project", new_callable=AsyncMock)
+    @patch("src.research.execute_tool", new_callable=AsyncMock)
+    @patch("src.research.anthropic.AsyncAnthropic")
+    async def test_triage_corrects_project_name(
+        self, MockClient, mock_exec_tool, mock_triage, sample_project
+    ):
+        """When triage corrects the project, research should use the corrected version."""
+        from src.models import TriageResult
+
+        corrected = dict(sample_project)
+        corrected["project_name"] = "Honey Creek Solar"
+        corrected["developer"] = "Leeward Renewable Energy"
+
+        mock_triage.return_value = TriageResult(
+            action="research",
+            corrected_project=corrected,
+            triage_log=[{"rule": "poi_regex"}, {"rule": "resolved"}],
+            tokens_used=200,
+        )
+
+        # Make the agent call report_findings immediately
+        report_block = make_tool_use_block(
+            name="report_findings",
+            block_id="rf-1",
+            input_data={
+                "epc_contractor": "McCarthy Building",
+                "confidence": "likely",
+                "reasoning": "Found via portfolio",
+                "sources": [],
+            },
+        )
+        resp = make_claude_response(stop_reason="tool_use", content=[report_block])
+
+        mock_client = MagicMock()
+        mock_client.messages = MagicMock()
+        mock_client.messages.create = AsyncMock(return_value=resp)
+        MockClient.return_value = mock_client
+
+        result, log, tokens = await run_research(sample_project)
+
+        # Triage was called
+        mock_triage.assert_called_once()
+        # Research proceeded (API was called)
+        mock_client.messages.create.assert_called()
+        # Result is from the research, not from triage
+        assert result.epc_contractor == "McCarthy Building"
