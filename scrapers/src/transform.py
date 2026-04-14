@@ -1,4 +1,50 @@
+import re
+
 import pandas as pd
+
+# Utility allow-list — matches triage module's list
+_UTILITY_NAMES = {
+    "SCE", "SOUTHERN CALIFORNIA EDISON",
+    "PGAE", "PG&E", "PACIFIC GAS & ELECTRIC", "PACIFIC GAS AND ELECTRIC",
+    "SDGE", "SAN DIEGO GAS & ELECTRIC",
+    "DCRT",
+    "ENTERGY ARKANSAS", "ENTERGY LOUISIANA", "ENTERGY MISSISSIPPI",
+    "ENTERGY TEXAS", "ENTERGY NEW ORLEANS",
+    "AMEREN ILLINOIS", "AMEREN MISSOURI",
+    "AMEREN TRANSMISSION COMPANY OF ILLINOIS",
+    "AEP", "AMERICAN ELECTRIC POWER", "AEP INDIANA MICHIGAN", "I&M",
+    "JCPL", "JERSEY CENTRAL POWER & LIGHT",
+    "HOOSIER ENERGY",
+    "CENTERPOINT ENERGY INDIANA SOUTH",
+    "SOUTHERN COMPANY", "ALABAMA POWER", "GEORGIA POWER", "MISSISSIPPI POWER",
+    "DOMINION", "DOMINION ENERGY",
+    "APS", "ARIZONA PUBLIC SERVICE",
+}
+
+# POI regex patterns — matches triage module's patterns
+_POI_PATTERNS = [
+    re.compile(r"^[\w\s\./&-]+ ?- ?[\w\s\./&-]+ ?\d+(\.\d+)? ?kV$", re.IGNORECASE),
+    re.compile(r"^\d+[A-Z]+ ?- ?\d+[A-Z]+ ?\d+(\.\d+)? ?kV$", re.IGNORECASE),
+    re.compile(r"\d+(\.\d+)? ?kV (Switching Station|Substation|SS)$", re.IGNORECASE),
+    re.compile(r"^Taping .+ to .+ \d+kV", re.IGNORECASE),
+    re.compile(r"^[\w\s]+ - [\w\s]+ \d+/\d+ SS \d+(\.\d+)? ?kV$", re.IGNORECASE),
+]
+
+
+def _classify_name(name: str | None) -> str:
+    """Classify project name as 'poi' or 'marketing'."""
+    if not name:
+        return "marketing"
+    return "poi" if any(p.search(name) for p in _POI_PATTERNS) else "marketing"
+
+
+def _detect_utility(developer: str | None) -> str | None:
+    """Return the developer string if it's a known utility, else None."""
+    if not developer:
+        return None
+    normalized = developer.strip().upper()
+    return developer if normalized in _UTILITY_NAMES else None
+
 
 # Target DB columns (excluding auto-generated ones)
 DB_COLUMNS = [
@@ -19,6 +65,8 @@ DB_COLUMNS = [
     "lead_score",
     "construction_status",
     "geocode_source",
+    "interconnecting_utility",
+    "name_type",
     "raw_data",
 ]
 
@@ -40,7 +88,7 @@ def transform_miso(raw: list[dict]) -> pd.DataFrame:
     """Transform raw MISO API records to DB schema."""
     rows = []
     for r in raw:
-        rows.append({
+        row = {
             "queue_id": r.get("projectNumber", ""),
             "iso_region": "MISO",
             "project_name": r.get("poiName") or None,
@@ -56,7 +104,9 @@ def transform_miso(raw: list[dict]) -> pd.DataFrame:
             "status": r.get("applicationStatus") or None,
             "source": "iso_queue",
             "raw_data": r,
-        })
+        }
+        row["name_type"] = _classify_name(row.get("project_name"))
+        rows.append(row)
     return pd.DataFrame(rows)
 
 
@@ -98,7 +148,7 @@ def transform_ercot(df_raw: pd.DataFrame) -> pd.DataFrame:
 
         raw = {k: (str(v) if pd.notna(v) else None) for k, v in r.items() if k is not None and str(k) != "nan"}
 
-        rows.append({
+        row = {
             "queue_id": str(r.get("INR", "")).strip(),
             "iso_region": "ERCOT",
             "project_name": str(r.get("Project Name", "")).strip() or None,
@@ -114,7 +164,9 @@ def transform_ercot(df_raw: pd.DataFrame) -> pd.DataFrame:
             "status": status,
             "source": "iso_queue",
             "raw_data": raw,
-        })
+        }
+        row["name_type"] = _classify_name(row.get("project_name"))
+        rows.append(row)
     return pd.DataFrame(rows)
 
 
@@ -145,7 +197,7 @@ def transform_caiso(sheets: dict[str, pd.DataFrame]) -> pd.DataFrame:
 
             raw = {k: (str(v) if pd.notna(v) else None) for k, v in r.items() if str(k) != "nan"}
 
-            all_rows.append({
+            row = {
                 "queue_id": str(r.get("Queue Position", "")).strip(),
                 "iso_region": "CAISO",
                 "project_name": str(project_name).strip() if pd.notna(project_name) else None,
@@ -161,7 +213,15 @@ def transform_caiso(sheets: dict[str, pd.DataFrame]) -> pd.DataFrame:
                 "status": str(r.get("Application Status", sheet_status)).strip() if pd.notna(r.get("Application Status")) else sheet_status,
                 "source": "iso_queue",
                 "raw_data": raw,
-            })
+            }
+            # Detect utility-as-developer
+            utility = _detect_utility(row.get("developer"))
+            if utility:
+                row["interconnecting_utility"] = utility
+                row["developer"] = None
+            # Classify project name
+            row["name_type"] = _classify_name(row.get("project_name"))
+            all_rows.append(row)
     return pd.DataFrame(all_rows)
 
 
@@ -183,7 +243,7 @@ def transform_pjm(df_raw: pd.DataFrame) -> pd.DataFrame:
 
         raw = {k: (str(v) if pd.notna(v) else None) for k, v in r.items() if k is not None and str(k) != "nan"}
 
-        rows.append({
+        row = {
             "queue_id": str(r.get("Project ID", "")).strip(),
             "iso_region": "PJM",
             "project_name": str(r.get("Name", "")).strip() or None,
@@ -199,7 +259,9 @@ def transform_pjm(df_raw: pd.DataFrame) -> pd.DataFrame:
             "status": str(r.get("Status", "")).strip() if pd.notna(r.get("Status")) else None,
             "source": "iso_queue",
             "raw_data": raw,
-        })
+        }
+        row["name_type"] = _classify_name(row.get("project_name"))
+        rows.append(row)
     return pd.DataFrame(rows)
 
 
