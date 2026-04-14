@@ -414,3 +414,41 @@ def build_user_message(project: dict, knowledge_context: str | None = None) -> s
         parts.append(f"\n## Knowledge Base Context\n{knowledge_context}")
 
     return "\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Reflection prompt — used between search rounds in the v2 research loop
+# ---------------------------------------------------------------------------
+
+REFLECTION_PROMPT = """\
+You are reviewing evidence collected during EPC discovery research for a solar project.
+
+## Project
+{project_summary}
+
+## Evidence Collected So Far
+{evidence}
+
+## Searches Performed
+{searches}
+
+## Time Budget
+You have approximately {minutes_remaining} minutes remaining for research.
+{time_warning}
+
+## Task
+Analyze the evidence and respond with a JSON object (no markdown fencing):
+
+{{"summary": "1-2 sentence assessment of what we know so far", "gaps": ["specific gap 1", "specific gap 2"], "should_continue": true, "next_search_topic": "the most promising search query to fill the biggest gap"}}
+
+Rules:
+- Set should_continue to false if: evidence is sufficient for a confident report, \
+OR all reasonable search angles have been exhausted, OR less than 1 minute remains.
+- Each gap should be specific and actionable (e.g., "No second independent source \
+confirming McCarthy as EPC" not "need more evidence").
+- next_search_topic should be a concrete search query, not a vague direction.
+- If you found a candidate EPC, the most valuable gap to fill is verification \
+(scale check, second source, counter-evidence).
+- If no candidate found after 4+ searches, consider whether the project is too \
+early-stage for EPC selection.
+"""

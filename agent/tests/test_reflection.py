@@ -1,213 +1,208 @@
-"""Tests for the post-research reflection loop in research.py.
+"""Tests for the reflection module (analyze_and_plan, v2 research loop)."""
 
-NOTE: _run_reflection and REFLECTION_MAX_RETRIES were removed from src/research.py.
-These tests are skipped until the reflection loop is re-implemented.
-"""
+import json
+from unittest.mock import AsyncMock, patch
 
-import pytest
-
-pytest.skip(
-    "src.research no longer exports _run_reflection or REFLECTION_MAX_RETRIES — "
-    "reflection loop was removed; update these tests when it is re-added",
-    allow_module_level=True,
-)
-
-from types import SimpleNamespace  # noqa: E402
-from unittest.mock import AsyncMock, MagicMock, patch  # noqa: E402
-
-from src.models import AgentResult  # noqa: E402
-
-REFLECTION_MAX_RETRIES = 3  # placeholder so tests below are syntactically valid
-_run_reflection = None  # placeholder
+from src.evidence import EvidenceStore
+from src.models import Finding, ReflectionResult
+from src.reflection import _format_project_summary, _parse_reflection, analyze_and_plan
 
 
-def _make_response(*, stop_reason="end_turn", content=None, input_tokens=100, output_tokens=50):
-    """Build a mock API response."""
-    return SimpleNamespace(
-        stop_reason=stop_reason,
-        content=content or [SimpleNamespace(type="text", text="Reflection looks good.")],
-        usage=SimpleNamespace(input_tokens=input_tokens, output_tokens=output_tokens),
-    )
+# ---------------------------------------------------------------------------
+# _format_project_summary
+# ---------------------------------------------------------------------------
 
 
-def _make_tool_use_block(name, tool_input, block_id="tool-1"):
-    return SimpleNamespace(type="tool_use", name=name, input=tool_input, id=block_id)
+class TestFormatProjectSummary:
+    def test_full_project(self):
+        result = _format_project_summary({
+            "project_name": "Lone Star Solar",
+            "developer": "NextEra Energy",
+            "mw_capacity": 200,
+            "state": "TX",
+        })
+        assert "Lone Star Solar" in result
+        assert "NextEra Energy" in result
+        assert "200MW" in result
+        assert "TX" in result
+
+    def test_empty_project(self):
+        result = _format_project_summary({})
+        assert result == "Unknown project"
+
+    def test_partial_project(self):
+        result = _format_project_summary({"developer": "AES"})
+        assert "AES" in result
 
 
-def _make_text_block(text):
-    return SimpleNamespace(type="text", text=text)
+# ---------------------------------------------------------------------------
+# _parse_reflection
+# ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_reflection_no_gaps_returns_original():
-    """Agent reflects and finds no issues — returns original result."""
-    original = AgentResult(epc_contractor="McCarthy", confidence="confirmed")
-    client = AsyncMock()
-    client.messages.create = AsyncMock(
-        return_value=_make_response(
-            stop_reason="end_turn",
-            content=[_make_text_block("Everything checks out. All tasks done.")],
-        )
-    )
+class TestParseReflection:
+    def test_direct_json(self):
+        raw = json.dumps({
+            "summary": "Found McCarthy as likely EPC",
+            "gaps": ["No second source"],
+            "should_continue": True,
+            "next_search_topic": "McCarthy portfolio",
+        })
+        result = _parse_reflection(raw)
+        assert isinstance(result, ReflectionResult)
+        assert result.should_continue is True
+        assert "McCarthy" in result.summary
 
-    result, log, tokens = await _run_reflection(
-        client,
-        original,
-        "session-1",
-        [],
-        MagicMock(content=[]),
-        [],
-        agent_log=[],
-        total_tokens=0,
-    )
-    assert result.epc_contractor == "McCarthy"
-    assert result.confidence == "confirmed"
-    assert any("reflection" in str(entry) for entry in log)
+    def test_json_in_code_block(self):
+        raw = '```json\n{"summary": "test", "gaps": [], "should_continue": false}\n```'
+        result = _parse_reflection(raw)
+        assert result.should_continue is False
+
+    def test_json_in_plain_code_block(self):
+        raw = '```\n{"summary": "test", "gaps": ["gap1"], "should_continue": true}\n```'
+        result = _parse_reflection(raw)
+        assert result.should_continue is True
+        assert len(result.gaps) == 1
+
+    def test_json_embedded_in_text(self):
+        raw = 'Here is my analysis: {"summary": "test", "should_continue": false} That is all.'
+        result = _parse_reflection(raw)
+        assert result.should_continue is False
+
+    def test_garbage_input(self):
+        raw = "This is not JSON at all, just random text about solar panels."
+        result = _parse_reflection(raw)
+        assert isinstance(result, ReflectionResult)
+        assert result.should_continue is True  # safe default
+
+    def test_empty_input(self):
+        result = _parse_reflection("")
+        assert result.should_continue is True
+
+    def test_partial_json_fields(self):
+        raw = json.dumps({"summary": "only summary"})
+        result = _parse_reflection(raw)
+        assert result.summary == "only summary"
+        assert result.gaps == []
+        assert result.should_continue is True
 
 
-@pytest.mark.asyncio
-async def test_reflection_updated_report():
-    """Agent reflects and calls report_findings with updated result."""
-    original = AgentResult(epc_contractor="McCarthy", confidence="possible")
+# ---------------------------------------------------------------------------
+# analyze_and_plan (integration with mocked LLM)
+# ---------------------------------------------------------------------------
 
-    # First call: agent calls report_findings with upgraded confidence
-    updated_input = {
-        "epc_contractor": "McCarthy Building Companies",
-        "confidence": "likely",
-        "sources": [],
-        "reasoning": "Found additional source confirming.",
+
+def _make_store_with_finding():
+    store = EvidenceStore()
+    store.add(Finding(
+        text="McCarthy Building Companies awarded 200MW solar EPC contract",
+        source_url="https://example.com/pr",
+        source_tool="tavily_search",
+        reliability="high",
+        iteration=1,
+    ))
+    store.record_search("McCarthy solar EPC Texas")
+    return store
+
+
+def _sample_project():
+    return {
+        "id": "test-123",
+        "project_name": "Lone Star Solar",
+        "developer": "NextEra Energy",
+        "mw_capacity": 200,
+        "state": "TX",
+        "iso_region": "ERCOT",
     }
-    response = _make_response(
-        stop_reason="tool_use",
-        content=[
-            _make_text_block("Found additional evidence."),
-            _make_tool_use_block("report_findings", updated_input),
-        ],
-    )
-    client = AsyncMock()
-    client.messages.create = AsyncMock(return_value=response)
-
-    result, log, tokens = await _run_reflection(
-        client,
-        original,
-        "session-1",
-        [],
-        MagicMock(content=[]),
-        [],
-        agent_log=[],
-        total_tokens=0,
-    )
-    # Should use the updated result, not the original
-    assert result.epc_contractor == "McCarthy Building Companies"
-    assert result.confidence == "likely"
 
 
-@pytest.mark.asyncio
-async def test_reflection_retry_then_report():
-    """Agent identifies gap, uses tools, then reports."""
-    original = AgentResult(epc_contractor="Unknown", confidence="unknown")
+class TestAnalyzeAndPlan:
+    async def test_returns_reflection_result(self):
+        mock_response = json.dumps({
+            "summary": "Found McCarthy as likely EPC from press release",
+            "gaps": ["No second independent source"],
+            "should_continue": True,
+            "next_search_topic": "McCarthy Building solar portfolio",
+        })
 
-    # Turn 1: agent calls manage_todo read (not report_findings)
-    turn1 = _make_response(
-        stop_reason="tool_use",
-        content=[_make_tool_use_block("manage_todo", {"operation": "read", "session_id": "s1"})],
-    )
-    # Turn 2: agent calls report_findings
-    turn2 = _make_response(
-        stop_reason="tool_use",
-        content=[
-            _make_tool_use_block(
-                "report_findings",
-                {
-                    "epc_contractor": "Signal Energy",
-                    "confidence": "possible",
-                    "sources": [],
-                    "reasoning": "Found after reflection.",
-                },
-                block_id="tool-2",
+        with patch("src.reflection._call_reflection_llm", new_callable=AsyncMock) as mock_llm:
+            mock_llm.return_value = mock_response
+            result = await analyze_and_plan(
+                project=_sample_project(),
+                evidence=_make_store_with_finding(),
+                minutes_remaining=3.0,
             )
-        ],
-    )
 
-    client = AsyncMock()
-    client.messages.create = AsyncMock(side_effect=[turn1, turn2])
+        assert isinstance(result, ReflectionResult)
+        assert result.should_continue is True
+        assert "McCarthy" in result.summary
+        assert len(result.gaps) == 1
 
-    with patch("src.research.execute_tool", new_callable=AsyncMock) as mock_exec:
-        mock_exec.return_value = {"tasks": [], "message": "No plan"}
-        result, log, tokens = await _run_reflection(
-            client,
-            original,
-            "session-1",
-            [],
-            MagicMock(content=[]),
-            [],
-            agent_log=[],
-            total_tokens=0,
-        )
+    async def test_prompt_includes_project_and_evidence(self):
+        with patch("src.reflection._call_reflection_llm", new_callable=AsyncMock) as mock_llm:
+            mock_llm.return_value = json.dumps({
+                "summary": "test", "gaps": [], "should_continue": False,
+            })
+            await analyze_and_plan(
+                project=_sample_project(),
+                evidence=_make_store_with_finding(),
+                minutes_remaining=3.0,
+            )
 
-    assert result.epc_contractor == "Signal Energy"
-    assert result.confidence == "possible"
+        prompt = mock_llm.call_args[0][0]
+        assert "Lone Star Solar" in prompt
+        assert "NextEra Energy" in prompt
+        assert "McCarthy" in prompt
+        assert "3.0" in prompt
 
+    async def test_time_warning_injected_when_low(self):
+        with patch("src.reflection._call_reflection_llm", new_callable=AsyncMock) as mock_llm:
+            mock_llm.return_value = json.dumps({
+                "summary": "test", "gaps": [], "should_continue": False,
+            })
+            await analyze_and_plan(
+                project=_sample_project(),
+                evidence=EvidenceStore(),
+                minutes_remaining=0.5,
+            )
 
-@pytest.mark.asyncio
-async def test_reflection_max_retries_fallback():
-    """Agent keeps using tools without reporting — hits max retries, falls back to original."""
-    original = AgentResult(epc_contractor="McCarthy", confidence="likely")
+        prompt = mock_llm.call_args[0][0]
+        assert "Less than 1 minute" in prompt
 
-    # Every turn: agent calls a tool but never report_findings
-    tool_response = _make_response(
-        stop_reason="tool_use",
-        content=[_make_tool_use_block("web_search", {"query": "more info"})],
-    )
+    async def test_no_time_warning_when_plenty(self):
+        with patch("src.reflection._call_reflection_llm", new_callable=AsyncMock) as mock_llm:
+            mock_llm.return_value = json.dumps({
+                "summary": "test", "gaps": [], "should_continue": False,
+            })
+            await analyze_and_plan(
+                project=_sample_project(),
+                evidence=EvidenceStore(),
+                minutes_remaining=3.0,
+            )
 
-    client = AsyncMock()
-    client.messages.create = AsyncMock(return_value=tool_response)
+        prompt = mock_llm.call_args[0][0]
+        assert "Less than 1 minute" not in prompt
 
-    with patch("src.research.execute_tool", new_callable=AsyncMock) as mock_exec:
-        mock_exec.return_value = {"results": []}
-        result, log, tokens = await _run_reflection(
-            client,
-            original,
-            "session-1",
-            [],
-            MagicMock(content=[]),
-            [],
-            agent_log=[],
-            total_tokens=0,
-        )
+    async def test_handles_llm_exception(self):
+        with patch("src.reflection._call_reflection_llm", new_callable=AsyncMock) as mock_llm:
+            mock_llm.side_effect = Exception("API timeout")
+            result = await analyze_and_plan(
+                project=_sample_project(),
+                evidence=EvidenceStore(),
+                minutes_remaining=3.0,
+            )
 
-    # Should fall back to original after max retries
-    assert result.epc_contractor == "McCarthy"
-    assert result.confidence == "likely"
-    # Should have made REFLECTION_MAX_RETRIES + 1 API calls
-    assert client.messages.create.call_count == REFLECTION_MAX_RETRIES + 1
+        assert isinstance(result, ReflectionResult)
+        assert result.should_continue is True
 
+    async def test_handles_malformed_llm_output(self):
+        with patch("src.reflection._call_reflection_llm", new_callable=AsyncMock) as mock_llm:
+            mock_llm.return_value = "This is not JSON at all"
+            result = await analyze_and_plan(
+                project=_sample_project(),
+                evidence=EvidenceStore(),
+                minutes_remaining=3.0,
+            )
 
-@pytest.mark.asyncio
-async def test_reflection_api_error_returns_original():
-    """API error during reflection — returns original result gracefully."""
-    import anthropic
-
-    original = AgentResult(epc_contractor="Blattner", confidence="confirmed")
-
-    client = AsyncMock()
-    client.messages.create = AsyncMock(
-        side_effect=anthropic.APIError(
-            message="Rate limited",
-            request=MagicMock(),
-            body=None,
-        )
-    )
-
-    result, log, tokens = await _run_reflection(
-        client,
-        original,
-        "session-1",
-        [],
-        MagicMock(content=[]),
-        [],
-        agent_log=[],
-        total_tokens=0,
-    )
-    assert result.epc_contractor == "Blattner"
-    assert result.confidence == "confirmed"
+        assert isinstance(result, ReflectionResult)
+        assert result.should_continue is True
