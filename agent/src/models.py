@@ -62,6 +62,14 @@ class ResearchError(BaseModel):
     detail: str | None = None
 
 
+class TriageResult(BaseModel):
+    action: str = "research"               # "research" | "skip"
+    corrected_project: dict | None = None  # project dict with resolved name/developer
+    skip_reason: str | None = None         # machine-readable code
+    triage_log: list[dict] = []            # rules fired, tools called, findings
+    tokens_used: int = 0
+
+
 class AgentResult(BaseModel):
     epc_contractor: str | None = None
     confidence: str = "unknown"  # confirmed / likely / possible / unknown
