@@ -28,6 +28,7 @@ from .completeness import CHECKPOINTS, evaluate_completeness
 from .models import AgentResult, ResearchError
 from .parsing import parse_report_findings
 from .prompts import PLANNING_SYSTEM_PROMPT, RESEARCH_SYSTEM_PROMPT, build_user_message
+from .salvage import synthesize_timeout_salvage
 from .tools import check_tool_health, execute_tool, get_tools
 
 MODEL = os.environ.get("RESEARCH_MODEL", "claude-sonnet-4-6")
@@ -126,6 +127,7 @@ async def run_research(
     recent_tool_outputs: list[dict] = []
     # Effective iteration counter — notify_progress-only turns don't count
     effective_iteration = 0
+    consecutive_status_only = 0
 
     for iteration in range(MAX_ITERATIONS):
         # Completeness checkpoint (Harvey AI pattern): at iterations 6, 12, 18
@@ -151,7 +153,7 @@ async def run_research(
         # to force the agent to conclude. The mandatory checkpoint at 18 is a
         # text nudge the agent can ignore; this is structural — it literally
         # cannot call anything else.
-        if effective_iteration >= HARD_STOP_ITERATION:
+        if effective_iteration >= HARD_STOP_ITERATION or iteration >= MAX_ITERATIONS - 3:
             active_tools = [t for t in cached_tools if t["name"] == "report_findings"]
             hard_stop_msg = (
                 "\n\nSYSTEM: You have exhausted your research budget. "
@@ -307,7 +309,13 @@ async def run_research(
         }
         substantive_tools = tool_names_this_turn - {"notify_progress", "research_scratchpad"}
         if substantive_tools:
+            consecutive_status_only = 0
             effective_iteration += 1
+        else:
+            consecutive_status_only += 1
+            if consecutive_status_only >= 3:
+                effective_iteration += 1
+                consecutive_status_only = 0
 
         # 3b: Check for consecutive tool errors — if 3+, tell agent to wrap up
         healthy, health_msg = check_tool_health(recent_tool_outputs)
@@ -326,13 +334,23 @@ async def run_research(
 
         # Context compaction is handled by the AgentRuntime in src/agents/research.py.
 
-    # 3c: Max iterations reached
+    # 3c: Max iterations reached — synthesize structured negative evidence
+    salvage = synthesize_timeout_salvage(agent_log, project, recent_tool_outputs)
     return (
         AgentResult(
-            reasoning="Research timed out after maximum iterations.",
+            reasoning={
+                "summary": salvage["summary"],
+                "supporting_evidence": salvage["supporting_evidence"],
+                "gaps": salvage["gaps"],
+            },
+            confidence="unknown",
+            epc_contractor=None,
+            sources=salvage["sources"],
+            searches_performed=salvage["queries_tried"],
+            negative_evidence=salvage["negative_evidence"],
             error=ResearchError(
-                category="max_iterations",
-                message="Research timed out after maximum iterations without completing.",
+                category="max_iterations_salvaged",
+                message="Hit iteration cap; salvaged structured negative evidence.",
             ),
         ),
         agent_log,

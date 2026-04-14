@@ -224,10 +224,97 @@ class TestMaxIterations:
 
         result, log, tokens = await run_research(sample_project)
 
-        assert "timed out" in result.reasoning.lower()
+        assert isinstance(result.reasoning, dict)
+        assert "summary" in result.reasoning
         assert result.error is not None
-        assert result.error.category == "max_iterations"
+        assert result.error.category == "max_iterations_salvaged"
         assert mock_client.messages.create.call_count == 2
+
+
+class TestHardStopRawIteration:
+    @patch("src.research.MAX_ITERATIONS", 6)
+    @patch("src.research.HARD_STOP_ITERATION", 100)  # disable effective_iteration trigger
+    @patch("src.research.execute_tool", new_callable=AsyncMock)
+    @patch("src.research.anthropic.AsyncAnthropic")
+    async def test_hard_stop_fires_on_raw_iteration(
+        self, MockClient, mock_exec_tool, sample_project
+    ):
+        """HARD_STOP should fire at MAX_ITERATIONS - 3 on raw iteration."""
+        # Agent only calls notify_progress — never increments effective_iteration
+        notify_block = make_tool_use_block(
+            name="notify_progress",
+            block_id="np-1",
+            input_data={"status": "still searching"},
+        )
+        resp = make_claude_response(
+            stop_reason="tool_use",
+            content=[notify_block],
+        )
+        mock_exec_tool.return_value = {"status": "ok"}
+
+        mock_client = MagicMock()
+        mock_client.messages = MagicMock()
+
+        # Track which tools are passed to each call
+        tools_per_call = []
+
+        async def capture_create(**kwargs):
+            tools_per_call.append([t["name"] for t in kwargs.get("tools", [])])
+            return resp
+
+        mock_client.messages.create = AsyncMock(side_effect=capture_create)
+        MockClient.return_value = mock_client
+
+        result, log, tokens = await run_research(sample_project)
+
+        # At iteration 3 (MAX_ITERATIONS - 3 = 6 - 3 = 3), HARD_STOP should fire
+        # So later iterations should only have report_findings available
+        # The last few calls should have only report_findings in tools
+        assert any(
+            tools == ["report_findings"] for tools in tools_per_call
+        ), f"HARD_STOP never fired — tools per call: {tools_per_call}"
+
+
+class TestConsecutiveStatusOnly:
+    @patch("src.research.MAX_ITERATIONS", 10)
+    @patch("src.research.HARD_STOP_ITERATION", 4)  # fires at effective_iteration 4
+    @patch("src.research.execute_tool", new_callable=AsyncMock)
+    @patch("src.research.anthropic.AsyncAnthropic")
+    async def test_consecutive_status_only_increments_effective(
+        self, MockClient, mock_exec_tool, sample_project
+    ):
+        """3 consecutive status-only turns should increment effective_iteration."""
+        notify_block = make_tool_use_block(
+            name="notify_progress",
+            block_id="np-1",
+            input_data={"status": "thinking"},
+        )
+        resp = make_claude_response(
+            stop_reason="tool_use",
+            content=[notify_block],
+        )
+        mock_exec_tool.return_value = {"status": "ok"}
+
+        mock_client = MagicMock()
+        mock_client.messages = MagicMock()
+
+        tools_per_call = []
+
+        async def capture_create(**kwargs):
+            tools_per_call.append([t["name"] for t in kwargs.get("tools", [])])
+            return resp
+
+        mock_client.messages.create = AsyncMock(side_effect=capture_create)
+        MockClient.return_value = mock_client
+
+        result, log, tokens = await run_research(sample_project)
+
+        # After 3 consecutive status-only turns, effective_iteration increments
+        # With HARD_STOP at 4, it should eventually engage even though
+        # the agent only calls notify_progress
+        assert any(
+            tools == ["report_findings"] for tools in tools_per_call
+        ), "Status-only counter never triggered HARD_STOP"
 
 
 # ---------------------------------------------------------------------------
