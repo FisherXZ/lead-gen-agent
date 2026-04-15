@@ -270,9 +270,9 @@ class TestHardStopRawIteration:
         # At iteration 3 (MAX_ITERATIONS - 3 = 6 - 3 = 3), HARD_STOP should fire
         # So later iterations should only have report_findings available
         # The last few calls should have only report_findings in tools
-        assert any(
-            tools == ["report_findings"] for tools in tools_per_call
-        ), f"HARD_STOP never fired — tools per call: {tools_per_call}"
+        assert any(tools == ["report_findings"] for tools in tools_per_call), (
+            f"HARD_STOP never fired — tools per call: {tools_per_call}"
+        )
 
 
 class TestConsecutiveStatusOnly:
@@ -312,9 +312,9 @@ class TestConsecutiveStatusOnly:
         # After 3 consecutive status-only turns, effective_iteration increments
         # With HARD_STOP at 4, it should eventually engage even though
         # the agent only calls notify_progress
-        assert any(
-            tools == ["report_findings"] for tools in tools_per_call
-        ), "Status-only counter never triggered HARD_STOP"
+        assert any(tools == ["report_findings"] for tools in tools_per_call), (
+            "Status-only counter never triggered HARD_STOP"
+        )
 
 
 # ---------------------------------------------------------------------------
