@@ -195,7 +195,14 @@ remaining gaps, and a suggested next search focus
   `[Research guidance: <summary>. Gaps remaining: <gaps>. Next search focus: <topic>. \
 Evidence so far: <numbered list>]`
 - Follow the suggested next_search_topic — it targets the biggest gap
-- Use fetch_page for promising leads; use web_search_broad (Brave) if Tavily misses
+- **Prefer `firecrawl_extract` over `fetch_page`** for: press releases, EPC portfolio \
+pages, SEC filing pages, regulatory documents, and any URL where you expect \
+structured EPC data. It returns typed JSON (epc_contractor, mw_capacity, developer, \
+announcement_date, key_quote) with high reliability. Use `fetch_page` only for quick \
+text peeks or when Firecrawl fails.
+- If a `fetch_page` call returns empty/garbled content (JS-heavy site), retry with \
+`firecrawl_extract` — it renders JavaScript and handles PDFs.
+- Use web_search_broad (Brave) if Tavily misses
 - If the guidance says "call report_findings now" — do so immediately
 
 ### Verification before reporting

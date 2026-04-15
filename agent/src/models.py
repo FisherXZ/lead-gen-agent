@@ -64,6 +64,22 @@ class Finding(BaseModel):
     iteration: int = 0
 
 
+class EpcPageExtraction(BaseModel):
+    """Schema for Firecrawl structured extraction from EPC-relevant pages.
+
+    Passed to Firecrawl's scrape API via model_json_schema() to get typed
+    output from press releases, portfolio pages, SEC filings, and similar.
+    """
+
+    epc_contractor: str | None = None
+    project_name: str | None = None
+    mw_capacity: float | None = None
+    developer: str | None = None
+    announcement_date: str | None = None
+    source_confidence: str = "medium"  # "high" | "medium" | "low"
+    key_quote: str | None = None
+
+
 class ReflectionResult(BaseModel):
     """Output of the analyze_and_plan reflection step."""
 

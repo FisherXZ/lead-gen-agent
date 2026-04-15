@@ -48,6 +48,7 @@ RESEARCH_TOOLS = [
     "web_search",
     "web_search_broad",
     "fetch_page",
+    "firecrawl_extract",
     "query_knowledge_base",
     "notify_progress",
     "research_scratchpad",
