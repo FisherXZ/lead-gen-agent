@@ -56,6 +56,25 @@ class NegativeEvidence(BaseModel):
     what_was_found: str  # "nothing", "contradictory", "different_epc", "different_project"
 
 
+class Finding(BaseModel):
+    """A single piece of evidence collected during research."""
+
+    text: str
+    source_url: str
+    source_tool: str  # tavily_search, brave_search, sec_edgar, osha_inspection, etc.
+    reliability: str = "medium"  # high / medium / low
+    iteration: int = 0
+
+
+class ReflectionResult(BaseModel):
+    """Output of the analyze_and_plan reflection step."""
+
+    summary: str
+    gaps: list[str] = []
+    should_continue: bool = True
+    next_search_topic: str | None = None
+
+
 class ResearchError(BaseModel):
     # "api_key_missing" | "anthropic_error" | "search_tool_error"
     # | "max_iterations" | "no_report" | "db_error" | "unknown"
