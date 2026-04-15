@@ -49,9 +49,7 @@ class TestTokenShape:
     @pytest.mark.asyncio
     @patch("src.main.get_active_job_for_conversation", return_value=None)
     @patch("src.main.db.set_share_token")
-    async def test_token_is_url_safe_and_high_entropy(
-        self, mock_set, mock_active_job, client
-    ):
+    async def test_token_is_url_safe_and_high_entropy(self, mock_set, mock_active_job, client):
         captured = {}
 
         def capture(conv_id, user_id, token):
@@ -72,9 +70,7 @@ class TestTokenShape:
     @pytest.mark.asyncio
     @patch("src.main.get_active_job_for_conversation", return_value=None)
     @patch("src.main.db.set_share_token")
-    async def test_tokens_are_unique_across_calls(
-        self, mock_set, mock_active_job, client
-    ):
+    async def test_tokens_are_unique_across_calls(self, mock_set, mock_active_job, client):
         tokens_seen: list[str] = []
 
         def capture(conv_id, user_id, token):
@@ -101,9 +97,7 @@ class TestCreateShareLink:
         "src.main.db.set_share_token",
         return_value={"token": "abc123XYZ_new", "shared_at": "2026-04-15T00:00:00Z"},
     )
-    async def test_returns_token_path_and_timestamp(
-        self, mock_set, mock_active_job, client
-    ):
+    async def test_returns_token_path_and_timestamp(self, mock_set, mock_active_job, client):
         res = await client.post("/api/conversations/conv-1/share")
         assert res.status_code == 200
         body = res.json()
@@ -123,9 +117,7 @@ class TestCreateShareLink:
     @pytest.mark.asyncio
     @patch("src.main.get_active_job_for_conversation", return_value=None)
     @patch("src.main.db.set_share_token", return_value=None)
-    async def test_404_when_conversation_not_owned(
-        self, mock_set, mock_active_job, client
-    ):
+    async def test_404_when_conversation_not_owned(self, mock_set, mock_active_job, client):
         res = await client.post("/api/conversations/someone-elses/share")
         assert res.status_code == 404
 
@@ -196,9 +188,7 @@ class TestPublicShareFetch:
     @pytest.mark.asyncio
     @patch("src.main.db.log_share_access")
     @patch("src.main.db.fetch_shared_conversation")
-    async def test_returns_sanitized_snapshot(
-        self, mock_fetch, mock_log, public_client
-    ):
+    async def test_returns_sanitized_snapshot(self, mock_fetch, mock_log, public_client):
         mock_fetch.return_value = {
             "conversation": {
                 "id": "c1",
@@ -269,9 +259,7 @@ class TestPublicShareFetch:
     @pytest.mark.asyncio
     @patch("src.main.db.log_share_access")
     @patch("src.main.db.fetch_shared_conversation")
-    async def test_logs_access_on_successful_fetch(
-        self, mock_fetch, mock_log, public_client
-    ):
+    async def test_logs_access_on_successful_fetch(self, mock_fetch, mock_log, public_client):
         mock_fetch.return_value = {
             "conversation": {"id": "c1", "title": "t", "shared_at": "2026-04-15T00:00:00Z"},
             "messages": [],

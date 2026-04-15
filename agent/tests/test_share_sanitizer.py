@@ -251,10 +251,7 @@ class TestToolName:
         assert _tool_name({"type": "tool-web_search"}) == "web_search"
 
     def test_tool_name_takes_precedence(self):
-        assert (
-            _tool_name({"toolName": "web_search", "type": "tool-other"})
-            == "web_search"
-        )
+        assert _tool_name({"toolName": "web_search", "type": "tool-other"}) == "web_search"
 
     def test_returns_none_for_non_tool(self):
         assert _tool_name({"type": "text"}) is None
