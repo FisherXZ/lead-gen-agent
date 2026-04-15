@@ -175,31 +175,43 @@ identify and verify the EPC contractor.
 
 ## Research Process
 
-### Phase 1: Plan
-1. Call notify_progress(stage="planning", message="Reviewing project and building plan").
-2. Review project details and knowledge base context. Note what's already known \
-and what searches have been tried in prior research attempts.
-3. Formulate a research plan: list 3-5 high-level search strategies and why each \
-is relevant to this project. Consider:
-   - What the KB already tells us about this developer/state
-   - Which EPC portfolio sites to check based on developer and region
-   - Whether the project stage suggests an EPC has been selected yet
-   - Any challenges (shell company developer, early-stage project, etc.)
-4. Call notify_progress(stage="planning", message="Research plan: [brief summary]").
+You operate in a structured research loop. Each round:
+1. You call search tools to investigate the current research focus
+2. Between rounds, the system evaluates your evidence and identifies gaps
+3. You receive `[Research guidance: ...]` messages with a summary of findings, \
+remaining gaps, and a suggested next search focus
+4. You follow that guidance until the system tells you to wrap up
 
-### Phase 2: Execute
-5. Execute planned searches. Call notify_progress(stage="searching") after each.
-6. Follow promising leads with fetch_page. Call notify_progress(stage="reading").
-7. After completing the plan, assess: did I find enough evidence?
-8. If not, formulate 1-2 additional targeted searches.
-9. If an unexpected lead appears, follow it even if not in the original plan. \
-Call notify_progress(stage="switching_strategy") when deviating.
+### Round 1 — Broad initial search
+- Review project details and knowledge base context
+- Run 2-3 searches across different angles:
+  * Web search (Tavily): developer + project + "EPC" or "contractor"
+  * Industry rankings: search_wiki_solar, search_spw for scale verification
+  * Structured data: search_sec_edgar if developer is public, search_osha for construction records
+- Call notify_progress(stage="searching") after each so the UI reflects activity
 
-### Phase 3: Report
-10. Verify any candidate EPC before reporting (scale, specificity, role, counter-evidence).
-11. Call report_findings with your verified result. Every source MUST have a URL. \
-Log ALL searches performed.
-12. ALWAYS call report_findings, even if you found nothing (set confidence to 'unknown').
+### Round 2+ — Gap-driven refinement
+- You will receive guidance messages between rounds. They look like:
+  `[Research guidance: <summary>. Gaps remaining: <gaps>. Next search focus: <topic>. \
+Evidence so far: <numbered list>]`
+- Follow the suggested next_search_topic — it targets the biggest gap
+- Use fetch_page for promising leads; use web_search_broad (Brave) if Tavily misses
+- If the guidance says "call report_findings now" — do so immediately
+
+### Verification before reporting
+When you have a candidate EPC, verify:
+1. Scale check: search_wiki_solar or search_spw — is this company utility-scale capable?
+2. Project specificity: does your source name THIS project, not a similarly named one?
+3. Role check: is this company the EPC, or developer/utility/supplier?
+4. Counter-evidence: run at least 1 search trying to disprove your finding
+5. Source independence: prefer 2+ different channels (press release + portfolio + ranking)
+
+### Reporting
+- Call report_findings with your verified result
+- Every source MUST have a URL (or `search:<query>` if found in a snippet without direct link)
+- Log ALL searches performed, including dead ends
+- Include negative_evidence for searches that found nothing or contradictory info
+- Report "unknown" with clear reasoning if evidence is insufficient — better than guessing
 """
 
 # ---------------------------------------------------------------------------

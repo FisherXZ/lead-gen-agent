@@ -20,7 +20,7 @@ from tests.conftest import (
 
 
 class TestReportFindings:
-    @patch("src.research.execute_tool", new_callable=AsyncMock)
+    @patch("src.research_loop.execute_tool", new_callable=AsyncMock)
     @patch("src.research.anthropic.AsyncAnthropic")
     async def test_single_turn_report(self, MockClient, mock_exec_tool, sample_project):
         """Agent calls report_findings on the first tool_use turn."""
@@ -66,7 +66,7 @@ class TestReportFindings:
         assert result.reasoning == "Two sources confirm."
         assert tokens == 300
 
-    @patch("src.research.execute_tool", new_callable=AsyncMock)
+    @patch("src.research_loop.execute_tool", new_callable=AsyncMock)
     @patch("src.research.anthropic.AsyncAnthropic")
     async def test_report_with_null_epc(self, MockClient, mock_exec_tool, sample_project):
         """Agent reports unknown with null epc_contractor."""
@@ -103,7 +103,7 @@ class TestReportFindings:
 
 
 class TestMultiTurn:
-    @patch("src.research.execute_tool", new_callable=AsyncMock)
+    @patch("src.research_loop.execute_tool", new_callable=AsyncMock)
     @patch("src.research.anthropic.AsyncAnthropic")
     async def test_search_then_report(self, MockClient, mock_exec_tool, sample_project):
         """Agent does a web_search, then calls report_findings."""
@@ -165,57 +165,44 @@ class TestMultiTurn:
 
 
 # ---------------------------------------------------------------------------
-# End turn (model finishes without report_findings)
+# Max depth / budget exhaustion
 # ---------------------------------------------------------------------------
 
 
-class TestEndTurn:
-    @patch("src.research.execute_tool", new_callable=AsyncMock)
+class TestMaxDepth:
+    """V2 loop exhausts its depth budget and returns a structured error.
+
+    Replaces the v1 TestEndTurn / TestMaxIterations tests — v2 treats end_turn
+    as round-ending (reflection decides next step) rather than extracting text.
+    """
+
+    @patch("src.research_loop.MAX_DEPTH", 2)
+    @patch("src.research_loop.analyze_and_plan", new_callable=AsyncMock)
+    @patch("src.research_loop.execute_tool", new_callable=AsyncMock)
     @patch("src.research.anthropic.AsyncAnthropic")
-    async def test_end_turn_extracts_text(self, MockClient, mock_exec_tool, sample_project):
-        text_block = make_text_block("I could not determine the EPC.")
-        resp = make_claude_response(
-            stop_reason="end_turn",
-            content=[text_block],
-            input_tokens=100,
-            output_tokens=40,
-        )
-
-        mock_client = MagicMock()
-        mock_client.messages = MagicMock()
-        mock_client.messages.create = AsyncMock(return_value=resp)
-        MockClient.return_value = mock_client
-
-        result, log, tokens = await run_research(sample_project)
-
-        assert result.reasoning == "I could not determine the EPC."
-        assert result.epc_contractor is None
-        assert tokens == 140
-
-
-# ---------------------------------------------------------------------------
-# Max iterations
-# ---------------------------------------------------------------------------
-
-
-class TestMaxIterations:
-    @patch("src.research.MAX_ITERATIONS", 2)
-    @patch("src.research.execute_tool", new_callable=AsyncMock)
-    @patch("src.research.anthropic.AsyncAnthropic")
-    async def test_max_iterations_returns_fallback(
-        self, MockClient, mock_exec_tool, sample_project
+    async def test_max_depth_returns_error(
+        self, MockClient, mock_exec_tool, mock_reflect, sample_project
     ):
-        """If agent hits max iterations without report_findings, return fallback."""
+        """If agent never calls report_findings and reflection keeps saying continue,
+        loop exhausts MAX_DEPTH and returns max_iterations error."""
+        from src.models import ReflectionResult
+
         search_block = make_tool_use_block(
             name="web_search",
             block_id="ws-loop",
-            input_data={"query": "search forever"},
+            input_data={"query": "never ending search"},
         )
         resp = make_claude_response(
             stop_reason="tool_use",
             content=[search_block],
         )
         mock_exec_tool.return_value = {"results": []}
+        mock_reflect.return_value = ReflectionResult(
+            summary="Still searching",
+            gaps=["Need more info"],
+            should_continue=True,
+            next_search_topic="another query",
+        )
 
         mock_client = MagicMock()
         mock_client.messages = MagicMock()
@@ -224,10 +211,9 @@ class TestMaxIterations:
 
         result, log, tokens = await run_research(sample_project)
 
-        assert "timed out" in result.reasoning.lower()
         assert result.error is not None
         assert result.error.category == "max_iterations"
-        assert mock_client.messages.create.call_count == 2
+        assert "budget" in result.reasoning.lower() or "iteration" in result.reasoning.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -236,7 +222,7 @@ class TestMaxIterations:
 
 
 class TestSearchErrors:
-    @patch("src.research.execute_tool", new_callable=AsyncMock)
+    @patch("src.research_loop.execute_tool", new_callable=AsyncMock)
     @patch("src.research.anthropic.AsyncAnthropic")
     async def test_search_error_feeds_back_error(self, MockClient, mock_exec_tool, sample_project):
         """Tool exception → error tool_result fed back, loop continues."""
@@ -285,7 +271,7 @@ class TestSearchErrors:
 
 
 class TestTokenCounting:
-    @patch("src.research.execute_tool", new_callable=AsyncMock)
+    @patch("src.research_loop.execute_tool", new_callable=AsyncMock)
     @patch("src.research.anthropic.AsyncAnthropic")
     async def test_tokens_accumulated_across_turns(
         self, MockClient, mock_exec_tool, sample_project
@@ -331,7 +317,7 @@ class TestTokenCounting:
 
 
 class TestTenacityRetry:
-    @patch("src.research.execute_tool", new_callable=AsyncMock)
+    @patch("src.research_loop.execute_tool", new_callable=AsyncMock)
     @patch("src.research.anthropic.AsyncAnthropic")
     async def test_rate_limit_retries_then_succeeds(
         self, MockClient, mock_exec_tool, sample_project
@@ -374,7 +360,7 @@ class TestTenacityRetry:
         assert result.epc_contractor == "Blattner"
         assert mock_client.messages.create.call_count == 2
 
-    @patch("src.research.execute_tool", new_callable=AsyncMock)
+    @patch("src.research_loop.execute_tool", new_callable=AsyncMock)
     @patch("src.research.anthropic.AsyncAnthropic")
     async def test_auth_error_fails_immediately(self, MockClient, mock_exec_tool, sample_project):
         """AuthenticationError -> immediate failure, no retries."""
@@ -399,7 +385,7 @@ class TestTenacityRetry:
         assert result.error.category == "api_key_missing"
         assert mock_client.messages.create.call_count == 1
 
-    @patch("src.research.execute_tool", new_callable=AsyncMock)
+    @patch("src.research_loop.execute_tool", new_callable=AsyncMock)
     @patch("src.research.anthropic.AsyncAnthropic")
     async def test_three_rate_limits_returns_error(
         self, MockClient, mock_exec_tool, sample_project

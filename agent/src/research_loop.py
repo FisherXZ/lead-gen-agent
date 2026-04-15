@@ -259,6 +259,20 @@ async def _run_search_round(
                 round_tokens,
                 failed_count,
             )
+        except anthropic.RateLimitError as exc:
+            logger.warning("Rate limit exceeded after retries: %s", exc)
+            return (
+                AgentResult(
+                    reasoning="Anthropic API rate limit exceeded after retries.",
+                    error=ResearchError(
+                        category="anthropic_error",
+                        message="Rate limit exceeded after retries.",
+                        detail=str(exc),
+                    ),
+                ),
+                round_tokens,
+                failed_count,
+            )
         except anthropic.APIError as exc:
             return (
                 AgentResult(
