@@ -20,6 +20,7 @@ async def _research_one(
     on_progress: Callable[[dict], Awaitable[None]],
     cancel_event: asyncio.Event | None = None,
     api_key: str | None = None,
+    shared_findings=None,
 ) -> dict:
     """Research a single project under semaphore control."""
     project_id = project["id"]
@@ -64,7 +65,8 @@ async def _research_one(
         try:
             knowledge_context = build_knowledge_context(project)
             agent_result, agent_log, total_tokens = await run_research(
-                project, knowledge_context, api_key=api_key
+                project, knowledge_context, api_key=api_key,
+                shared_findings=shared_findings,
             )
             discovery = store_discovery(
                 project_id,
@@ -110,9 +112,19 @@ async def run_batch(
     Returns:
         List of result dicts, one per project.
     """
+    from .evidence import EvidenceStore
+
+    # Shared evidence store — propagates findings across sibling research tasks.
+    # Project A's discoveries (e.g. "developer X uses EPC Y") immediately benefit
+    # project B in the same batch.
+    shared_findings = EvidenceStore()
+
     semaphore = asyncio.Semaphore(concurrency)
     tasks = [
-        _research_one(project, semaphore, on_progress, cancel_event, api_key=api_key)
+        _research_one(
+            project, semaphore, on_progress, cancel_event,
+            api_key=api_key, shared_findings=shared_findings,
+        )
         for project in projects
     ]
     raw_results = await asyncio.gather(*tasks, return_exceptions=True)

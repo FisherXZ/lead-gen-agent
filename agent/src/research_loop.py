@@ -87,6 +87,7 @@ async def run_research_loop(
     api_key: str | None = None,
     max_depth: int | None = None,
     time_budget: float | None = None,
+    shared_findings: EvidenceStore | None = None,
 ) -> tuple[AgentResult, list[dict], int]:
     """Run gap-driven EPC research for a single project.
 
@@ -96,6 +97,13 @@ async def run_research_loop(
 
     Stops when: reflection says stop, max_depth reached, time expired,
     or report_findings is called.
+
+    Args:
+        shared_findings: Optional cross-project evidence store for batch mode.
+            When provided, this project's local store is seeded from it at start,
+            and local findings are propagated back at end. Enables concurrent
+            batch research tasks to share discoveries (e.g., "developer X uses
+            EPC Y" found by project A benefits project B).
 
     Returns:
         (result, agent_log, total_tokens) — same contract as run_research().
@@ -110,9 +118,22 @@ async def run_research_loop(
 
     session_id = f"research-{project.get('id', 'unknown')}-{uuid4().hex[:8]}"
     evidence = EvidenceStore()
+
+    # Seed local evidence from shared store (batch mode: benefits from sibling discoveries)
+    if shared_findings is not None:
+        for finding in shared_findings.findings:
+            evidence.add(finding)
+
     agent_log: list[dict] = []
     total_tokens = 0
     failed_attempts = 0
+
+    async def _propagate_findings() -> None:
+        """Push this project's findings back to the shared store (batch mode)."""
+        if shared_findings is None:
+            return
+        for finding in evidence.findings:
+            await shared_findings.add_async(finding)
 
     user_msg = build_user_message(project, knowledge_context)
     user_msg += f"\n- **Session ID:** {session_id}"
@@ -144,6 +165,7 @@ async def run_research_loop(
         failed_attempts += round_failed
 
         if report_result is not None:
+            await _propagate_findings()
             return report_result, agent_log, total_tokens
 
         if failed_attempts >= MAX_FAILED_ATTEMPTS:
@@ -183,6 +205,7 @@ async def run_research_loop(
             )
             total_tokens += round_tokens
             if report_result is not None:
+                await _propagate_findings()
                 return report_result, agent_log, total_tokens
             break
 
@@ -200,6 +223,7 @@ async def run_research_loop(
         })
 
     # Exhausted depth/time without report_findings
+    await _propagate_findings()
     return (
         AgentResult(
             reasoning=f"Research exhausted iteration budget ({effective_max_depth} rounds). "

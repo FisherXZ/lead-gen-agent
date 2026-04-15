@@ -77,6 +77,7 @@ async def run_research(
     knowledge_context: str | None = None,
     approved_plan: str | None = None,
     api_key: str | None = None,
+    shared_findings=None,
 ) -> tuple[AgentResult, list[dict], int]:
     """Run EPC research for a single project.
 
@@ -88,6 +89,10 @@ async def run_research(
         knowledge_context: Optional KB briefing to include in the prompt.
         approved_plan: Optional approved research plan text to inject.
         api_key: Optional user-provided Anthropic API key.
+        shared_findings: Optional EvidenceStore shared across sibling batch
+            research tasks. When provided, findings from other projects in
+            the same batch seed this project, and its findings are propagated
+            back on completion.
 
     Returns:
         (result, agent_log, total_tokens)
@@ -97,6 +102,7 @@ async def run_research(
         knowledge_context=knowledge_context,
         approved_plan=approved_plan,
         api_key=api_key,
+        shared_findings=shared_findings,
     )
 
 

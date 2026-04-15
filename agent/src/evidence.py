@@ -6,24 +6,45 @@ and formats evidence for reflection and synthesis prompts.
 
 from __future__ import annotations
 
+import asyncio
+
 from .models import Finding
 
 
 class EvidenceStore:
-    """Accumulates research findings across iterations."""
+    """Accumulates research findings across iterations.
+
+    Supports single-project (synchronous `add`) and concurrent batch
+    (async `add_async`, lock-guarded) usage patterns.
+    """
 
     def __init__(self) -> None:
         self.findings: list[Finding] = []
         self.visited_urls: set[str] = set()
         self.searches_performed: list[str] = []
+        self._lock: asyncio.Lock | None = None
+
+    def _ensure_lock(self) -> asyncio.Lock:
+        """Lazily construct the lock so instances can be created outside an event loop."""
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
 
     def add(self, finding: Finding) -> bool:
-        """Add a finding. Returns False if URL already seen (dedup)."""
+        """Add a finding. Returns False if URL already seen (dedup).
+
+        Not thread-safe. Use `add_async` when multiple coroutines share one store.
+        """
         if finding.source_url in self.visited_urls:
             return False
         self.findings.append(finding)
         self.visited_urls.add(finding.source_url)
         return True
+
+    async def add_async(self, finding: Finding) -> bool:
+        """Thread-safe add for concurrent batch research."""
+        async with self._ensure_lock():
+            return self.add(finding)
 
     def record_search(self, query: str) -> None:
         """Record a search query that was executed."""
