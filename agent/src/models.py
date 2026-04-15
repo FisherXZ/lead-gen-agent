@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -63,7 +65,7 @@ class ResearchError(BaseModel):
 
 
 class TriageResult(BaseModel):
-    action: str = "research"  # "research" | "skip"
+    action: Literal["research", "skip"] = "research"
     corrected_project: dict | None = None  # project dict with resolved name/developer
     skip_reason: str | None = None  # machine-readable code
     triage_log: list[dict] = []  # rules fired, tools called, findings
