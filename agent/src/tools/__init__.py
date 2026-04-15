@@ -32,6 +32,7 @@ from . import (
     fetch_page,
     fetch_sec_filing,
     find_contacts,
+    firecrawl_extract,
     get_discoveries,
     lookup_hubspot_contacts,
     manage_todo,
@@ -80,6 +81,7 @@ _register(export_csv)
 _register(fetch_page)
 _register(fetch_sec_filing)
 _register(find_contacts)
+_register(firecrawl_extract)
 _register(push_to_hubspot)
 _register(search_projects)
 _register(search_projects_with_epc)

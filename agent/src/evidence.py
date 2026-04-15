@@ -113,6 +113,38 @@ def extract_findings_from_tool_result(
                     iteration=iteration,
                 ))
 
+    elif tool_name == "firecrawl_extract":
+        url = tool_input.get("url", "") or result.get("url", "")
+        extracted = result.get("extracted") or {}
+        if url and extracted:
+            # Reliability tracks what Firecrawl's extractor reported
+            conf = (extracted.get("source_confidence") or "medium").lower()
+            reliability = conf if conf in {"high", "medium", "low"} else "medium"
+
+            # Summarize structured fields as finding text
+            parts = []
+            if extracted.get("epc_contractor"):
+                parts.append(f"EPC: {extracted['epc_contractor']}")
+            if extracted.get("project_name"):
+                parts.append(f"Project: {extracted['project_name']}")
+            if extracted.get("mw_capacity"):
+                parts.append(f"{extracted['mw_capacity']}MW")
+            if extracted.get("developer"):
+                parts.append(f"Developer: {extracted['developer']}")
+            if extracted.get("announcement_date"):
+                parts.append(f"Date: {extracted['announcement_date']}")
+            if extracted.get("key_quote"):
+                parts.append(f'Quote: "{extracted["key_quote"]}"')
+
+            text = " | ".join(parts) if parts else "Firecrawl extracted structured data"
+            evidence.add(Finding(
+                text=text,
+                source_url=url,
+                source_tool="firecrawl_extract",
+                reliability=reliability,
+                iteration=iteration,
+            ))
+
     elif tool_name == "fetch_page":
         url = tool_input.get("url", "")
         text = result.get("text", "")
