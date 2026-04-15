@@ -60,7 +60,7 @@ def parse_report_findings(tool_input: dict) -> AgentResult:
     # Compute confidence upgrade
     raw_confidence = tool_input.get("confidence", "unknown")
     final_confidence, independent_count, warning = compute_confidence_upgrade(
-        sources, raw_confidence
+        sources, raw_confidence, tool_input.get("epc_contractor")
     )
 
     return AgentResult(

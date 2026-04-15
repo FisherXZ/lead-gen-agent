@@ -15,6 +15,7 @@ CONFIDENCE_RANK = {"confirmed": 3, "likely": 2, "possible": 1, "unknown": 0}
 def compute_confidence_upgrade(
     sources: list[EpcSource],
     raw_confidence: str,
+    epc_contractor: str | None = None,
 ) -> tuple[str, int, str | None]:
     """Compute a confidence upgrade based on source independence and quality.
 
@@ -25,6 +26,10 @@ def compute_confidence_upgrade(
       - possible + 2+ independent sources with total reliability >= 5 -> likely
       - likely + 2+ independent sources with at least one high reliability -> confirmed
       - Single source with reliability="low" -> warning
+
+    Guard: if epc_contractor is None, empty, or "unknown", confidence is never
+    upgraded. An honest "unknown" with many supporting sources should remain
+    "unknown" — the sources support context, not an EPC identity.
     """
     # Count independent sources: distinct (url, source_method) pairs,
     # excluding search: prefix URLs
@@ -37,6 +42,16 @@ def compute_confidence_upgrade(
             seen.add(key)
 
     independent_count = len(seen)
+
+    # Guard: don't upgrade confidence if no actual EPC was identified.
+    # An honest "unknown" with many supporting sources should remain "unknown"
+    # — the sources support context, not an EPC identity.
+    if not epc_contractor or epc_contractor.strip().lower() in ("", "unknown"):
+        # Compute warning for single low-rel source case, but skip upgrade
+        warning = None
+        if len(sources) == 1 and sources[0].reliability == "low":
+            warning = "Unverified \u2014 single low-reliability source"
+        return raw_confidence, independent_count, warning
 
     # Compute total reliability score
     total_reliability = sum(RELIABILITY_SCORE.get(s.reliability, 1) for s in sources)
