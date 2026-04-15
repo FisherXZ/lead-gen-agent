@@ -53,6 +53,7 @@ from .models import (
     HubSpotPushRequest,
     NegativeEvidence,
     ReviewRequest,
+    build_anthropic_messages,
 )
 from .research import run_research, run_research_plan
 from .sse import StreamWriter
@@ -984,9 +985,10 @@ async def chat(req: ChatRequest, request: Request, _user_id: str = Depends(requi
             conversation_id, "user", last.get_text(), parts=persist_parts, user_id=_user_id
         )
 
-    # Build message history for the agent (Anthropic API needs role + content)
-    # Use get_content_blocks() to pass file attachments as native Claude content blocks
-    messages = [{"role": m.role, "content": m.get_content_blocks()} for m in req.messages]
+    # Build message history for the agent — reconstructs Anthropic
+    # tool_use / tool_result pairing from AI SDK tool-invocation parts so
+    # Claude retains memory of prior tool calls across turns.
+    messages = build_anthropic_messages(req.messages)
 
     # Create job and spawn background task
     job_id = str(uuid.uuid4())

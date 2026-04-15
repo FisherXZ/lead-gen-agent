@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Literal
+import json
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -106,12 +107,21 @@ class AgentResult(BaseModel):
 
 
 class ChatMessagePart(BaseModel):
-    type: str  # "text", "file"
+    type: str  # "text" | "file" | "tool-invocation"
     text: str | None = None
     # File attachment fields (type="file") — AI SDK FileUIPart format
     mediaType: str | None = None  # MIME type: "application/pdf", "image/png", etc.
     filename: str | None = None
     url: str | None = None  # data URL: "data:<mediaType>;base64,<data>"
+    # Tool-invocation fields (type="tool-invocation") — AI SDK useChat format.
+    # Present on past assistant messages shipped back by the frontend so the
+    # server can rehydrate Anthropic tool_use + tool_result blocks and Claude
+    # retains memory of prior tool calls across turns.
+    toolCallId: str | None = None
+    toolName: str | None = None
+    input: dict | None = None
+    output: Any | None = None
+    state: str | None = None  # "result" | "partial-call"
 
 
 # Supported file types and their Claude API content block mappings
@@ -214,6 +224,94 @@ def _extract_base64(data_url: str) -> str | None:
         return parts[1] if len(parts) == 2 else None
     # Already raw base64
     return data_url
+
+
+def build_anthropic_messages(messages: list[ChatMessage]) -> list[dict]:
+    """Convert AI SDK chat history to Anthropic API messages.
+
+    Each assistant ``tool-invocation`` part is split into paired ``tool_use``
+    blocks (on the assistant message) and ``tool_result`` blocks (prepended
+    to the next user message). Without this pairing, Claude loses memory of
+    prior tool calls across turns because the AI SDK ships tool metadata as
+    a part type the legacy parser dropped silently. See
+    ``docs/superpowers/specs/2026-04-06-agent-memory-persistence-issues.md``
+    for the original incident report.
+
+    Partial tool-invocations (``output is None``) are dropped entirely —
+    emitting a ``tool_use`` without a matching ``tool_result`` violates the
+    Anthropic API contract.
+    """
+    out: list[dict] = []
+    pending_tool_results: list[dict] = []
+
+    def _flush_pending_as_user() -> None:
+        nonlocal pending_tool_results
+        if pending_tool_results:
+            out.append({"role": "user", "content": pending_tool_results})
+            pending_tool_results = []
+
+    for msg in messages:
+        if msg.role == "assistant":
+            # Flush orphaned tool_results before starting a new assistant turn
+            # (defensive — normal chat flow never produces back-to-back
+            # assistant messages).
+            _flush_pending_as_user()
+
+            assistant_blocks: list[dict] = []
+            for p in msg.parts or []:
+                if p.type == "text" and p.text:
+                    assistant_blocks.append({"type": "text", "text": p.text})
+                elif p.type == "tool-invocation" and p.toolCallId and p.output is not None:
+                    assistant_blocks.append(
+                        {
+                            "type": "tool_use",
+                            "id": p.toolCallId,
+                            "name": p.toolName or "",
+                            "input": p.input if isinstance(p.input, dict) else {},
+                        }
+                    )
+                    content = (
+                        p.output if isinstance(p.output, str) else json.dumps(p.output, default=str)
+                    )
+                    pending_tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": p.toolCallId,
+                            "content": content,
+                        }
+                    )
+                # Partial tool-invocations are intentionally dropped.
+
+            # Legacy fallback: messages saved before parts existed used .content
+            if not assistant_blocks and msg.content:
+                assistant_blocks.append({"type": "text", "text": msg.content})
+
+            if assistant_blocks:
+                out.append({"role": "assistant", "content": assistant_blocks})
+            continue
+
+        # User message
+        user_blocks = msg.get_content_blocks()
+        if isinstance(user_blocks, str):
+            user_content: list[dict] = (
+                [{"type": "text", "text": user_blocks}] if user_blocks else []
+            )
+        else:
+            user_content = list(user_blocks)
+
+        if pending_tool_results:
+            user_content = pending_tool_results + user_content
+            pending_tool_results = []
+
+        if user_content:
+            out.append({"role": msg.role, "content": user_content})
+
+    # Edge case: history ends on an assistant with pending tool_results
+    # (shouldn't happen in normal chat flow — a new turn is only triggered
+    # by a user message). Emit them as a trailing synthetic user message to
+    # stay API-valid.
+    _flush_pending_as_user()
+    return out
 
 
 class ChatRequest(BaseModel):
