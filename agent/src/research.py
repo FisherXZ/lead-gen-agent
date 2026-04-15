@@ -30,6 +30,7 @@ from .parsing import parse_report_findings
 from .prompts import PLANNING_SYSTEM_PROMPT, RESEARCH_SYSTEM_PROMPT, build_user_message
 from .salvage import synthesize_timeout_salvage
 from .tools import check_tool_health, execute_tool, get_tools
+from .triage import triage_project
 
 MODEL = os.environ.get("RESEARCH_MODEL", "claude-sonnet-4-6")
 MAX_ITERATIONS = 25
@@ -122,6 +123,23 @@ async def run_research(
     tools = get_tools(RESEARCH_TOOLS)
     # Cache system + last tool for prompt caching (~90% input token savings)
     cached_tools = [*tools[:-1], {**tools[-1], "cache_control": {"type": "ephemeral"}}]
+
+    # Triage: classify project before research
+    triage = await triage_project(project, api_key)
+    if triage.action == "skip":
+        return (
+            AgentResult(
+                reasoning=f"Skipped by triage: {triage.skip_reason}",
+                error=ResearchError(
+                    category="triaged_skip",
+                    message=f"Triage skipped: {triage.skip_reason}",
+                ),
+            ),
+            triage.triage_log,
+            triage.tokens_used,
+        )
+    if triage.corrected_project:
+        project = triage.corrected_project
 
     # Track parsed tool results for health checking
     recent_tool_outputs: list[dict] = []
