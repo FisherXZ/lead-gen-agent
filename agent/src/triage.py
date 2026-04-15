@@ -291,8 +291,12 @@ async def triage_project(
                     age = datetime.now(UTC) - datetime.fromisoformat(triaged_at)
                     if age < timedelta(days=CACHE_TTL_DAYS):
                         triage_log.append({"rule": "cache_hit", "age_days": age.days})
+                        # Defensive: tolerate legacy cache rows with unknown action values
+                        cached_action = cached.get("action", "research")
+                        if cached_action not in ("research", "skip"):
+                            cached_action = "research"
                         return TriageResult(
-                            action=cached.get("action", "research"),
+                            action=cached_action,
                             corrected_project=cached.get("corrected_project"),
                             skip_reason=cached.get("skip_reason"),
                             triage_log=triage_log,
@@ -381,8 +385,6 @@ def _persist_triage(project_id: str | None, result: TriageResult) -> None:
             "corrected_project": result.corrected_project,
             "triaged_at": datetime.now(UTC).isoformat(),
         }
-        client.table("projects").update({"triage_result": json.dumps(payload)}).eq(
-            "id", project_id
-        ).execute()
+        client.table("projects").update({"triage_result": payload}).eq("id", project_id).execute()
     except Exception as e:
         logger.warning("Failed to persist triage result: %s", e)
