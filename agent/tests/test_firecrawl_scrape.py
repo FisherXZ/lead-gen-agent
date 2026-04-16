@@ -136,7 +136,7 @@ class TestExecute:
 
         assert "error" not in result
         assert result["text"].endswith("[... truncated]")
-        assert len(result["text"]) <= _MAX_CHARS + len("[... truncated]") + 5
+        assert len(result["text"]) == _MAX_CHARS
 
     @pytest.mark.asyncio
     @patch.dict(os.environ, {"FIRECRAWL_API_KEY": "test-key"})
@@ -185,6 +185,28 @@ class TestExecute:
         assert "error" in result
         msg = result["error"].lower()
         assert "empty" in msg or "extract" in msg
+
+    @pytest.mark.asyncio
+    @patch.dict(os.environ, {"FIRECRAWL_API_KEY": "test-key"})
+    async def test_wall_clock_timeout_returns_error(self):
+        """When the threaded call exceeds the wall-clock timeout, return a timeout error."""
+        from src.tools import firecrawl_scrape
+
+        firecrawl_scrape._cache.clear()
+
+        def hang_briefly(url, api_key):
+            import time
+
+            time.sleep(2)  # simulate a hung SDK call (short so test suite stays fast)
+
+        with (
+            patch("src.tools.firecrawl_scrape._scrape_sync", side_effect=hang_briefly),
+            patch("src.tools.firecrawl_scrape._SCRAPE_TIMEOUT_MS", 100),  # 0.1s timeout
+        ):
+            result = await execute({"url": "https://example.com/timeout"})
+
+        assert "error" in result
+        assert "timed out" in result["error"].lower()
 
     @pytest.mark.asyncio
     @patch.dict(os.environ, {"FIRECRAWL_API_KEY": "test-key"})

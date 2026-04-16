@@ -91,8 +91,9 @@ def _scrape_sync(url: str, api_key: str) -> dict:
     except Exception:  # noqa: BLE001
         logger.debug("firecrawl_scrape: could not read status_code from metadata")
 
+    _TRUNCATION_SUFFIX = "[... truncated]"
     if len(markdown) > _MAX_CHARS:
-        markdown = markdown[:_MAX_CHARS] + "[... truncated]"
+        markdown = markdown[: _MAX_CHARS - len(_TRUNCATION_SUFFIX)] + _TRUNCATION_SUFFIX
 
     return {
         "url": url,
@@ -123,7 +124,14 @@ async def execute(tool_input: dict) -> dict:
     if not api_key:
         return {"error": "FIRECRAWL_API_KEY not set. Firecrawl scraping is unavailable."}
 
-    result = await asyncio.to_thread(_scrape_sync, url, api_key)
+    try:
+        result = await asyncio.wait_for(
+            asyncio.to_thread(_scrape_sync, url, api_key),
+            timeout=_SCRAPE_TIMEOUT_MS / 1000.0,
+        )
+    except TimeoutError:
+        logger.warning("firecrawl_scrape wall-clock timeout for %s", url)
+        return {"error": f"Firecrawl scrape timed out after {_SCRAPE_TIMEOUT_MS // 1000}s."}
 
     if "error" not in result:
         _cache[url] = (time.monotonic(), result)
