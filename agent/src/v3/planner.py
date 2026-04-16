@@ -48,8 +48,11 @@ async def llm_plan(
     knowledge_context: str | None = None,
     api_key: str | None = None,
     n_queries: int = 3,
-) -> list[str]:
-    """Generate initial search queries for a project. Single cheap LLM call."""
+) -> tuple[list[str], int]:
+    """Generate initial search queries for a project. Single cheap LLM call.
+
+    Returns: (queries, tokens_used)
+    """
     summary = _format_project_summary(project)
     prompt = PLAN_PROMPT.format(
         n_queries=n_queries,
@@ -58,15 +61,15 @@ async def llm_plan(
     )
 
     try:
-        raw = await _call_llm(prompt, api_key)
+        raw, tokens = await _call_llm(prompt, api_key)
         queries = _parse_query_list(raw)
         if queries:
-            return queries
+            return queries, tokens
     except Exception as e:
         logger.warning("Planning failed: %s — using fallback queries", e)
 
     # Fallback: generate basic queries from project fields
-    return _fallback_queries(project)
+    return _fallback_queries(project), 0
 
 
 def _format_project_summary(project: dict) -> str:
@@ -135,8 +138,8 @@ def _fallback_queries(project: dict) -> list[str]:
     return queries or [f"{name or dev or 'solar project'} EPC contractor"]
 
 
-async def _call_llm(prompt: str, api_key: str | None = None) -> str:
-    """Call the cheap planning model."""
+async def _call_llm(prompt: str, api_key: str | None = None) -> tuple[str, int]:
+    """Call the cheap planning model. Returns (text, token_count)."""
     key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
     client = anthropic.AsyncAnthropic(api_key=key)
     response = await client.messages.create(
@@ -144,4 +147,6 @@ async def _call_llm(prompt: str, api_key: str | None = None) -> str:
         max_tokens=1024,
         messages=[{"role": "user", "content": prompt}],
     )
-    return response.content[0].text if response.content else ""
+    text = response.content[0].text if response.content else ""
+    tokens = (response.usage.input_tokens + response.usage.output_tokens) if response.usage else 0
+    return text, tokens

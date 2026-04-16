@@ -1,0 +1,42 @@
+[
+  {
+    "project": "Pepper Hammock Solar and Storage solar farm",
+    "v2_epc": null,
+    "v2_conf": "likely",
+    "v2_tokens": 121539,
+    "v2_time": 122.2,
+    "v3_epc": null,
+    "v3_conf": "unknown",
+    "v3_tokens": 0,
+    "v3_time": 114.1,
+    "v3_sources": 0,
+    "v3_phases": {
+      "plan": 1,
+      "initial_fanout": 1,
+      "reflect": 5,
+      "refine": 5,
+      "synthesize": 1
+    },
+    "error": null
+  },
+  {
+    "project": "Solar Star Rhome Storage",
+    "v2_epc": null,
+    "v2_conf": "unknown",
+    "v2_tokens": 239086,
+    "v2_time": 140.6,
+    "v3_epc": null,
+    "v3_conf": "unknown",
+    "v3_tokens": 0,
+    "v3_time": 99.9,
+    "v3_sources": 0,
+    "v3_phases": {
+      "plan": 1,
+      "initial_fanout": 1,
+      "reflect": 5,
+      "refine": 5,
+      "synthesize": 1
+    },
+    "error": null
+  }
+]

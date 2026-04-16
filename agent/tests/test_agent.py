@@ -36,12 +36,12 @@ class TestReportFindings:
         self, MockEmbed, mock_sub_query, mock_plan, mock_reflect, mock_synth, sample_project
     ):
         """v3 pipeline: plan → fan-out → reflect-stop → synthesize returns EPC."""
-        mock_plan.return_value = ["query1"]
+        mock_plan.return_value = (["query1"], 500)
         mock_sub_query.return_value = 3
         mock_reflect.return_value = ReflectionResult(
             summary="done", gaps=[], should_continue=False
         )
-        mock_synth.return_value = AgentResult(
+        mock_synth.return_value = (AgentResult(
             epc_contractor="Blattner Energy",
             confidence="confirmed",
             sources=[
@@ -54,7 +54,7 @@ class TestReportFindings:
             ],
             reasoning="Two sources confirm.",
             searches_performed=["query1"],
-        )
+        ), 1000)
 
         result, log, tokens = await run_research(sample_project)
 
@@ -62,8 +62,8 @@ class TestReportFindings:
         assert result.epc_contractor == "Blattner Energy"
         assert result.confidence == "confirmed"
         assert result.reasoning == "Two sources confirm."
-        # v3 token tracking is a TODO — total_tokens is 0
-        assert tokens == 0
+        # v3 now tracks tokens from plan + reflect + synthesize calls
+        assert tokens > 0
 
     @patch("src.v3.orchestrator.llm_synthesize", new_callable=AsyncMock)
     @patch("src.v3.orchestrator.llm_reflect", new_callable=AsyncMock)
@@ -74,17 +74,17 @@ class TestReportFindings:
         self, MockEmbed, mock_sub_query, mock_plan, mock_reflect, mock_synth, sample_project
     ):
         """v3 synthesizer can return unknown confidence with null epc_contractor."""
-        mock_plan.return_value = ["dead end query"]
+        mock_plan.return_value = (["dead end query"], 500)
         mock_sub_query.return_value = 0
         mock_reflect.return_value = ReflectionResult(
             summary="No evidence found.", gaps=[], should_continue=False
         )
-        mock_synth.return_value = AgentResult(
+        mock_synth.return_value = (AgentResult(
             epc_contractor=None,
             confidence="unknown",
             reasoning="No evidence found.",
             searches_performed=["dead end query"],
-        )
+        ), 1000)
 
         result, log, tokens = await run_research(sample_project)
 
@@ -108,7 +108,7 @@ class TestMultiTurn:
         self, MockEmbed, mock_sub_query, mock_plan, mock_reflect, mock_synth, sample_project
     ):
         """Reflect says continue on first pass, then stops — two rounds of sub-queries."""
-        mock_plan.return_value = ["SunDev Sunrise Solar EPC contractor"]
+        mock_plan.return_value = (["SunDev Sunrise Solar EPC contractor"], 500)
         mock_sub_query.return_value = 2
 
         reflect_calls = 0
@@ -128,13 +128,13 @@ class TestMultiTurn:
             )
 
         mock_reflect.side_effect = reflect_side_effect
-        mock_synth.return_value = AgentResult(
+        mock_synth.return_value = (AgentResult(
             epc_contractor="Blattner Energy",
             confidence="likely",
             sources=[{"channel": "news_article", "excerpt": "Blattner"}],
             reasoning="Found news article.",
             searches_performed=["SunDev Sunrise Solar EPC contractor"],
-        )
+        ), 1000)
 
         result, log, tokens = await run_research(sample_project)
 
@@ -163,16 +163,16 @@ class TestSharedFindingsForwarding:
         """shared_findings kwarg is forwarded through run_research → run_research_v3."""
         from src.evidence import EvidenceStore, Finding
 
-        mock_plan.return_value = ["query1"]
+        mock_plan.return_value = (["query1"], 500)
         mock_sub_query.return_value = 1
         mock_reflect.return_value = ReflectionResult(
             summary="done", gaps=[], should_continue=False
         )
-        mock_synth.return_value = AgentResult(
+        mock_synth.return_value = (AgentResult(
             epc_contractor="McCarthy",
             confidence="likely",
             searches_performed=["query1"],
-        )
+        ), 1000)
 
         shared = EvidenceStore()
         shared.add(Finding(

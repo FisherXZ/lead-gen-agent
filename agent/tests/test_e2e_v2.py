@@ -39,14 +39,14 @@ class TestE2EV3:
         """Full flow via run_research(): plan → fan-out → reflect-stop → synthesize."""
         project = _sample_project()
 
-        mock_plan.return_value = ["AES Desert Sun Solar EPC contractor"]
+        mock_plan.return_value = (["AES Desert Sun Solar EPC contractor"], 500)
         mock_sub_query.return_value = 3
         mock_reflect.return_value = ReflectionResult(
             summary="Mortenson confirmed from press release",
             gaps=[],
             should_continue=False,
         )
-        mock_synth.return_value = AgentResult(
+        mock_synth.return_value = (AgentResult(
             epc_contractor="Mortenson",
             confidence="likely",
             sources=[{
@@ -56,7 +56,7 @@ class TestE2EV3:
             }],
             reasoning="Mortenson identified as EPC from press release",
             searches_performed=["AES Desert Sun Solar EPC contractor"],
-        )
+        ), 1000)
 
         result, log, tokens = await run_research(
             project=project,
@@ -66,7 +66,7 @@ class TestE2EV3:
         assert isinstance(result, AgentResult)
         assert result.epc_contractor == "Mortenson"
         assert result.confidence == "likely"
-        assert tokens == 0  # v3 token tracking is a TODO
+        assert tokens > 0  # v3 now tracks tokens
 
         # Verify plan + fan-out + reflect + synthesize phases all logged
         phases = [e["phase"] for e in log]

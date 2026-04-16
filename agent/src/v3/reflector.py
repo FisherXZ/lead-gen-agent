@@ -75,14 +75,18 @@ async def llm_reflect(
     )
 
     try:
-        raw = await _call_llm(prompt, api_key)
-        return _parse_reflection(raw)
+        raw, tokens = await _call_llm(prompt, api_key)
+        result = _parse_reflection(raw)
+        result._tokens_used = tokens  # stash for orchestrator to collect
+        return result
     except Exception as e:
         logger.warning("Reflection failed: %s", e)
-        return ReflectionResult(
+        r = ReflectionResult(
             summary=f"Reflection failed ({e}), continuing.",
             should_continue=True,
         )
+        r._tokens_used = 0
+        return r
 
 
 def _parse_reflection(raw: str) -> ReflectionResult:
@@ -103,7 +107,8 @@ def _parse_reflection(raw: str) -> ReflectionResult:
     return ReflectionResult(summary="Could not parse reflection.", should_continue=True)
 
 
-async def _call_llm(prompt: str, api_key: str | None = None) -> str:
+async def _call_llm(prompt: str, api_key: str | None = None) -> tuple[str, int]:
+    """Returns (text, token_count)."""
     key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
     client = anthropic.AsyncAnthropic(api_key=key)
     response = await client.messages.create(
@@ -111,4 +116,6 @@ async def _call_llm(prompt: str, api_key: str | None = None) -> str:
         max_tokens=1024,
         messages=[{"role": "user", "content": prompt}],
     )
-    return response.content[0].text if response.content else ""
+    text = response.content[0].text if response.content else ""
+    tokens = (response.usage.input_tokens + response.usage.output_tokens) if response.usage else 0
+    return text, tokens

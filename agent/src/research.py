@@ -29,9 +29,26 @@ from tenacity import (
 
 from .models import AgentResult
 from .prompts import PLANNING_SYSTEM_PROMPT, build_user_message
-from .research_loop import RESEARCH_TOOLS  # keep for backward compat export
 from .tools import execute_tool, get_tools
 from .v3.orchestrator import run_research_v3
+
+# Research tools list — used by test_request_guidance.py for backward compat
+RESEARCH_TOOLS = [
+    "web_search",
+    "web_search_broad",
+    "fetch_page",
+    "firecrawl_extract",
+    "query_knowledge_base",
+    "notify_progress",
+    "research_scratchpad",
+    "report_findings",
+    "search_sec_edgar",
+    "fetch_sec_filing",
+    "search_osha",
+    "search_enr",
+    "search_wiki_solar",
+    "search_spw",
+]
 
 # Re-export RESEARCH_TOOLS so consumers importing from src.research continue to work
 __all__ = ["run_research", "run_research_plan", "RESEARCH_TOOLS", "PLANNING_TOOLS", "MODEL"]

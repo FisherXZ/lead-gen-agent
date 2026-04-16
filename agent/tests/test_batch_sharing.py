@@ -91,17 +91,17 @@ class TestSharedFindingsSeeding:
             iteration=1,
         ))
 
-        mock_plan.return_value = ["query1"]
+        mock_plan.return_value = (["query1"], 500)
         mock_sub_query.return_value = 1
         mock_reflect.return_value = ReflectionResult(
             summary="done", gaps=[], should_continue=False,
         )
-        mock_synth.return_value = AgentResult(
+        mock_synth.return_value = (AgentResult(
             epc_contractor="Mortenson",
             confidence="likely",
             reasoning="Using shared finding",
             searches_performed=[],
-        )
+        ), 1000)
 
         result, log, tokens = await run_research(
             project=_sample_project(),
@@ -144,17 +144,17 @@ class TestSharedFindingsPropagation:
             ))
             return 1
 
-        mock_plan.return_value = ["NextEra Lone Star EPC"]
+        mock_plan.return_value = (["NextEra Lone Star EPC"], 500)
         mock_sub_query.side_effect = sub_query_side_effect
         mock_reflect.return_value = ReflectionResult(
             summary="done", gaps=[], should_continue=False,
         )
-        mock_synth.return_value = AgentResult(
+        mock_synth.return_value = (AgentResult(
             epc_contractor="McCarthy",
             confidence="likely",
             reasoning="Found",
             searches_performed=["NextEra Lone Star EPC"],
-        )
+        ), 1000)
 
         assert len(shared.findings) == 0
 

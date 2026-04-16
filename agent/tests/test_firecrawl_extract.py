@@ -259,6 +259,6 @@ class TestFirecrawlRegistration:
         assert "firecrawl_extract" in get_tool_names()
 
     def test_tool_in_research_tools(self):
-        from src.research_loop import RESEARCH_TOOLS
+        from src.research import RESEARCH_TOOLS
 
         assert "firecrawl_extract" in RESEARCH_TOOLS

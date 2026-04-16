@@ -37,13 +37,14 @@ async def test_plan_returns_query_list():
         "Sunbelt Solar 250MW OSHA inspection",
     ]
     mock_response = MagicMock()
+    mock_response.usage = MagicMock(input_tokens=100, output_tokens=50)
     mock_response.content = [MagicMock(text=json.dumps(queries))]
 
     mock_client = MagicMock()
     mock_client.messages.create = AsyncMock(return_value=mock_response)
 
     with patch("src.v3.planner.anthropic.AsyncAnthropic", return_value=mock_client):
-        result = await llm_plan(PROJECT, api_key="test-key")
+        result, _tokens = await llm_plan(PROJECT, api_key="test-key")
 
     assert isinstance(result, list)
     assert len(result) == 3
@@ -63,13 +64,14 @@ async def test_plan_handles_code_block():
     fenced = f"```json\n{json.dumps(queries)}\n```"
 
     mock_response = MagicMock()
+    mock_response.usage = MagicMock(input_tokens=100, output_tokens=50)
     mock_response.content = [MagicMock(text=fenced)]
 
     mock_client = MagicMock()
     mock_client.messages.create = AsyncMock(return_value=mock_response)
 
     with patch("src.v3.planner.anthropic.AsyncAnthropic", return_value=mock_client):
-        result = await llm_plan(PROJECT, api_key="test-key")
+        result, _tokens = await llm_plan(PROJECT, api_key="test-key")
 
     assert result == queries
 
@@ -86,7 +88,7 @@ async def test_plan_fallback_on_failure():
     mock_client.messages.create = AsyncMock(side_effect=Exception("API timeout"))
 
     with patch("src.v3.planner.anthropic.AsyncAnthropic", return_value=mock_client):
-        result = await llm_plan(PROJECT, api_key="test-key")
+        result, _tokens = await llm_plan(PROJECT, api_key="test-key")
 
     assert isinstance(result, list)
     assert len(result) >= 1

@@ -54,7 +54,7 @@ async def test_happy_path_finds_epc():
         patch(
             "src.v3.orchestrator.llm_plan",
             new_callable=AsyncMock,
-            return_value=["query1", "query2"],
+            return_value=(["query1", "query2"], 500),
         ),
         patch(
             "src.v3.orchestrator.execute_sub_query",
@@ -69,14 +69,14 @@ async def test_happy_path_finds_epc():
         patch(
             "src.v3.orchestrator.llm_synthesize",
             new_callable=AsyncMock,
-            return_value=_GOOD_RESULT,
+            return_value=(_GOOD_RESULT, 1000),
         ),
     ):
         result, log, tokens = await run_research_v3(PROJECT)
 
     assert result.epc_contractor == "McCarthy Building"
     assert result.confidence == "likely"
-    assert tokens == 0
+    assert tokens > 0  # plan + reflect + synthesize tokens
 
     phases = [entry["phase"] for entry in log]
     assert "plan" in phases
@@ -125,14 +125,14 @@ async def test_reflect_drives_additional_search():
         patch(
             "src.v3.orchestrator.llm_plan",
             new_callable=AsyncMock,
-            return_value=["initial query"],
+            return_value=(["initial query"], 500),
         ),
         patch("src.v3.orchestrator.execute_sub_query", side_effect=mock_execute),
         patch("src.v3.orchestrator.llm_reflect", side_effect=mock_reflect),
         patch(
             "src.v3.orchestrator.llm_synthesize",
             new_callable=AsyncMock,
-            return_value=_GOOD_RESULT,
+            return_value=(_GOOD_RESULT, 1000),
         ),
     ):
         result, log, tokens = await run_research_v3(PROJECT)
@@ -167,7 +167,7 @@ async def test_max_depth_exhausted():
         patch(
             "src.v3.orchestrator.llm_plan",
             new_callable=AsyncMock,
-            return_value=["query1"],
+            return_value=(["query1"], 500),
         ),
         patch(
             "src.v3.orchestrator.execute_sub_query",
@@ -182,7 +182,7 @@ async def test_max_depth_exhausted():
         patch(
             "src.v3.orchestrator.llm_synthesize",
             new_callable=AsyncMock,
-            return_value=_GOOD_RESULT,
+            return_value=(_GOOD_RESULT, 1000),
         ) as mock_synth,
     ):
         result, log, tokens = await run_research_v3(PROJECT, max_depth=3)
@@ -226,7 +226,7 @@ async def test_planning_failure_uses_fallback():
         patch(
             "src.v3.orchestrator.llm_synthesize",
             new_callable=AsyncMock,
-            return_value=_GOOD_RESULT,
+            return_value=(_GOOD_RESULT, 1000),
         ),
     ):
         result, log, tokens = await run_research_v3(PROJECT)
@@ -255,7 +255,7 @@ async def test_synthesis_failure_returns_error():
         patch(
             "src.v3.orchestrator.llm_plan",
             new_callable=AsyncMock,
-            return_value=["query1"],
+            return_value=(["query1"], 500),
         ),
         patch(
             "src.v3.orchestrator.execute_sub_query",
@@ -325,7 +325,7 @@ async def test_shared_findings_seeded_and_propagated():
         patch(
             "src.v3.orchestrator.llm_plan",
             new_callable=AsyncMock,
-            return_value=["query1"],
+            return_value=(["query1"], 500),
         ),
         patch("src.v3.orchestrator.execute_sub_query", side_effect=mock_execute),
         patch(
@@ -336,7 +336,7 @@ async def test_shared_findings_seeded_and_propagated():
         patch(
             "src.v3.orchestrator.llm_synthesize",
             new_callable=AsyncMock,
-            return_value=_GOOD_RESULT,
+            return_value=(_GOOD_RESULT, 1000),
         ),
     ):
         result, log, tokens = await run_research_v3(PROJECT, shared_findings=shared)
@@ -372,7 +372,7 @@ async def test_time_budget_respected():
         patch(
             "src.v3.orchestrator.llm_plan",
             new_callable=AsyncMock,
-            return_value=["query1"],
+            return_value=(["query1"], 500),
         ),
         patch(
             "src.v3.orchestrator.execute_sub_query",
@@ -383,7 +383,7 @@ async def test_time_budget_respected():
         patch(
             "src.v3.orchestrator.llm_synthesize",
             new_callable=AsyncMock,
-            return_value=_GOOD_RESULT,
+            return_value=(_GOOD_RESULT, 1000),
         ) as mock_synth,
     ):
         # 0.001 minutes = 0.06 seconds — deadline fires almost immediately

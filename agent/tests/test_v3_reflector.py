@@ -51,6 +51,7 @@ async def test_reflect_returns_result():
     }
 
     mock_response = MagicMock()
+    mock_response.usage = MagicMock(input_tokens=100, output_tokens=50)
     mock_response.content = [MagicMock(text=json.dumps(payload))]
 
     mock_client = MagicMock()
@@ -79,6 +80,7 @@ async def test_reflect_time_warning():
     async def capture_create(**kwargs):
         captured_prompts.append(kwargs["messages"][0]["content"])
         mock_response = MagicMock()
+        mock_response.usage = MagicMock(input_tokens=100, output_tokens=50)
         mock_response.content = [
             MagicMock(
                 text=json.dumps(

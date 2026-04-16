@@ -73,13 +73,13 @@ async def test_synthesize_structured_output():
         reasoning="Found in press release [1]",
         searches_performed=["query 0"],
     )
-    fake_response = SimpleNamespace(parsed_output=fake_synthesis)
+    fake_response = SimpleNamespace(usage=SimpleNamespace(input_tokens=2000, output_tokens=500), parsed_output=fake_synthesis)
 
     mock_client = MagicMock()
     mock_client.messages.parse = AsyncMock(return_value=fake_response)
 
     with patch("src.v3.synthesizer.anthropic.AsyncAnthropic", return_value=mock_client):
-        result = await llm_synthesize(PROJECT, _make_evidence(), api_key="test-key")
+        result, _tokens = await llm_synthesize(PROJECT, _make_evidence(), api_key="test-key")
 
     assert isinstance(result, AgentResult)
     assert result.epc_contractor == "Mortenson Construction"
@@ -120,13 +120,13 @@ async def test_synthesize_applies_confidence_upgrade():
         reasoning="Two independent sources confirm Mortenson.",
         searches_performed=["query 0"],
     )
-    fake_response = SimpleNamespace(parsed_output=fake_synthesis)
+    fake_response = SimpleNamespace(usage=SimpleNamespace(input_tokens=2000, output_tokens=500), parsed_output=fake_synthesis)
 
     mock_client = MagicMock()
     mock_client.messages.parse = AsyncMock(return_value=fake_response)
 
     with patch("src.v3.synthesizer.anthropic.AsyncAnthropic", return_value=mock_client):
-        result = await llm_synthesize(PROJECT, _make_evidence(), api_key="test-key")
+        result, _tokens = await llm_synthesize(PROJECT, _make_evidence(), api_key="test-key")
 
     # agent_confidence should capture the pre-upgrade value
     assert result.agent_confidence == "likely"
@@ -147,7 +147,7 @@ async def test_synthesize_fallback_on_error():
     mock_client.messages.parse = AsyncMock(side_effect=Exception("structured output failed"))
 
     with patch("src.v3.synthesizer.anthropic.AsyncAnthropic", return_value=mock_client):
-        result = await llm_synthesize(PROJECT, _make_evidence(), api_key="test-key")
+        result, _tokens = await llm_synthesize(PROJECT, _make_evidence(), api_key="test-key")
 
     assert isinstance(result, AgentResult)
     assert result.error is not None
@@ -174,7 +174,7 @@ async def test_prompt_includes_evidence():
             confidence="possible",
             reasoning="Some evidence",
         )
-        return SimpleNamespace(parsed_output=fake_synthesis)
+        return SimpleNamespace(usage=SimpleNamespace(input_tokens=2000, output_tokens=500), parsed_output=fake_synthesis)
 
     mock_client = MagicMock()
     mock_client.messages.parse = capture_parse
@@ -208,13 +208,13 @@ async def test_synthesize_empty_evidence():
         confidence="unknown",
         reasoning="No evidence found.",
     )
-    fake_response = SimpleNamespace(parsed_output=fake_synthesis)
+    fake_response = SimpleNamespace(usage=SimpleNamespace(input_tokens=2000, output_tokens=500), parsed_output=fake_synthesis)
 
     mock_client = MagicMock()
     mock_client.messages.parse = AsyncMock(return_value=fake_response)
 
     with patch("src.v3.synthesizer.anthropic.AsyncAnthropic", return_value=mock_client):
-        result = await llm_synthesize(PROJECT, EvidenceStore(), api_key="test-key")
+        result, _tokens = await llm_synthesize(PROJECT, EvidenceStore(), api_key="test-key")
 
     assert result.confidence == "unknown"
     assert result.epc_contractor is None
@@ -230,7 +230,7 @@ async def test_synthesize_uses_evidence_searches_on_empty_parsed():
         reasoning="Indirect evidence only.",
         searches_performed=[],  # empty
     )
-    fake_response = SimpleNamespace(parsed_output=fake_synthesis)
+    fake_response = SimpleNamespace(usage=SimpleNamespace(input_tokens=2000, output_tokens=500), parsed_output=fake_synthesis)
 
     mock_client = MagicMock()
     mock_client.messages.parse = AsyncMock(return_value=fake_response)
@@ -238,7 +238,7 @@ async def test_synthesize_uses_evidence_searches_on_empty_parsed():
     ev = _make_evidence(n=1)  # has 1 recorded search
 
     with patch("src.v3.synthesizer.anthropic.AsyncAnthropic", return_value=mock_client):
-        result = await llm_synthesize(PROJECT, ev, api_key="test-key")
+        result, _tokens = await llm_synthesize(PROJECT, ev, api_key="test-key")
 
     # Should fall back to evidence.searches_performed
     assert len(result.searches_performed) >= 1

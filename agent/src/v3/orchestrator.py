@@ -64,16 +64,20 @@ async def run_research_v3(
             "shared_findings_count": len(shared_findings.findings),
         })
 
+    total_tokens = 0
+
     # ── PLAN ──
     try:
-        sub_queries = await llm_plan(
+        sub_queries, plan_tokens = await llm_plan(
             project, knowledge_context, api_key=api_key,
         )
+        total_tokens += plan_tokens
     except Exception as e:
         logger.warning("Planning failed: %s", e)
         sub_queries = _emergency_queries(project)
+        plan_tokens = 0
 
-    agent_log.append({"phase": "plan", "queries": sub_queries})
+    agent_log.append({"phase": "plan", "queries": sub_queries, "tokens": plan_tokens})
 
     # ── INITIAL FAN-OUT (parallel, no LLM) ──
     fanout_results = await asyncio.gather(*[
@@ -101,6 +105,8 @@ async def run_research_v3(
             reflection = await llm_reflect(
                 project, evidence, minutes_remaining, api_key=api_key,
             )
+            reflect_tokens = getattr(reflection, "_tokens_used", 0)
+            total_tokens += reflect_tokens
         except Exception as e:
             logger.warning("Reflection failed at depth %d: %s", depth, e)
             break
@@ -114,6 +120,7 @@ async def run_research_v3(
             "next_search_topic": reflection.next_search_topic,
             "findings_count": len(evidence.findings),
             "minutes_remaining": round(minutes_remaining, 1),
+            "tokens": reflect_tokens,
         })
 
         if not reflection.should_continue or not reflection.gaps:
@@ -133,8 +140,13 @@ async def run_research_v3(
         })
 
     # ── SYNTHESIZE (1 Sonnet structured-output call) ──
+    # Pass reflection trail so synthesizer can generate negative_evidence
+    reflection_trail = [e for e in agent_log if e.get("phase") == "reflect"]
     try:
-        result = await llm_synthesize(project, evidence, api_key=api_key)
+        result, synth_tokens = await llm_synthesize(
+            project, evidence, api_key=api_key, reflection_trail=reflection_trail,
+        )
+        total_tokens += synth_tokens
     except Exception as e:
         logger.error("Synthesis failed: %s", e)
         result = AgentResult(
@@ -142,6 +154,7 @@ async def run_research_v3(
             searches_performed=evidence.searches_performed,
             error=ResearchError(category="anthropic_error", message=str(e)),
         )
+        synth_tokens = 0
 
     # Ensure searches_performed is populated from evidence
     if not result.searches_performed and evidence.searches_performed:
@@ -153,16 +166,14 @@ async def run_research_v3(
         "confidence": result.confidence,
         "source_count": result.source_count,
         "total_findings": len(evidence.findings),
+        "tokens": synth_tokens,
+        "total_tokens": total_tokens,
     })
 
     # ── PROPAGATE TO SHARED (batch mode) ──
     if shared_findings is not None:
         for finding in evidence.findings:
             await shared_findings.add_async(finding)
-
-    # Token tracking is approximate (we don't instrument individual LLM calls yet)
-    # TODO: add per-call token tracking in a follow-up
-    total_tokens = 0
 
     return result, agent_log, total_tokens
 
