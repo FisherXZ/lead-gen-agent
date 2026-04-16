@@ -1,12 +1,10 @@
 """Tests for cross-project evidence sharing in batch research."""
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
-
-from tests.conftest import make_claude_response, make_tool_use_block
+from unittest.mock import AsyncMock, patch
 
 from src.evidence import EvidenceStore
-from src.models import Finding, ReflectionResult
+from src.models import AgentResult, Finding, ReflectionResult
 
 
 # ---------------------------------------------------------------------------
@@ -72,13 +70,15 @@ def _sample_project(pid="p1"):
 class TestSharedFindingsSeeding:
     """Verify that shared_findings seeds a project's local evidence store."""
 
-    @patch("src.research_loop.analyze_and_plan", new_callable=AsyncMock)
-    @patch("src.research_loop.execute_tool", new_callable=AsyncMock)
-    @patch("src.research.anthropic.AsyncAnthropic")
+    @patch("src.v3.orchestrator.llm_synthesize", new_callable=AsyncMock)
+    @patch("src.v3.orchestrator.llm_reflect", new_callable=AsyncMock)
+    @patch("src.v3.orchestrator.llm_plan", new_callable=AsyncMock)
+    @patch("src.v3.orchestrator.execute_sub_query", new_callable=AsyncMock)
+    @patch("src.v3.orchestrator.EmbeddingProvider")
     async def test_shared_findings_visible_to_reflection(
-        self, MockClient, mock_exec_tool, mock_reflect
+        self, MockEmbed, mock_sub_query, mock_plan, mock_reflect, mock_synth
     ):
-        """Evidence from shared store appears in the reflection prompt for a new project."""
+        """Evidence from shared store is seeded and logged in v3 orchestrator."""
         from src.research import run_research
 
         # Pre-populate shared store (simulating a sibling project that already ran)
@@ -91,34 +91,16 @@ class TestSharedFindingsSeeding:
             iteration=1,
         ))
 
-        # Agent calls report_findings immediately (no real search needed)
-        report_block = make_tool_use_block(
-            name="report_findings",
-            block_id="rf-seed",
-            input_data={
-                "epc_contractor": "Mortenson",
-                "confidence": "likely",
-                "sources": [{
-                    "channel": "press_release",
-                    "excerpt": "Mortenson EPC",
-                    "url": "https://example.com/pr",
-                    "reliability": "high",
-                    "source_method": "tavily_search",
-                    "date": "2025-06-01",
-                }],
-                "reasoning": "Using shared finding",
-                "searches_performed": [],
-                "negative_evidence": [],
-            },
-        )
-        resp = make_claude_response(stop_reason="tool_use", content=[report_block])
-        mock_client = MagicMock()
-        mock_client.messages = MagicMock()
-        mock_client.messages.create = AsyncMock(return_value=resp)
-        MockClient.return_value = mock_client
-
+        mock_plan.return_value = ["query1"]
+        mock_sub_query.return_value = 1
         mock_reflect.return_value = ReflectionResult(
             summary="done", gaps=[], should_continue=False,
+        )
+        mock_synth.return_value = AgentResult(
+            epc_contractor="Mortenson",
+            confidence="likely",
+            reasoning="Using shared finding",
+            searches_performed=[],
         )
 
         result, log, tokens = await run_research(
@@ -128,67 +110,50 @@ class TestSharedFindingsSeeding:
         )
 
         assert result.epc_contractor == "Mortenson"
+        # Seed phase logged with correct count
+        seed_entry = next((e for e in log if e.get("phase") == "seed"), None)
+        assert seed_entry is not None
+        assert seed_entry["shared_findings_count"] == 1
 
 
 class TestSharedFindingsPropagation:
     """Verify that findings from a project flow back to the shared store."""
 
-    @patch("src.research_loop.analyze_and_plan", new_callable=AsyncMock)
-    @patch("src.research_loop.execute_tool", new_callable=AsyncMock)
-    @patch("src.research.anthropic.AsyncAnthropic")
+    @patch("src.v3.orchestrator.llm_synthesize", new_callable=AsyncMock)
+    @patch("src.v3.orchestrator.llm_reflect", new_callable=AsyncMock)
+    @patch("src.v3.orchestrator.llm_plan", new_callable=AsyncMock)
+    @patch("src.v3.orchestrator.execute_sub_query", new_callable=AsyncMock)
+    @patch("src.v3.orchestrator.EmbeddingProvider")
     async def test_local_findings_pushed_to_shared(
-        self, MockClient, mock_exec_tool, mock_reflect
+        self, MockEmbed, mock_sub_query, mock_plan, mock_reflect, mock_synth
     ):
-        """After research completes, findings collected during this run are in shared."""
+        """After research completes, findings added during fan-out propagate to shared."""
+        from src.evidence import Finding as F
         from src.research import run_research
 
         shared = EvidenceStore()
 
-        # Agent does one web_search then report_findings
-        search_block = make_tool_use_block(
-            name="web_search",
-            block_id="ws-1",
-            input_data={"query": "NextEra Lone Star EPC"},
-        )
-        search_resp = make_claude_response(stop_reason="tool_use", content=[search_block])
+        # Simulate execute_sub_query adding a finding to the local evidence store
+        async def sub_query_side_effect(query, evidence, compressor, iteration=0):
+            evidence.add(F(
+                text="McCarthy Building Companies selected as EPC for Texas solar project",
+                source_url="https://example.com/pr-discovered",
+                source_tool="tavily_search",
+                reliability="high",
+                iteration=iteration,
+            ))
+            return 1
 
-        report_block = make_tool_use_block(
-            name="report_findings",
-            block_id="rf-1",
-            input_data={
-                "epc_contractor": "McCarthy",
-                "confidence": "likely",
-                "sources": [{
-                    "channel": "press_release",
-                    "excerpt": "McCarthy EPC",
-                    "url": "https://example.com/pr",
-                    "reliability": "high",
-                    "source_method": "tavily_search",
-                    "date": "2025-06-01",
-                }],
-                "reasoning": "Found",
-                "searches_performed": ["NextEra Lone Star EPC"],
-                "negative_evidence": [],
-            },
-        )
-        report_resp = make_claude_response(stop_reason="tool_use", content=[report_block])
-
-        mock_client = MagicMock()
-        mock_client.messages = MagicMock()
-        mock_client.messages.create = AsyncMock(side_effect=[search_resp, report_resp])
-        MockClient.return_value = mock_client
-
-        mock_exec_tool.return_value = {
-            "results": [{
-                "title": "McCarthy press release",
-                "url": "https://example.com/pr-discovered",
-                "content": "McCarthy Building Companies selected as EPC for Texas solar project",
-                "score": 0.9,
-            }],
-        }
-
+        mock_plan.return_value = ["NextEra Lone Star EPC"]
+        mock_sub_query.side_effect = sub_query_side_effect
         mock_reflect.return_value = ReflectionResult(
             summary="done", gaps=[], should_continue=False,
+        )
+        mock_synth.return_value = AgentResult(
+            epc_contractor="McCarthy",
+            confidence="likely",
+            reasoning="Found",
+            searches_performed=["NextEra Lone Star EPC"],
         )
 
         assert len(shared.findings) == 0
