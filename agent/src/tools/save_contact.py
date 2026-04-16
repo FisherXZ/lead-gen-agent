@@ -1,7 +1,8 @@
 """Save a discovered contact to the database.
 
-Upserts into the `contacts` table (dedup on entity_id + lower(full_name))
-and optionally links the contact to a project via `project_contacts`.
+Upserts into the `contacts` table (dedup on entity_id + full_name_lower, a
+stored generated column = lower(full_name)) and optionally links the contact
+to a project via `project_contacts`.
 """
 
 from __future__ import annotations
@@ -131,7 +132,7 @@ async def execute(tool_input: dict) -> dict:
     try:
         resp = (
             client.table("contacts")
-            .upsert(contact_data, on_conflict="entity_id,lower(full_name)")
+            .upsert(contact_data, on_conflict="entity_id,full_name_lower")
             .execute()
         )
         contact_row = resp.data[0] if resp.data else {}

@@ -428,7 +428,9 @@ def store_contacts(entity_id: str, contacts: list[dict]) -> list[dict]:
         }
         try:
             resp = (
-                client.table("contacts").upsert(data, on_conflict="entity_id,full_name").execute()
+                client.table("contacts")
+                .upsert(data, on_conflict="entity_id,full_name_lower")
+                .execute()
             )
             if resp.data:
                 stored.append(resp.data[0])

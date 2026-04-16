@@ -119,6 +119,29 @@ async def test_valid_input_upserts_contact():
 
 
 @pytest.mark.asyncio
+async def test_upsert_uses_generated_column_for_on_conflict():
+    """Regression guard for Supabase/PostgREST bug.
+
+    PostgREST cannot reference expression indexes (e.g. ``lower(full_name)``)
+    in its ``on_conflict`` query parameter — it tries to resolve ``lower`` as
+    a column name and Postgres errors with ``column "lower" does not exist``.
+    The fix (migration 030) adds a stored generated column
+    ``full_name_lower`` and indexes it directly. This test pins the
+    ``on_conflict`` string so we don't silently regress back to the
+    expression form.
+    """
+    from src.tools.save_contact import execute
+
+    client, contacts_tbl, _pc_tbl = _make_client()
+
+    with patch("src.tools.save_contact.get_client", return_value=client):
+        await execute(VALID_INPUT)
+
+    _args, kwargs = contacts_tbl.upsert.call_args
+    assert kwargs.get("on_conflict") == "entity_id,full_name_lower"
+
+
+@pytest.mark.asyncio
 async def test_optional_fields_included_in_upsert():
     from src.tools.save_contact import execute
 
