@@ -32,6 +32,7 @@ from . import (
     fetch_page,
     fetch_sec_filing,
     find_contacts,
+    firecrawl_scrape,
     get_discoveries,
     lookup_hubspot_contacts,
     manage_todo,
@@ -78,6 +79,7 @@ _register(web_search)
 _register(brave_search)
 _register(export_csv)
 _register(fetch_page)
+_register(firecrawl_scrape)
 _register(fetch_sec_filing)
 _register(find_contacts)
 _register(push_to_hubspot)
