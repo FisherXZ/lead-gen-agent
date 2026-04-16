@@ -73,7 +73,7 @@ async def test_synthesize_structured_output():
         reasoning="Found in press release [1]",
         searches_performed=["query 0"],
     )
-    fake_response = SimpleNamespace(parsed=fake_synthesis)
+    fake_response = SimpleNamespace(parsed_output=fake_synthesis)
 
     mock_client = MagicMock()
     mock_client.messages.parse = AsyncMock(return_value=fake_response)
@@ -120,7 +120,7 @@ async def test_synthesize_applies_confidence_upgrade():
         reasoning="Two independent sources confirm Mortenson.",
         searches_performed=["query 0"],
     )
-    fake_response = SimpleNamespace(parsed=fake_synthesis)
+    fake_response = SimpleNamespace(parsed_output=fake_synthesis)
 
     mock_client = MagicMock()
     mock_client.messages.parse = AsyncMock(return_value=fake_response)
@@ -174,7 +174,7 @@ async def test_prompt_includes_evidence():
             confidence="possible",
             reasoning="Some evidence",
         )
-        return SimpleNamespace(parsed=fake_synthesis)
+        return SimpleNamespace(parsed_output=fake_synthesis)
 
     mock_client = MagicMock()
     mock_client.messages.parse = capture_parse
@@ -208,7 +208,7 @@ async def test_synthesize_empty_evidence():
         confidence="unknown",
         reasoning="No evidence found.",
     )
-    fake_response = SimpleNamespace(parsed=fake_synthesis)
+    fake_response = SimpleNamespace(parsed_output=fake_synthesis)
 
     mock_client = MagicMock()
     mock_client.messages.parse = AsyncMock(return_value=fake_response)
@@ -230,7 +230,7 @@ async def test_synthesize_uses_evidence_searches_on_empty_parsed():
         reasoning="Indirect evidence only.",
         searches_performed=[],  # empty
     )
-    fake_response = SimpleNamespace(parsed=fake_synthesis)
+    fake_response = SimpleNamespace(parsed_output=fake_synthesis)
 
     mock_client = MagicMock()
     mock_client.messages.parse = AsyncMock(return_value=fake_response)

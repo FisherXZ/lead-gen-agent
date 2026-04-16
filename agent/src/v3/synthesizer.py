@@ -98,7 +98,8 @@ async def llm_synthesize(
             output_format=_SynthesisResult,
             messages=[{"role": "user", "content": prompt}],
         )
-        parsed = response.parsed
+        # Anthropic SDK v0.84.0: ParsedMessage exposes structured result via `parsed_output`
+        parsed = response.parsed_output
 
         # Convert _SynthesisResult -> AgentResult
         result = AgentResult(
