@@ -8,6 +8,8 @@ import httpx
 import tenacity
 import trafilatura
 
+from ..evidence_compression import compress_evidence, is_compression_enabled
+
 logger = logging.getLogger(__name__)
 
 _TIMEOUT = 15.0  # seconds (raised from 10 for slow gov sites)
@@ -139,7 +141,18 @@ async def execute(tool_input: dict) -> dict:
     # --- PDF path ---
     content_type = response.headers.get("content-type", "").lower()
     if _PDF_CONTENT_TYPE in content_type:
-        return _handle_pdf(url, response.content)
+        pdf_result = _handle_pdf(url, response.content)
+        # Evidence compression for PDFs (opt-in)
+        if (
+            is_compression_enabled()
+            and "error" not in pdf_result
+            and len(pdf_result.get("text", "")) > _MAX_CHARS
+        ):
+            pdf_result["text"] = await compress_evidence(
+                pdf_result["text"], query_context=url
+            )
+            pdf_result["length"] = len(pdf_result["text"])
+        return pdf_result
 
     # --- HTML path ---
     html = response.text
@@ -158,6 +171,10 @@ async def execute(tool_input: dict) -> dict:
 
     if len(text) > _MAX_CHARS:
         text = _extract_relevant_sections(text)
+
+    # Evidence compression — use Haiku to extract EPC-relevant content (opt-in)
+    if is_compression_enabled() and len(text) > _MAX_CHARS:
+        text = await compress_evidence(text, query_context=url)
 
     # Hard truncation — even after keyword extraction, cap at 8000 chars
     if len(text) > _HARD_TRUNCATE:
