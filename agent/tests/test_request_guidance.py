@@ -95,6 +95,6 @@ class TestRegistryIntegration:
 
     def test_not_in_research_tools(self):
         """request_guidance should NOT be available in batch research."""
-        from src.research import RESEARCH_TOOLS
+        from src.agents.research import RESEARCH_TOOL_NAMES
 
-        assert "request_guidance" not in RESEARCH_TOOLS
+        assert "request_guidance" not in RESEARCH_TOOL_NAMES

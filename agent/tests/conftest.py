@@ -11,7 +11,7 @@ import sys
 _worktree_src = str(pathlib.Path(__file__).parent.parent / "src")
 if _worktree_src not in sys.path:
     sys.path.insert(0, _worktree_src)
-from unittest.mock import AsyncMock, MagicMock, patch  # noqa: E402
+from unittest.mock import MagicMock  # noqa: E402
 
 import pytest  # noqa: E402
 
@@ -20,24 +20,6 @@ os.environ.setdefault("ANTHROPIC_API_KEY", "sk-ant-test-key")
 os.environ.setdefault("TAVILY_API_KEY", "tvly-test-key")
 os.environ.setdefault("SUPABASE_URL", "https://test.supabase.co")
 os.environ.setdefault("SUPABASE_SERVICE_KEY", "test-service-key")
-
-
-@pytest.fixture(autouse=True)
-def _mock_triage():
-    """Auto-mock triage_project so existing tests pass without patching it.
-
-    Returns a default "research" action (pass-through) triage result.
-    Tests that need specific triage behavior override this with @patch.
-    """
-    from src.models import TriageResult
-
-    default_triage = TriageResult(action="research", triage_log=[], tokens_used=0)
-    with patch(
-        "src.research.triage_project",
-        new_callable=AsyncMock,
-        return_value=default_triage,
-    ):
-        yield
 
 
 @pytest.fixture()

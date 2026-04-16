@@ -9,7 +9,7 @@ from ..runtime import AgentRuntime, EscalationPolicy
 from ..runtime.compactor import HeuristicCompactor
 from ..tools import get_tools
 
-# Canonical research tool set — matches RESEARCH_TOOLS in research.py.
+# Canonical research tool set for AgentRuntime-based research.
 # The completeness hook handles checkpoint and hard-stop logic that was
 # previously inline in the research.py loop.
 RESEARCH_TOOL_NAMES = [
