@@ -20,42 +20,42 @@ ToolScan ([arXiv 2411.13547](https://arxiv.org/abs/2411.13547)) catalogs seven s
 
 ---
 
-## 2. Anthropic's official guidance (the canonical list)
+## 2. Anthropic's official guidance
 
 From [platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools](https://platform.claude.com/docs/en/agents-and-tools/tool-use/define-tools):
 
-1. **Aim for at least 3–4 sentences per tool description, more if the tool is complex.** Explain: what it does, when to use it, when *not* to use it, what each parameter means, important caveats, what info the tool does *not* return.
-2. **Consolidate related operations into fewer tools.** Prefer one `manage_pr(action=...)` over `create_pr` + `review_pr` + `merge_pr`. "Bloated tool sets that cover too much functionality or lead to ambiguous decision points about which tool to use" is identified as a top failure mode in [Writing tools for agents](https://www.anthropic.com/engineering/writing-tools-for-agents) — "if a human engineer can't definitively say which tool should be used in a given situation, an AI agent can't be expected to do better."
-3. **Use meaningful namespacing in tool names** when tools span services: `github_list_prs`, `slack_send_message`. This is "especially important when using tool search."
-4. **Use `input_examples` for complex tools**, not just descriptions. ~20–50 extra tokens for a simple example, ~100–200 for nested objects. Schema-validated; invalid examples return 400.
-5. **Design responses to return only high-signal information.** Stable IDs (slugs, UUIDs), not opaque internal handles. "Bloated responses waste context and make it harder for Claude to extract what matters."
-6. **The `description` field is plaintext.** It cannot contain XML tags (per the [Skills doc validation rules](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices), which apply analogously). Max 1024 chars for Skills; the tool-definition field is more generous but the spirit is the same: every token competes with conversation history once loaded.
-7. **Write in third person, present tense.** "Processes Excel files and generates reports" — not "I can help with..." or "You can use this to..." (Skills best-practices doc; the warning applies to tool descriptions for the same reason — POV inconsistency causes discovery problems).
-8. **Description should answer two questions:** *what* the tool does AND *when* to use it.
+1. **≥3–4 sentences per description, more if complex.** Explain what it does, when to use it, when NOT to use it, parameter semantics, caveats, what it does *not* return.
+2. **Consolidate related operations.** Prefer `manage_pr(action=...)` over `create_pr` + `review_pr` + `merge_pr`. From [Writing tools for agents](https://www.anthropic.com/engineering/writing-tools-for-agents): "if a human engineer can't definitively say which tool should be used in a given situation, an AI agent can't be expected to do better."
+3. **Namespace when tools span services:** `github_list_prs`, `slack_send_message`. Especially important with tool search.
+4. **`input_examples` for complex/nested/format-sensitive inputs.** ~20–50 tokens simple, ~100–200 nested. Schema-validated.
+5. **Return only high-signal data.** Stable IDs (slugs, UUIDs), not opaque handles. "Bloated responses waste context and make it harder for Claude to extract what matters."
+6. **`description` is plaintext, no XML tags.** Skills limit is 1024 chars; tool-definition field is more generous but every token competes with conversation history once loaded.
+7. **Third person, present tense.** "Retrieves..." not "I can help you..." or "You can use this to..." — inconsistent POV causes discovery problems.
+8. **Always answer two questions:** *what* the tool does AND *when* to use it.
 
-Anthropic's worked example (good vs bad) is short enough to quote verbatim:
+Anthropic's worked example:
 
 > **Good:** "Retrieves the current stock price for a given ticker symbol. The ticker symbol must be a valid symbol for a publicly traded company on a major US stock exchange like NYSE or NASDAQ. The tool will return the latest trade price in USD. It should be used when the user asks about the current or most recent price of a specific stock. It will not provide any other information about the stock or company."
 >
 > **Bad:** "Gets the stock price for a ticker."
 
-Notice what the good version does in 4 sentences: scope (US exchanges), unit (USD), trigger ("when the user asks about current/most recent price"), and *negative space* ("will not provide any other information").
+Four sentences, four jobs: scope (US exchanges), unit (USD), trigger, and negative space ("will not provide any other information").
 
 ---
 
-## 3. OpenAI's guidance (function calling)
+## 3. OpenAI's guidance
 
-From the OpenAI Function Calling guide and the GPT-5 / GPT-4.1 prompting cookbooks:
+From the [OpenAI Function Calling guide](https://platform.openai.com/docs/guides/function-calling) and the [GPT-5 prompting cookbook](https://cookbook.openai.com/examples/gpt-5/gpt-5_prompting_guide):
 
-- **"Make the functions obvious and intuitive."** Treat tool design as a software-engineering API design problem.
-- **Aim for fewer than ~20 functions exposed at any one turn** — soft target. Beyond that, use a tool-search/retrieval layer to defer the long tail.
-- **Combine functions always called in sequence.** If `mark_location()` always follows `query_location()`, fold the marking into the query.
-- **Don't make the model fill arguments you already know.** If `order_id` is unambiguous from prior context, accept it as zero-arg `submit_refund()` and inject the `order_id` server-side.
-- **Use enums and object structure to make invalid states unrepresentable.** Classic example: `toggle_light(on: bool, off: bool)` allows `{on:true, off:true}` — replace with `state: "on" | "off"`.
-- **The "intern test":** "Can an intern/human correctly use the function given nothing but what you gave the model? If not, what questions do they ask you? Add the answers to the prompt."
-- **Where guidance lives:** put per-tool semantics in the `description`; put cross-tool policy ("always confirm before deleting") in the system prompt.
+- **"Make the functions obvious and intuitive."** Treat tool design as API design.
+- **Aim for fewer than ~20 functions per turn** (soft target). Above that, use tool search to defer the long tail.
+- **Combine functions always called in sequence.** If `mark_location()` always follows `query_location()`, fold them.
+- **Don't make the model fill arguments you already know.** If `order_id` is unambiguous from context, accept a zero-arg `submit_refund()` and inject the ID server-side.
+- **Enums and structure make invalid states unrepresentable.** Replace `toggle_light(on: bool, off: bool)` with `state: "on" | "off"`.
+- **The "intern test":** "Can an intern/human correctly use the function given nothing but what you gave the model?"
+- **Per-tool semantics → `description`; cross-tool policy → system prompt.**
 
-OpenAI Agents SDK adds one more useful idiom — **start descriptions with "Use this when..."**: "Tool descriptions should be one or two sentences that start with 'Use this when…' so the model knows exactly when to pick the tool."
+[OpenAI Agents SDK](https://openai.github.io/openai-agents-python/handoffs/) adds: **start descriptions with "Use this when..."** so the model can pattern-match selection cues.
 
 ---
 
@@ -75,73 +75,61 @@ OpenAI Agents SDK adds one more useful idiom — **start descriptions with "Use 
 | `annotations.idempotentHint` | True ⇒ repeated calls with same args have no extra effect — enables safe retry |
 | `annotations.openWorldHint` | True ⇒ interacts with external/untrusted entities (network, user-provided content) |
 
-Critical caveat from the spec and the [MCP blog post on annotations](https://blog.modelcontextprotocol.io/posts/2026-03-16-tool-annotations/): *annotations are hints, not guarantees.* "Clients should never make tool use decisions based on ToolAnnotations received from untrusted servers." Use them for UX (confirmation dialogs, auto-approve toggles, retry policy), not for security.
-
-For solar-gen these map to concrete UX decisions:
-- `readOnlyHint: true` ⇒ safe to auto-run with no permission prompt
-- `destructiveHint: true` ⇒ require confirmation
-- `idempotentHint: true` ⇒ retry on transient failure
-- `openWorldHint: true` ⇒ treat output as untrusted (prompt-injection surface)
+Critical caveat ([MCP blog on annotations](https://blog.modelcontextprotocol.io/posts/2026-03-16-tool-annotations/)): *annotations are hints, not guarantees.* "Clients should never make tool use decisions based on ToolAnnotations received from untrusted servers." Use them for UX (confirmation dialogs, auto-approve, retry policy), not for security. For solar-gen: `readOnlyHint` ⇒ auto-run; `destructiveHint` ⇒ require confirmation; `idempotentHint` ⇒ retry on transient failure; `openWorldHint` ⇒ treat output as untrusted (prompt-injection surface).
 
 ---
 
-## 5. Empirical signal: what the benchmarks tell us
+## 5. Empirical signal
 
-- **BFCL ([Patil et al., ICML 2025](https://proceedings.mlr.press/v267/patil25a.html)):** Seven categories — Simple, Multiple, Parallel, Nested, **Relevance Detection**, AST, Executable. Relevance Detection (knowing when *not* to call) is where frontier models still bleed accuracy. Implication: every tool needs an explicit "when not to use this" clause.
-- **ToolScan ([arXiv 2411.13547](https://arxiv.org/abs/2411.13547)):** Seven empirically observed error patterns. Four are description-addressable: IFN (Incorrect Function Name — i.e., picked the wrong tool), IAN (Incorrect Argument Name), IAV (Incorrect Argument Value — includes missing required args), IAT (Incorrect Argument Type). The remaining three (IAC — too few calls; RAC — repeated identical calls; IFE — invalid format) are addressed by better system prompts and structured-output validation.
-- **NexusRaven-V2 ([Nexusflow](https://github.com/nexusflowai/NexusRaven-V2)):** Standardizes tool docs as **Python docstrings**, often longer than OpenAI's 1024-char limit allows. The model "exhibits greater robustness than GPT-4 when handling variations in developers' descriptions" — i.e., richer descriptions improve generalization across phrasings.
-- **When2Call ([NAACL 2025](https://aclanthology.org/2025.naacl-long.174.pdf)):** Documents the persistent problem of LLMs failing to *abstain* from tool calls when none are appropriate. Same lesson: surface the negative space.
+- **[BFCL](https://gorilla.cs.berkeley.edu/leaderboard.html)** (Patil et al., ICML 2025): Seven evaluation categories. Relevance Detection — knowing when *not* to call — is where frontier models still lose accuracy. Every tool needs an explicit "when NOT to use" clause.
+- **[ToolScan](https://arxiv.org/abs/2411.13547)**: Seven empirical error patterns. Four are description-addressable: IFN (wrong tool picked), IAN (hallucinated argument name), IAV (wrong / missing required value), IAT (wrong type). The other three (too few calls, repeated calls, invalid format) are system-prompt and schema-validation territory.
+- **[NexusRaven-V2](https://github.com/nexusflowai/NexusRaven-V2)**: Standardizes docs as Python docstrings (often >1024 chars). The model "exhibits greater robustness than GPT-4 when handling variations in developers' descriptions" — richer descriptions generalize across phrasings.
+- **[When2Call](https://aclanthology.org/2025.naacl-long.174.pdf)** (NAACL 2025): LLMs persistently fail to *abstain* when no tool fits. Surface the negative space.
 
-**Plain English:** The benchmarks don't say "longer = better forever." They say models reliably break in four predictable ways, and three of those four are fixed by (a) better names and (b) explicit "when to use / when not to use" sections.
+**Plain English:** Models break in predictable ways — three of the top four failure modes are fixed by better names and explicit "when to use / when not to use" sections.
 
 ---
 
 ## 6. Concrete recommendations for solar-gen
 
 ### Length
-- **Minimum:** 3 sentences (what / when / not when). Anything shorter routinely loses to a near-neighbor tool.
-- **Sweet spot:** 4–8 sentences (≈80–200 tokens) for the majority of tools.
-- **Long-form (300–600 tokens):** justified when the tool is complex, has many parameters, or sits next to a confusable neighbor (e.g., `web_search` vs `brave_search` vs `search_exa_people` — these *must* differentiate explicitly).
-- **Parameter docs:** every parameter gets its own `description`, even if the name seems obvious. Examples inline (`"e.g. AAPL for Apple Inc."`) consistently outperform abstract descriptions.
+- **Minimum 3 sentences** (what / when / not when). Anything shorter loses to confusable neighbors.
+- **Sweet spot: 4–8 sentences (~80–200 tokens)** for typical tools.
+- **Long-form (300–600 tokens)** when the tool has many params, complex semantics, or a near-twin (e.g., `web_search` vs `brave_search` vs `search_exa_people` — these *must* differentiate explicitly).
+- **Every parameter gets a `description`**, even obvious ones. Inline examples (`"e.g. AAPL for Apple Inc."`) consistently outperform abstract phrasing.
 
 ### Naming
-- `snake_case` (universally; LangChain, MCP, Anthropic examples).
-- **Verb_object** when the tool is action-y: `send_message`, `create_pr`. **Noun-first** is acceptable for read-only retrievals: `permit_status`, `iso_queue_position`.
-- **Namespace with a service prefix when overlap is possible:** `github_list_prs` not `list_prs`. Anthropic's blog explicitly calls this out for tool-search scenarios — which applies to solar-gen at ~40 tools.
-- Avoid generic verbs that several tools could claim: `get`, `do`, `run`, `handle`. Prefer specific verbs that match the underlying domain action.
-- Anthropic's Skills doc recommends gerund-form (`processing-pdfs`) for skills; for *tools* (callable functions) the convention is verb_object — gerunds read awkwardly when invoked.
+- `snake_case`, ≤64 chars, matches `^[a-zA-Z0-9_-]{1,64}$`.
+- **Verb_object** for actions (`send_message`, `create_pr`); **noun-first** acceptable for read-only retrievals (`permit_status`).
+- **Service prefix when overlap is possible:** `github_list_prs` not `list_prs`. Critical at solar-gen's ~40-tool scale.
+- Avoid generic verbs (`get`, `do`, `run`, `handle`) — they invite collisions.
+- Skills use gerund form (`processing-pdfs`); *tools* use verb_object — gerunds read awkwardly when called.
 
 ### Where each piece of info lives
-- **Tool `description`:** purpose, when to use, when not to use, what it returns, what it does *not* return, cost/latency hints, format conventions.
-- **Parameter `description`:** what the value represents, format (`"ISO 8601 date"`), units (`"USD"`), examples (`"e.g. CAISO, ERCOT, MISO"`), defaults, enum semantics.
-- **`input_examples`:** wire-format examples of how parameters compose. Use for nested/format-sensitive inputs.
-- **System prompt:** cross-tool policy ("prefer `cached_search` over `web_search` when freshness is not critical"), retry policy, output style.
+- **Tool `description`:** purpose, when, when-not, what's returned, what's NOT returned, cost/latency, format conventions.
+- **Parameter `description`:** semantics, format (`"ISO 8601 date"`), units (`"USD"`), examples, defaults, enum meanings.
+- **`input_examples`:** wire-format examples for nested/format-sensitive inputs.
+- **System prompt:** cross-tool policy ("prefer `cached_search` when freshness is not critical"), retry policy, output style.
 
 ### Side effects
-Use MCP annotations (or your equivalent metadata) for `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`. *Also* mention destructive behavior in the prose description — annotations are read by the harness, the description is read by the model.
+Set MCP annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`). *Also* mention destructive behavior in prose — annotations are read by the harness, descriptions by the model.
 
 ### Error messages the LLM sees
-This is under-appreciated in most guides. Bad tool errors send the model into retry loops. Good ones include:
-- The error class (`PermissionDenied`, `NotFound`, `RateLimited`)
-- A specific, actionable hint (`"Field 'signature_date' not found. Available fields: customer_name, order_total, signature_date_signed"` — from Anthropic's Skills examples)
-- The recommended next action (`"Request access from owner or use different thread_id"`)
-- If a different tool would work, *name it* (`"This file requires write access. Use create_or_update_file instead."`)
+Under-appreciated; bad errors send the model into retry loops. Good errors include:
+- Error class (`PermissionDenied`, `NotFound`, `RateLimited`)
+- A specific actionable hint — Anthropic's example: `"Field 'signature_date' not found. Available fields: customer_name, order_total, signature_date_signed"`
+- Recommended next action (`"Request access from owner or use different thread_id"`)
+- If a different tool would succeed, *name it* (`"This file requires write access. Use create_or_update_file instead."`)
 
-### Disambiguating similar tools (solar-gen-specific)
-With overlapping search tools (`web_search`, `brave_search`, `search_exa_people`, `search_linkedin`), each description must answer one question crisply: **"What is true about my domain that is not true of the others?"** Examples:
-- `web_search`: general-purpose web search via the Claude server-side tool. Returns titles + URLs. Use when freshness matters and the user hasn't specified a source. Mandatory `Sources:` section in the response.
-- `brave_search`: privacy-respecting web search with independent index — use only when you need a non-Google viewpoint or web_search is rate-limited.
-- `search_exa_people`: semantic search for individual people (name + role + employer). Returns LinkedIn-style profiles. Use when looking for *a specific person*; do NOT use for company-wide searches.
-- `search_linkedin`: structured LinkedIn lookup by company or person URL. Use when you already have a LinkedIn handle/URL. NOT a substitute for `search_exa_people` (LinkedIn search has rate limits and weaker name resolution).
-
-The pattern: each description includes an explicit *exclusion clause* naming the neighbor tool.
+### Disambiguating similar tools
+With overlapping search tools (`web_search`, `brave_search`, `search_exa_people`, `search_linkedin`), each description must answer: **"What is true of my domain that is not true of the others?"** Every description includes an explicit *exclusion clause* naming the neighbor tool ("Do NOT use for people-lookup — use `search_exa_people`"). See Example 1 below for the pattern.
 
 ### Parameter design
-- **Required vs optional:** mark only the truly load-bearing fields as required; everything else optional with sensible defaults documented inline.
-- **Enums > free-form strings** wherever the value space is closed (countries, statuses, ISO regions). Models hallucinate fewer values when constrained.
-- **Types that confuse models:** free-form date strings (always specify "ISO 8601 YYYY-MM-DD"), opaque IDs (prefer slugs), `Any`/untyped maps (split into structured object), booleans named with negatives (`disable_cache` — flip to `use_cache`).
-- **Avoid mutually-exclusive booleans** (OpenAI's `toggle_light(on, off)` anti-pattern). Use a single enum.
-- **Pagination:** if a tool could return >50 items, include `limit` (default 25), `cursor`, and document the default in the description — per Anthropic's [tool design ADR](https://github.com/vishnu2kmohan/mcp-server-langgraph/blob/main/adr/adr-0023-anthropic-tool-design-best-practices.md), restrict total response to ~25,000 tokens and truncate with a helpful message.
+- Mark only truly load-bearing fields as `required`; everything else optional with documented defaults.
+- **Enums beat free-form strings** wherever the value space is closed (statuses, ISO codes, regions). Reduces hallucinated values.
+- Confusing types to avoid: free-form dates (specify "ISO 8601 YYYY-MM-DD"), opaque IDs (prefer slugs), `Any`/untyped maps, negatively-named booleans (`disable_cache` → flip to `use_cache`).
+- Avoid mutually-exclusive booleans (`toggle_light(on, off)`); use a single enum.
+- For lists >50 items: include `limit` (default 25) and `cursor`; cap responses around 25k tokens with a helpful truncation message (per the [Anthropic tool-design ADR](https://github.com/vishnu2kmohan/mcp-server-langgraph/blob/main/adr/adr-0023-anthropic-tool-design-best-practices.md)).
 
 ---
 
@@ -149,19 +137,7 @@ The pattern: each description includes an explicit *exclusion clause* naming the
 
 ### Example 1 — Web search disambiguation
 
-**Before**
-```json
-{
-  "name": "brave_search",
-  "description": "Search the web using Brave.",
-  "input_schema": {
-    "type": "object",
-    "properties": {"q": {"type": "string"}},
-    "required": ["q"]
-  }
-}
-```
-*Problems:* indistinguishable from any other `*_search`. No "when to use." Param named `q` not `query`. No "when NOT to use." Will lose every coin flip against `web_search`.
+**Before:** `description: "Search the web using Brave."`, param `q: string`. Indistinguishable from any other `*_search`. No "when to use", no "when NOT to use", terse param. Loses every coin flip against `web_search`.
 
 **After**
 ```json
@@ -182,14 +158,7 @@ The pattern: each description includes an explicit *exclusion clause* naming the
 
 ### Example 2 — A read-only lookup
 
-**Before**
-```json
-{
-  "name": "get_project",
-  "description": "Get a project.",
-  "input_schema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}
-}
-```
+**Before:** `description: "Get a project."`, parameter `id: string` (no description).
 
 **After**
 ```json
@@ -203,30 +172,20 @@ The pattern: each description includes an explicit *exclusion clause* naming the
     },
     "required": ["project_id"]
   },
-  "input_examples": [
-    {"project_id": "tx-permian-200mw-2026"},
-    {"project_id": "9e8c1a44-2c3b-4d59-9f7e-b0c9d8e7f6a5"}
-  ]
+  "input_examples": [{"project_id": "tx-permian-200mw-2026"}]
 }
 ```
-Annotations: `readOnlyHint: true`, `idempotentHint: true`, `openWorldHint: false`.
+Annotations: `readOnlyHint: true`, `idempotentHint: true`, `openWorldHint: false`. Before-version errors are 50/50: model would call `list_projects` instead, or hallucinate UUIDs.
 
 ### Example 3 — A destructive mutation
 
-**Before**
-```json
-{
-  "name": "delete_attachment",
-  "description": "Deletes an attachment.",
-  "input_schema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}
-}
-```
+**Before:** `description: "Deletes an attachment."`, parameter `id: string`.
 
 **After**
 ```json
 {
   "name": "delete_attachment",
-  "description": "Permanently deletes a project attachment. THIS OPERATION IS IRREVERSIBLE — there is no soft-delete or recycle bin. Use only when the user has explicitly confirmed deletion of a specific attachment by name or ID. Returns {deleted: true, id} on success. Returns 403 if the caller does not own the attachment — in that case, ask the owner instead of retrying. Do NOT use to 'clear' or 'reset' bulk attachments; there is no bulk delete by design. For replacing a file, use `update_attachment` instead.",
+  "description": "Permanently deletes a project attachment. THIS OPERATION IS IRREVERSIBLE — there is no soft-delete or recycle bin. Use only when the user has explicitly confirmed deletion of a specific attachment by name or ID. Returns {deleted: true, id} on success. Returns 403 if the caller does not own the attachment — in that case, ask the owner instead of retrying. Do NOT use to 'clear' or 'reset' bulk attachments; there is no bulk delete by design. To replace a file, use `update_attachment` instead.",
   "input_schema": {
     "type": "object",
     "properties": {
@@ -236,18 +195,13 @@ Annotations: `readOnlyHint: true`, `idempotentHint: true`, `openWorldHint: false
   }
 }
 ```
-Annotations: `readOnlyHint: false`, `destructiveHint: true`, `idempotentHint: true` (deleting an already-deleted attachment is a no-op 404), `openWorldHint: false`.
+Annotations: `destructiveHint: true`, `idempotentHint: true` (deleting an already-deleted attachment is a no-op 404), `openWorldHint: false`. The shouting capitals on "IRREVERSIBLE" are intentional — models attend more reliably to emphasized text in tool descriptions.
 
 ### Example 4 — Consolidating sibling tools
 
-**Before** — three tools, all near-identical names, easy to confuse:
-```
-search_permits_by_state
-search_permits_by_iso
-search_permits_by_county
-```
+**Before** — three tools, easy to confuse: `search_permits_by_state`, `search_permits_by_iso`, `search_permits_by_county`.
 
-**After** — one tool with an explicit dispatch:
+**After** — one tool with explicit dispatch:
 ```json
 {
   "name": "search_permits",
@@ -267,23 +221,15 @@ search_permits_by_county
 ```
 This collapses three tools into one, removes ambiguity ("which `search_permits_*` do I call?"), and uses enums where the value space is closed. Matches Anthropic's "consolidate related operations" guidance directly.
 
-### Example 5 — A real Claude Code description (good)
+### Example 5 — A real Claude Code description (annotated)
 
-The Claude Code `Read` tool description, paraphrased from the system prompt visible in this session:
+Claude Code's `Read` tool description, paraphrased from this session's system prompt:
 
-> Reads a file from the local filesystem. You can access any file directly. Assume this tool can read all files on the machine. If the User provides a path, assume that path is valid. It is okay to read a file that does not exist; an error will be returned.
+> Reads a file from the local filesystem. Assume this tool can read all files on the machine. If the User provides a path, assume that path is valid. It is okay to read a file that does not exist; an error will be returned.
 >
-> Usage notes:
-> - `file_path` must be an absolute path, not relative.
-> - Reads up to 2000 lines starting from the beginning by default.
-> - Use `offset`/`limit` for targeted reads of large files.
-> - Returns content in `cat -n` format with line numbers starting at 1.
-> - For images (PNG, JPG): contents are presented visually since Claude is multimodal.
-> - For PDFs: large PDFs (>10 pages) require a `pages` parameter. Max 20 pages per request.
-> - For Jupyter notebooks: returns all cells with outputs.
-> - This tool can only read files, not directories.
+> Usage: `file_path` must be absolute; reads up to 2000 lines by default; use `offset`/`limit` for large files; returns `cat -n` format with line numbers; images presented visually (multimodal); PDFs >10 pages require `pages` (max 20/request); Jupyter notebooks return all cells with outputs; **this tool can only read files, not directories**.
 
-What it does well: (1) starts with the action verb, (2) sets expectations about path resolution, (3) tells the model it's OK to attempt to read a missing file (preventing pre-flight overthinking), (4) enumerates every special content type and how it behaves, (5) ends with a sharp boundary ("only files, not directories") which prevents the most common confusion with `Glob`/`ls`.
+What it does well: (1) starts with action verb; (2) sets path-resolution expectations; (3) tells the model it's safe to attempt a missing file (prevents pre-flight overthinking); (4) enumerates every special content type; (5) ends with a sharp negative-space boundary ("only files, not directories") that prevents confusion with `Glob`/`ls`.
 
 ---
 
@@ -291,54 +237,49 @@ What it does well: (1) starts with the action verb, (2) sets expectations about 
 
 **Naming**
 - [ ] `snake_case`, ≤64 chars, matches `^[a-zA-Z0-9_-]{1,64}$`
-- [ ] Verb_object (action tools) or noun-first (read-only retrievals)
-- [ ] Namespaced with service prefix when overlap with sibling tools is possible
-- [ ] No generic verbs (`get`, `do`, `run`) without a specific object
-- [ ] Pronounceable; a teammate could guess what it does from the name alone
+- [ ] Verb_object (action) or noun-first (read-only retrieval)
+- [ ] Service prefix when overlap is possible
+- [ ] No generic verbs (`get`, `do`, `run`, `handle`) standing alone
 
-**Description (prose)**
-- [ ] At least 3 sentences (what / when to use / when NOT to use); 4–8 for typical tools
-- [ ] Third person, present tense ("Retrieves...", not "I will retrieve...")
-- [ ] States what the tool returns AND what it does NOT return
-- [ ] Names confusable sibling tools explicitly ("Do NOT use for X — use `other_tool` instead")
+**Description**
+- [ ] ≥3 sentences (what / when / when-not); 4–8 for typical tools
+- [ ] Third person, present tense; no "I" or "you"
+- [ ] States what it returns AND what it does NOT return
+- [ ] Names confusable sibling tools explicitly ("Do NOT use for X — use `other_tool`")
 - [ ] Mentions cost/latency if non-trivial
-- [ ] Mentions destructive behavior in prose even if also marked in annotations
-- [ ] No XML tags inside the description string (Anthropic constraint)
-- [ ] Plaintext; no markdown headers that might confuse rendering
+- [ ] Mentions destructive behavior in prose, not just annotations
+- [ ] Plaintext only; no XML tags inside the string
 
 **Parameters**
-- [ ] Every param has a `description` — even obvious ones
+- [ ] Every param has a `description`
 - [ ] Format/units/examples inline ("e.g. AAPL", "ISO 8601 date", "USD")
-- [ ] Enums where value space is closed
-- [ ] Only truly required fields marked `required`
+- [ ] Enums wherever value space is closed
+- [ ] Only truly load-bearing fields are `required`
 - [ ] Defaults documented in the param description
-- [ ] No mutually-exclusive booleans (use an enum)
-- [ ] No untyped `Any` maps (split into structured object)
+- [ ] No mutually-exclusive booleans
+- [ ] No untyped `Any` maps
 - [ ] Booleans named positively (`use_cache`, not `disable_cache`)
-- [ ] Param names are specific (`project_id`, `thread_id`) not generic (`id`)
+- [ ] Specific param names (`project_id`, not `id`)
 
 **Examples**
-- [ ] `input_examples` provided for any tool with nested objects or format-sensitive params
-- [ ] Examples cover: minimum-required case, full case, common edge case
+- [ ] `input_examples` for any tool with nested or format-sensitive params
+- [ ] Cover minimum-required, full, and common-edge cases
 - [ ] All examples validate against `input_schema`
 
-**Side-effect metadata**
-- [ ] `readOnlyHint` set
-- [ ] `destructiveHint` set (default to `true` unless explicitly safe)
-- [ ] `idempotentHint` set (informs the harness's retry policy)
-- [ ] `openWorldHint` set (informs prompt-injection treatment of output)
+**Side-effect metadata** (MCP annotations or equivalent)
+- [ ] `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` all set
 
 **Errors the model will see**
-- [ ] Errors include a class name and a specific actionable hint
-- [ ] If a different tool would succeed, the error names it
-- [ ] No bare HTTP status codes — always include semantic text
+- [ ] Error class + specific actionable hint
+- [ ] If a different tool would succeed, name it
+- [ ] No bare HTTP codes — always include semantic text
 
 **Final sanity checks**
-- [ ] **Intern test:** could a new hire use this tool from the description alone?
-- [ ] **Disambiguation test:** if you removed the tool name and showed just the description, could a teammate pick this tool from the lineup?
-- [ ] **Confusable-pair test:** for every near-neighbor tool, the description explicitly says when to prefer this one
-- [ ] **Token budget:** description + schema fits in ≤500 tokens (most tools); ≤1500 for complex ones
-- [ ] **Negative-space test:** at least one "do NOT use for…" clause exists
+- [ ] **Intern test:** a new hire could use this tool from the description alone
+- [ ] **Disambiguation test:** with the name hidden, a teammate could still pick this tool from the lineup
+- [ ] **Confusable-pair test:** every near-neighbor is named in an exclusion clause
+- [ ] **Token budget:** description + schema ≤500 tokens (most); ≤1500 (complex)
+- [ ] **Negative-space test:** at least one "do NOT use for…" clause
 
 ---
 
